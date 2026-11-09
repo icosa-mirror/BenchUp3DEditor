@@ -30,9 +30,9 @@ The initial plan/panel milestone is commit `e21b8c9`.
 - `examples/openxr_diagnostics.rs`: terminal command with nonzero failure status
   and actionable diagnostics. No session, GPU device or swapchain is created.
 
-No headset mode is functional yet. No new UI settings have been introduced.
-The rendering host, runtime-selected Vulkan device, swapchain interoperability,
-frame loop, egui input integration and persistent XR controls remain to implement.
+At the original macOS handoff no headset mode was functional. The Windows
+continuation below supersedes that implementation status. No XR UI settings
+have been introduced.
 
 ## Windows continuation, 2026-11-09
 
@@ -47,7 +47,13 @@ Successive unattended runs submitted quad frames on the RTX 4090 and stopped
 cleanly. VISIBLE/FOCUSED state and human-observed panel appearance remain untested.
 Khronos validation still reports runtime-side shader/image/copy errors, including
 the runtime's BlankEyeBuffer; the clean-validation gate has not passed. Editor
-hosting, input integration and persistent XR controls remain to implement.
+hosting is now implemented as a render-only preview using the shared editor UI
+and GPU viewport callbacks. An independent hardware Vulkan snapshot of the
+bundled Example was inspected on the RTX 4090. Full-editor headset submission is
+not yet verified: following the drive interruption, SteamVR reports no connected
+headset and OpenXR instance creation fails. The same SPIR-V layout errors also
+reproduce without an XR session and match wgpu/Naga issue #7696. Input integration,
+desktop mirroring, native window services and persistent XR controls remain.
 
 ## Validation already completed on macOS
 

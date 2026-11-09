@@ -55,7 +55,7 @@ fn issue_url(report: &str) -> String {
     url
 }
 
-fn collect(ctx: &egui::Context, frame: &eframe::Frame) -> String {
+fn collect(ctx: &egui::Context, frame: Option<&eframe::Frame>) -> String {
     let mut text = tr!(
         "system_info.benchup_build",
         env!("CARGO_PKG_VERSION"),
@@ -90,7 +90,7 @@ fn collect(ctx: &egui::Context, frame: &eframe::Frame) -> String {
         let _ = writeln!(
             text,
             tr!("system_info.runtime_browser_webassembly_browser_os"),
-            frame.info().web_info.user_agent
+            frame.map(|frame| frame.info().web_info.user_agent.as_str()).unwrap_or("Unavailable")
         );
     }
     let _ = writeln!(text, tr!("system_info.platform"), ctx.os());
@@ -109,7 +109,7 @@ fn collect(ctx: &egui::Context, frame: &eframe::Frame) -> String {
         },
         scale = scale,
     );
-    if let Some(render) = frame.wgpu_render_state() {
+    if let Some(render) = frame.and_then(|frame| frame.wgpu_render_state()) {
         let adapter = render.adapter.get_info();
         let _ = writeln!(
             text,
@@ -129,7 +129,7 @@ fn collect(ctx: &egui::Context, frame: &eframe::Frame) -> String {
     text
 }
 
-pub(crate) fn show(ctx: &egui::Context, frame: &eframe::Frame) {
+pub(crate) fn show(ctx: &egui::Context, frame: Option<&eframe::Frame>) {
     if ctx
         .data_mut(|data| data.remove_temp::<bool>(issue_request_id()))
         .unwrap_or(false)

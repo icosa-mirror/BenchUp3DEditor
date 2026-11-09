@@ -113,3 +113,74 @@ device drain before XR-resource destruction, the third run also submitted two
 frames and stopped cleanly; the earlier in-use-memory teardown error disappeared.
 Validation still reported 14 runtime-created objects at device destruction
 (command buffers, semaphores, fences and memory). The teardown gate remains open.
+
+## Shared-editor render preview
+
+`openxr_editor` uses the existing BenchUp UI, document, history and retained GPU
+viewport callbacks on the same Vulkan device and directly into the acquired quad
+image. The eframe entry point calls the same UI function through a small host
+service adapter. This is currently **render-only**: controller input, a desktop
+mirror, keyboard/mouse input and native window-command handling are not supplied.
+It does not satisfy phase 1's editing/saving acceptance gate.
+
+```powershell
+./scripts/openxr_probe.ps1 -Probe Editor -ValidationDirectory .local/openxr/validation-layers
+```
+
+The editor loads the usual workspace unless `BENCHUP_DATA_DIR` overrides it.
+For automated checks, use an isolated directory and copy the bundled
+`assets/examples/Example.bup` to its `model.json`, as the README capture helper does.
+Preferences use the existing RON key/value format and shared capture/restore
+logic, with immediate flushing even without a document edit. Malformed files and
+intervening external changes detected before a save produce errors rather than
+silently replacing the file.
+
+Two explicit PNG diagnostics are available:
+
+```powershell
+# Runtime-selected Vulkan device; requires successful OpenXR instance creation.
+./scripts/openxr_probe.ps1 -Probe Editor -Snapshot .local/openxr/editor-preview.png
+
+# Independent hardware Vulkan rendering, without an OpenXR instance or session.
+cargo run -p benchup-app --locked --offline --features openxr --example openxr_editor -- --desktop-snapshot .local/openxr/editor-desktop-preview.png
+```
+
+PNG readback belongs only to these diagnostic commands. The headset path has no
+CPU image-copy/readback step. A desktop snapshot proves neither runtime adapter
+selection nor XR image interoperability. It is useful for checking the shared
+renderer when the headset is unavailable.
+
+### Windows continuation evidence
+
+The editor example compiled successfully after the workspace drive returned.
+An independent Vulkan snapshot rendered the bundled Example project through the
+shared UI and GPU viewport on the RTX 4090; the resulting 1440 × 900 PNG was
+visually inspected. It contains the model, toolbars, inspector and startup release
+notes. This is a diagnostic image, not a release/README screenshot.
+A second run restored the saved preferences/read state and produced
+`.local/openxr/editor-desktop-preview-restored.png` without that modal; this image
+was inspected as well. Five focused XR tests passed, including immediate
+preference restoration without a document edit and rejection of a detected
+intervening preference-file change.
+Default desktop `cargo check -p benchup-app --locked --offline` passed. The
+default WASM check also passed with `--target wasm32-unknown-unknown`, after
+fetching missing locked dependencies. These are compilation checks, not browser
+GPU or interactive desktop validation.
+
+Core and synchronization validation were enabled. This run reproduced
+`VUID-StandaloneSpirv-None-10684` layout-decoration errors with existing renderer
+shaders even without an OpenXR instance/session. The messages match the open
+[wgpu/Naga issue #7696](https://github.com/gfx-rs/wgpu/issues/7696).
+No package-cache changes, dependency replacement or validation-message suppression
+were applied. The independent renderer run therefore also does not pass the
+clean-validation gate. Its validation error categories contained only this
+SPIR-V error; no synchronization or resource-lifetime errors were reported in
+the independent snapshot run.
+
+After the drive interruption, SteamVR/OpenXR instance creation failed. The current
+SteamVR startup log reported no connected headset (including
+`VRInitError_Driver_WirelessHmdNotConnectedAndNoSteam`). Steam/SteamVR startup was
+requested without changing the active runtime. Full-editor XR session submission
+still requires a connected headset; the successful desktop PNG cannot substitute
+for that result. Logs are `.local/openxr/editor-desktop-snapshot.log`,
+`editor-snapshot-resume.log` and `preflight-resume.log`.

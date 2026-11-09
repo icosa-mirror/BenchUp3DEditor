@@ -2,6 +2,7 @@ mod realtime;
 mod account;
 mod server_config;
 mod app;
+mod app_host;
 mod identity;
 mod brand_mark;
 mod cutting_layout;

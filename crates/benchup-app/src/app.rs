@@ -439,25 +439,33 @@ pub struct BenchUpApp {
 
 impl BenchUpApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        apply(&cc.egui_ctx);
-        restore_preference(&cc.egui_ctx, cc.storage);
+        Self::new_with_host(
+            &cc.egui_ctx, cc.storage, renderer::install(cc),
+            cc.wgpu_render_state.as_ref().map(|state| (state.device.clone(), state.queue.clone())),
+        )
+    }
+    pub(crate) fn new_with_host(
+        ctx: &egui::Context,
+        storage: Option<&dyn eframe::Storage>,
+        gpu_ready: bool,
+        graphics: Option<(eframe::wgpu::Device, eframe::wgpu::Queue)>,
+    ) -> Self {
+        apply(ctx);
+        restore_preference(ctx, storage);
         let (doc, error) = match storage::load() {
             Ok(doc) => (doc.unwrap_or_default(), None),
             Err(e) => (Document::default(), Some(e)),
         };
-        let mut app = Self::with_document(doc, error, renderer::install(cc));
-        app.screenshot_gpu = cc
-            .wgpu_render_state
-            .as_ref()
-            .map(|state| (state.device.clone(), state.queue.clone()));
-        app.restore_inspector_preferences(&cc.egui_ctx, cc.storage);
+        let mut app = Self::with_document(doc, error, gpu_ready);
+        app.screenshot_gpu = graphics;
+        app.restore_inspector_preferences(ctx, storage);
         app.release_notes.open_if_unread();
-        app.account.start(&cc.egui_ctx);
-        app.open_shared_startup(&cc.egui_ctx);
+        app.account.start(ctx);
+        app.open_shared_startup(ctx);
         #[cfg(not(target_arch = "wasm32"))]
         let app = {
             let mut app = app;
-            app.updates = crate::updates::Updater::new(&cc.egui_ctx);
+            app.updates = crate::updates::Updater::new(ctx);
             match crate::updates::Resume::take(&app.doc) {
                 Ok(Some(resume)) => {
                     app.project.path = resume.path;
@@ -6375,14 +6383,15 @@ impl BenchUpApp {
         }
     }
 }
-impl eframe::App for BenchUpApp {
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+impl BenchUpApp {
+    pub(crate) fn ui_with_host(&mut self, ui: &mut egui::Ui, host: &mut crate::app_host::UiHost<'_>) {
         let ctx = ui.ctx().clone();
         self.ui_frame=Some(ctx.cumulative_frame_nr());
         #[cfg(target_arch = "wasm32")]
         web_viewport_benchmark::tick(self, &ctx);
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(mut benchmark) = self.viewport_benchmark.take() {
+        if let Some(frame) = host.frame_mut()
+            && let Some(mut benchmark) = self.viewport_benchmark.take() {
             benchmark.tick(self, &ctx, frame);
             self.viewport_benchmark = Some(benchmark);
         }
@@ -6418,7 +6427,7 @@ impl eframe::App for BenchUpApp {
         self.inspector_panel(ui);
         self.viewport_panel(ui);
         if theme_before != ctx.options(|options| options.theme_preference)
-            && let Some(storage) = frame.storage_mut()
+            && let Some(storage) = host.storage_mut()
         {
             save_preference(&ctx, storage);
         }
@@ -6439,7 +6448,7 @@ impl eframe::App for BenchUpApp {
         if self.about {
             self.about_window(&ctx);
         }
-        crate::system_info::show(&ctx, frame);
+        crate::system_info::show(&ctx, host.frame_mut().as_deref());
         self.sync_stock_materials(&ctx);
         self.release_notes.show(&ctx);
         #[cfg(not(target_arch = "wasm32"))]
@@ -6452,7 +6461,7 @@ impl eframe::App for BenchUpApp {
         self.sharing_after_frame(&ctx);
         self.persist_inspector_changes(
             &ctx,
-            frame.storage_mut(),
+            host.storage_mut(),
             inspector_order_before != self.inspector_order,
         );
         #[cfg(target_arch = "wasm32")]
@@ -6472,6 +6481,11 @@ impl eframe::App for BenchUpApp {
             }
         }
         self.ui_frame=None;
+    }
+}
+impl eframe::App for BenchUpApp {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.ui_with_host(ui, &mut crate::app_host::UiHost::Desktop(frame));
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         self.save_inspector_preferences(storage);

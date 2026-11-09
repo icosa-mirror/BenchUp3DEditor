@@ -228,3 +228,16 @@ The pattern shader's initial validation error was corrected. Other validation
 errors remain in runtime-created shaders, external-image setup and runtime copies
 involving BlankEyeBuffer. Phase 1B's visual, restart-under-use, and clean-validation
 acceptance gate remains open. This is a graphics prototype, not phase 1 completion.
+
+Phase 1C now has a render-only `openxr_editor` example. It calls the same editor
+constructor/UI through a small host-services adapter and installs the existing
+GPU viewport callbacks on the XR device. Preferences retain the shared RON
+key/value format and immediate capture/restore persistence. The desktop and web
+entry points still use eframe through this same UI seam.
+
+An independent RTX 4090 Vulkan snapshot rendered the bundled Example editor and
+was visually inspected. This does not establish editor submission in a headset:
+SteamVR currently reports no connected headset and OpenXR instance creation
+fails. The snapshot also reproduces the known wgpu/Naga #7696 SPIR-V validation
+errors without an XR session. Desktop mirroring, input, native window-command
+services, live headset validation and phase 1 acceptance remain outstanding.

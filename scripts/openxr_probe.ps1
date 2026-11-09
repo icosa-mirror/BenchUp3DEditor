@@ -2,15 +2,19 @@
 # apply only to this invocation; no runtime selection or system installation.
 [CmdletBinding()]
 param(
-    [ValidateSet('Diagnostics', 'Panel')]
+    [ValidateSet('Diagnostics', 'Panel', 'Editor')]
     [string]$Probe = 'Diagnostics',
     [string]$LoaderDirectory,
-    [string]$ValidationDirectory
+    [string]$ValidationDirectory,
+    [string]$Snapshot
 )
 
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath 'OPENXR_PLAN.md')) {
     throw 'Run this script from the BenchUp repository root.'
+}
+if ($Snapshot -and $Probe -ne 'Editor') {
+    throw '-Snapshot is supported only with -Probe Editor.'
 }
 if (-not $LoaderDirectory) {
     $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
@@ -48,8 +52,14 @@ khronos_validation.validate_sync = true
         $env:VK_LAYER_SETTINGS_PATH = $settings
         Write-Output "[BenchUpXR] Vulkan validation requested (including synchronization): $ValidationDirectory"
     }
-    $example = if ($Probe -eq 'Panel') { 'openxr_panel' } else { 'openxr_diagnostics' }
-    & cargo run -p benchup-app --locked --features openxr --example $example
+    $example = switch ($Probe) {
+        'Panel' { 'openxr_panel' }
+        'Editor' { 'openxr_editor' }
+        default { 'openxr_diagnostics' }
+    }
+    $arguments = @('run', '-p', 'benchup-app', '--locked', '--features', 'openxr', '--example', $example)
+    if ($Snapshot) { $arguments += @('--', '--snapshot', $Snapshot) }
+    & cargo @arguments
     $result = $LASTEXITCODE
 }
 finally {
