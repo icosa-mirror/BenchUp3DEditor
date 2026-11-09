@@ -261,6 +261,25 @@ impl BenchUpApp {
             self.snap = None;
         }
         self.update_measurement(pos);
+        let size = dv(self.viewport.size());
+        let surface_normal = self
+            .picking_cache
+            .nearest(
+                &self.face_cache,
+                &self.entity_cache,
+                self.doc.camera.ray(dv(pos - self.viewport.min), size),
+                false,
+            )
+            .and_then(|(id, _, _)| {
+                benchup_core::faces::plane(&self.doc.model, &self.doc.model.faces[&id].vertices)
+            })
+            .map(|p| p.normal)
+            .unwrap_or(DVec3::Z);
+        self.measurement_click_snap(surface_normal, self.doc.camera.eye(), ctx);
+    }
+
+    // Pointer-independent commit path, shared with controller-ray measurements.
+    pub(super) fn measurement_click_snap(&mut self, surface_normal: DVec3, eye: DVec3, ctx: &egui::Context) {
         if self.tool == Tool::Dimensions
             && self
                 .measurement
@@ -293,27 +312,13 @@ impl BenchUpApp {
             );
             return;
         };
-        let size = dv(self.viewport.size());
-        let surface_normal = self
-            .picking_cache
-            .nearest(
-                &self.face_cache,
-                &self.entity_cache,
-                self.doc.camera.ray(dv(pos - self.viewport.min), size),
-                false,
-            )
-            .and_then(|(id, _, _)| {
-                benchup_core::faces::plane(&self.doc.model, &self.doc.model.faces[&id].vertices)
-            })
-            .map(|p| p.normal)
-            .unwrap_or(DVec3::Z);
         let reference_direction = (self.tool == Tool::TapeMeasure)
             .then(|| self.tape_reference_direction(snap))
             .flatten();
         let normal = if let Some(direction) =
             reference_direction.filter(|d| d.dot(surface_normal).abs() > 1e-6)
         {
-            let view = self.doc.camera.eye() - snap.point;
+            let view = eye - snap.point;
             (view - direction * view.dot(direction))
                 .try_normalize()
                 .unwrap_or(DVec3::Z)
@@ -339,7 +344,7 @@ impl BenchUpApp {
         if self.tool == Tool::Protractor && m.points.len() == 2 {
             let baseline = (m.points[1] - m.points[0]).normalize();
             if baseline.dot(m.normal).abs() > 1e-6 {
-                let view = (self.doc.camera.eye() - m.points[0]).normalize();
+                let view = (eye - m.points[0]).normalize();
                 m.normal = (view - baseline * view.dot(baseline))
                     .try_normalize()
                     .unwrap_or_else(|| {

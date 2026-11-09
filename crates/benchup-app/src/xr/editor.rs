@@ -100,6 +100,7 @@ pub(super) struct Editor {
     recenter_requested: bool,
     scene: super::immersive::Scene,
     fit_scene_requested: bool,
+    world_tools: crate::app::xr_tools::State,
 }
 
 impl Editor {
@@ -153,6 +154,7 @@ impl Editor {
             recenter_requested: false,
             scene: super::immersive::Scene::new(device, format),
             fit_scene_requested: true,
+            world_tools: Default::default(),
         })
     }
 
@@ -222,9 +224,14 @@ impl Editor {
         let mut preferences = self.app.xr_panel_preferences();
         let mut recenter = false;
         let mut fit_scene = false;
+        let pointer = self.input.scene.and_then(|input| self.scene.tool_pointer(input, preferences.scene_scale));
+        // egui may repeat layout; consume a model operation only once.
+        let mut activate = true;
         let output = self.ctx.run_ui(raw, |ui| {
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
+            self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx);
+            activate = false;
             egui::Area::new(egui::Id::unique("benchup.xr.panel_controls"))
                 .order(egui::Order::Foreground)
                 .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -28.0))
@@ -296,6 +303,7 @@ impl Editor {
                                     preferences.scene_scale *= 1.25;
                                 }
                             });
+                            self.app.xr_tool_controls(ui, &mut self.preferences);
                         });
                 });
             if preferences.immersive_scene {
@@ -341,18 +349,6 @@ impl Editor {
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
         self.scene.navigate(input.navigation,self.app.xr_panel_preferences());
         self.scene.set_input(input.scene);
-        if let Some(scene) = input.scene {
-            if scene.select || scene.clear {
-                self.app.xr_select_entity(
-                    if scene.clear {
-                        None
-                    } else {
-                        scene.hit.map(|hit| hit.entity)
-                    },
-                    &self.ctx,
-                );
-            }
-        }
         // Retain releases/cancellation accumulated while XR skipped rendering.
         self.input.events.append(&mut input.events);
         self.input.cursor = input.cursor;

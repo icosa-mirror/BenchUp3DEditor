@@ -63,6 +63,9 @@ pub(crate) mod grid;
 pub(crate) mod viewport_overlays;
 #[path = "grain_direction.rs"]
 mod grain_direction;
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[path = "xr_tools.rs"]
+pub(crate) mod xr_tools;
 #[path = "measurement_tools.rs"]
 mod measurement_tools;
 #[path = "move_tool.rs"]
@@ -517,6 +520,7 @@ impl BenchUpApp {
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
+            tool_target: self.snap.map(|snap| snap.point),
             tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),
@@ -530,14 +534,6 @@ impl BenchUpApp {
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn xr_scene_interaction_enabled(&self, ctx: &egui::Context) -> bool {
         !self.project.blocked() && self.history_preview.is_none() && ctx.memory(|memory| memory.top_modal_layer().is_none())
-    }
-
-    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
-    pub(crate) fn xr_select_entity(&mut self, entity: Option<u64>, ctx: &egui::Context) {
-        if !self.xr_scene_interaction_enabled(ctx) { return; }
-        self.set_tool(Tool::Select);
-        self.selected = entity.filter(|id| self.doc.model.contains_entity(id)).into_iter().collect();
-        ctx.request_repaint();
     }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
@@ -1103,6 +1099,11 @@ impl BenchUpApp {
     }
     fn commit_line(&mut self, ctx: &egui::Context, precise: bool) {
         self.refresh_snap(ctx);
+        self.commit_line_snap(ctx, precise);
+        self.refresh_snap(ctx);
+    }
+    // Shared desktop/XR commit: the caller supplies an authoritative snap.
+    fn commit_line_snap(&mut self, ctx: &egui::Context, precise: bool) {
         let Some(start) = self.line_start else {
             return;
         };
@@ -1138,7 +1139,6 @@ impl BenchUpApp {
                 } else {
                     self.line_start = Some(end);
                     self.length_input.clear();
-                    self.refresh_snap(ctx);
                 }
             }
             Err(message) => self.say(ctx, message),

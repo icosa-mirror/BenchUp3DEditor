@@ -16,6 +16,7 @@ pub(crate) struct Source {
     pub overlays: crate::app::viewport_overlays::Overlays,
     pub references: Arc<crate::app::viewport_overlays::Overlays>,
     pub tool: benchup_core::Tool,
+    pub tool_target: Option<DVec3>,
     pub hover: Option<u64>,
     pub outliner_hover: BTreeSet<u64>,
     pub erasing: BTreeSet<u64>,
@@ -235,7 +236,7 @@ impl Scene {
                 owners: Default::default(),
                 depth: false,
                 shapes: vec![Glyph::Paragraph {
-                    text: format!("{}\n{}", source.status, self.navigation.hint()),
+                    text: format!("{}\n{}\n{}", source.status, crate::app::xr_tools::hint(source.tool), self.navigation.hint()),
                     size: 12.0,
                     width: 320.0,
                     color: colors.ink,
@@ -317,9 +318,30 @@ impl Scene {
         let tracking_point = transform.transform_point3(point);
         Some(super::input::SceneHit {
             entity,
+            face,
             point,
-            tracking_point,
             distance: tracking_point.distance(ray.origin),
+        })
+    }
+
+    pub fn tool_pointer(&self, input: super::input::SceneInput, scale: f32) -> Option<crate::app::xr_tools::Pointer> {
+        let (source, placement) = (self.source.as_ref()?, self.placement.as_ref()?);
+        let inverse = (self.navigation.matrix() * placement.model_to_tracking(scale as f64)).inverse();
+        Some(crate::app::xr_tools::Pointer {
+            ray: benchup_core::Ray {
+                origin: inverse.transform_point3(input.ray.origin),
+                direction: inverse.transform_vector3(input.ray.direction).normalize(),
+            },
+            model: source.model.clone(),
+            hit: input.hit.map(|hit| {
+                let face = self.faces.get(hit.face);
+                crate::app::xr_tools::Hit {
+                    entity: hit.entity, face: hit.face, point: hit.point,
+                    normal: face.normal, center: self.faces.snap_center(&source.model, hit.face),
+                }
+            }),
+            activate: input.select,
+            cancel: input.clear,
         })
     }
 
@@ -774,16 +796,16 @@ impl Scene {
             }
             let mut pointer = Vec::new();
             if let Some(input) = self.input {
-                if let Some(hit) = input.hit {
+                if let Some(target) = source.tool_target.or(input.hit.map(|hit| hit.point)) {
                     let color = if input.pressed {
                         [1.0, 0.65, 0.1, 1.0]
                     } else {
                         [0.1, 0.9, 1.0, 1.0]
                     };
-                    let target = transform.transform_point3(hit.point);
+                    let target = transform.transform_point3(target);
                     let point = target - input.ray.direction * 0.002;
                     let radius =
-                        (hit.tracking_point.distance(input.ray.origin) * 0.004).clamp(0.004, 0.03);
+                        (target.distance(input.ray.origin) * 0.004).clamp(0.004, 0.03);
                     pointer.push(Line::new(input.ray.origin, point, color, 1.8));
                     for axis in [DVec3::X, DVec3::Y, DVec3::Z] {
                         pointer.push(Line::new(

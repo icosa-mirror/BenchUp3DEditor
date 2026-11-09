@@ -22,6 +22,44 @@ The initial plan/panel milestone is commit `e21b8c9`.
 
 ### Current work: immersive visual parity
 
+### Direct controller-ray drawing and measurements
+
+Scene clicks now honor the active tool instead of switching to Select. Line,
+Tape Measure, Protractor and Dimensions accept model-space controller rays, using
+the inverse of the same placement/navigation transform as stereo rendering.
+Line commits and measurement/dimension commits share the desktop operations,
+undo history, guide creation and GPU preview producers. No document camera is
+temporarily changed to synthesize desktop pointer events.
+
+The large XR control bar includes Select, Line, Tape, Angle, Dimension, Cancel,
+Undo and Redo. Tool selection uses the existing immediately saved preferences.
+Trigger picks the next point; the secondary button cancels the unfinished action.
+Two-grip navigation reserves the controllers and suspends the tool cursor without
+committing a point. Tracking/focus loss retains the existing release-to-rearm
+rules. Repeated egui layout passes cannot repeat the same click operation.
+
+Initial world inference supports the hit face's endpoints, midpoints, edges and
+cached interior centre, origin/start closure, axis/plane locks, axis alignment,
+grid snapping, face hits and a drawing-plane fallback. Boundary work is local to
+the hit face, not a scan/project of the complete model. The ray cursor follows
+the snapped point, including when drawing on the empty model ground plane.
+Dimension placement uses a stable controller-facing plane containing its span;
+an invalid/parallel placement ray cannot commit an old offset.
+
+Remaining: world snapping to standalone edges, construction guides and off-face
+nearby geometry; desktop reference-acquisition parity; controller paths for
+shapes, text, transforms, solid tools, paint and section handles. Those tools
+remain available through the panel and no longer silently switch to Select.
+The native OpenXR example build passes. Desktop-panel and immersive-eye startup
+snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;
+the large control bar was visually checked for fit/readability. Controller-driven
+editing still awaits its first headset check; broad suites remain deferred.
+
+Suggested next headset sequence: select Line in the large control bar, click two
+points on the scene or ground, Cancel, Undo and Redo; use Tape for two points,
+Angle for three and Dimension for two endpoints plus an annotation position.
+Also check that both grips still scale/translate/yaw with Keep upright enabled.
+
 ### Two-grip scene navigation
 
 The user requested Open Brush-style navigation: hold both grip buttons to scale,

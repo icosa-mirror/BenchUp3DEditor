@@ -4,6 +4,16 @@ Date: 2026-11-09
 
 ## Outcomes and initial target
 
+Current functionality update: controller world rays now drive Line, Tape Measure,
+Protractor and Dimensions through shared document commit/undo operations and
+shared GPU previews. A large XR tool bar exposes these tools, cancellation and
+undo/redo with persisted active-tool selection. Initial inference is local to the
+hit face plus drawing planes and axis constraints. Remaining direct interaction
+work includes standalone-edge/guide snapping, shared reference acquisition,
+shapes/text, modeling transforms, solid tools and section-handle manipulation.
+Upright two-grip navigation remains the default. Continue functionality work;
+broad validation and multiview remain deferred as previously agreed.
+
 1. Run the complete existing editor as an interactive 2D panel in a headset.
 2. Separate the editor UI from the model viewport: retain readable floating UI
    panels while rendering the model as head-tracked, stereoscopic VR content.
