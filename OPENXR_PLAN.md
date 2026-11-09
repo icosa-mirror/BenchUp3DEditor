@@ -12,7 +12,9 @@ Recommended first target: a Windows PC with a SteamVR-connected headset, using
 OpenXR and Vulkan. This is an engineering recommendation for the existing desktop
 application: it avoids the Android packaging, lifecycle, file access and native
 service adaptations needed for standalone Quest. Hardware availability must be
-confirmed before the runtime milestone. Steam Frame and standalone Quest are
+confirmed before the runtime milestone. A Windows PC with SteamVR and a connected
+headset has now been confirmed available; test access is still to be arranged.
+Steam Frame and standalone Quest are
 subsequent platform targets, with their own device validation.
 
 A headset's virtual desktop can provide an immediate 2D usability baseline with
@@ -52,7 +54,7 @@ targets. It contains panel geometry and four regression tests. It is not yet
 connected to an OpenXR runtime or the app's input loop. No user-facing control or
 saved preference is introduced in this preparatory change.
 
-### 1B. Prove runtime and graphics interoperability
+### 1B. Prove runtime and graphics interoperability — runtime preflight implemented
 
 Introduce an optional native OpenXR host/dependency behind a Cargo feature. Keep
 the default desktop and WASM builds independent of the OpenXR loader. Begin with
@@ -183,3 +185,30 @@ Phase 1A is implemented in source; runtime integration, renderer hosting, persis
 XR controls and headset validation remain pending. BenchUp cannot yet launch in
 OpenXR. The next implementation milestone is 1B on a confirmed Windows/SteamVR
 test machine and headset.
+
+The first part of 1B now provides the optional `openxr` Cargo feature and an
+explicit developer diagnostic command:
+
+```sh
+cargo run -p benchup-app --locked --features openxr --example openxr_diagnostics
+```
+
+On the initial Windows target, install a conformant OpenXR loader
+(`openxr_loader.dll` must be available to the executable), select SteamVR as the
+active OpenXR runtime, and connect/wake the headset. Run from a terminal so that
+the output and exit status remain visible. This tool does not install software,
+select a runtime, change preferences, or launch the editor.
+
+The command reports progress through loader initialization, the required
+`XR_KHR_vulkan_enable2` extension, runtime identity, headset identity/tracking,
+primary stereo view dimensions and Vulkan API requirements. Failures return a
+nonzero status with stage-specific context. Success only proves preflight
+capabilities: it does not yet prove device selection, wgpu image sharing, a working
+session, frame submission or headset rendering. Normal app startup never loads
+OpenXR, even when built with the feature. The dependency is native-only and
+dynamically loaded; the WASM application does not link it.
+
+Next: use the runtime-selected Vulkan adapter/device, validate swapchain-image
+interoperability with wgpu, then submit the first colored quad on the target
+headset. The macOS development host can compile this groundwork and exercise
+missing-loader handling, but is not the selected headset validation platform.
