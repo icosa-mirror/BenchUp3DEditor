@@ -203,14 +203,25 @@ preference path; tracked release keeps the value. Cancel, grip navigation,
 focus/tracking loss or changing tools restores the starting offset. Desktop
 pointer events do not update a world-driven section drag.
 
-The latest built executable is running from the frozen ignored
+The last user-launched executable was started from the frozen ignored
 `.local/openxr/preview-builds/section-preview/` directory after the user requested
 it. It has no session deadline. Startup logs confirm the native window, keyboard
 bridge, focused OpenXR session, stereo and editor-quad frame submission, and
 controller grip events. New modeling and section behavior await user feedback;
-do not stop or replace this preview without checking its ownership and user intent.
+The user subsequently closed it; check current process ownership before any launch.
 
-Remaining: world snapping to construction guides and off-face
+Construction guides now participate in controller selection, erasure and
+transforms, and drawing/measurement snapping. A separate retained spatial index
+uses the exact finite line spans drawn in XR and includes point guides. It is
+rebuilt only when the model or fitted span changes. Guide visibility and editing
+scope are respected; guides remain overlays through surfaces and section cuts,
+matching their display. Geometry edge targets take precedence over guides.
+Constrained snapping intersects the picked guide with the active axis/plane;
+finite display ends do not become false endpoint targets. Attachment tools and
+face/solid operations retain geometry targets. Five isolated spatial-index checks
+pass, including guide points and span changes. Live interaction remains untested.
+
+Remaining: guide-guide intersection inference and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
 direct annotation picking and flip-plane hover feedback. Legacy desktop-only navigation modes
 remain available through the panel and no longer silently switch to Select.

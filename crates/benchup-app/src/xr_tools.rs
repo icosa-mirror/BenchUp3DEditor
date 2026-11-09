@@ -8,6 +8,7 @@ pub(crate) struct Hit {
     pub entity: u64,
     pub face: Option<u64>,
     pub edge: Option<u64>,
+    pub guide: Option<(DVec3, DVec3)>,
     pub edge_targets: [Option<DVec3>; 3],
     pub point: DVec3,
     pub normal: DVec3,
@@ -16,7 +17,13 @@ pub(crate) struct Hit {
 
 impl Hit {
     fn contains(&self, model: &Model, point: DVec3) -> bool {
-        if let Some(edge) = self.edge.and_then(|edge| model.edges.get(&edge)) {
+        if let Some((a, b)) = self.guide {
+            let segment = b - a;
+            let t = if segment.length_squared() > 1e-24 {
+                (point - a).dot(segment) / segment.length_squared()
+            } else { 0. };
+            point.distance(a + segment * t.clamp(0., 1.)) < 1e-7
+        } else if let Some(edge) = self.edge.and_then(|edge| model.edges.get(&edge)) {
             let (a, b) = model.points(edge);
             let direction = b - a;
             let t = (point - a).dot(direction) / direction.length_squared();
@@ -26,7 +33,9 @@ impl Hit {
         }
     }
     fn inference(&self) -> Inference {
-        if self.edge.is_some() {
+        if let Some((a,b)) = self.guide {
+            if a == b { Inference::GuidePoint } else { Inference::OnGuide }
+        } else if self.edge.is_some() {
             Inference::OnEdge
         } else {
             Inference::OnFace
@@ -1038,7 +1047,7 @@ impl BenchUpApp {
                 .is_none_or(|(s, c)| c.contains(point - s))
         };
         // Angular tolerance remains usable as the user scales or moves the scene.
-        // Only the hit face's boundary is visited, never the full scene per frame.
+        // Targets come from retained spatial queries, never a full scene scan.
         let near = |point: DVec3| -> Option<f64> {
             let delta = point - ray.origin;
             let depth = delta.dot(ray.direction);
@@ -1047,7 +1056,7 @@ impl BenchUpApp {
             }
             let tolerance = depth * 0.01;
             if pointer.hit.is_some_and(|hit| {
-                hit.edge.is_none()
+                hit.edge.is_none() && hit.guide.is_none()
                     && depth > (hit.point - ray.origin).dot(ray.direction) + tolerance
             }) {
                 return None;
@@ -1102,6 +1111,29 @@ impl BenchUpApp {
                 point: hit.point,
                 kind: Inference::OnEdge,
             });
+        }
+        if self.doc.snap_to_geometry
+            && let Some(hit) = pointer.hit.filter(|hit| hit.guide.is_some())
+        {
+            let (a, b) = hit.guide.unwrap();
+            let direction = (b - a).try_normalize();
+            let point = match (direction, start.zip(constraint)) {
+                (None, _) => Some(a),
+                (Some(direction), Some((start, AxisConstraint::Axis(axis)))) => {
+                    (Ray { origin: start, direction: axis.vector() }).axis(a, direction)
+                        .filter(|point| hit.contains(&pointer.model, *point))
+                }
+                (Some(direction), Some((start, AxisConstraint::Plane(axis))))
+                    if direction.dot(axis.vector()).abs() > 1e-9 => {
+                        Some(a + direction * ((start - a).dot(axis.vector())
+                            / direction.dot(axis.vector())))
+                            .filter(|point| hit.contains(&pointer.model, *point))
+                    }
+                _ => Some(hit.point),
+            };
+            if let Some(point) = point.filter(|point| near(*point).is_some()) {
+                return Some(Snap { point, kind: hit.inference() });
+            }
         }
         if let Some(start) = start {
             if let Some(constraint) = constraint {

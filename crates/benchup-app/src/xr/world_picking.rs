@@ -1,6 +1,27 @@
-//! Retained world-space edge hierarchy for controller-ray queries.
-use benchup_core::{DVec3, Model, Ray};
+//! Retained world-space edge and construction-guide controller-ray queries.
+use benchup_core::{ConstructionGuide, DVec3, Model, Ray};
 use std::sync::Arc;
+
+/// The finite displayed span of construction lines, shared by drawing and picking.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct GuideFrame {
+    pub center: DVec3,
+    pub extent: f64,
+}
+
+impl GuideFrame {
+    pub fn segment(self, guide: &ConstructionGuide) -> (DVec3, DVec3) {
+        guide
+            .direction
+            .map_or((guide.origin, guide.origin), |direction| {
+                let center = guide.origin + direction * (self.center - guide.origin).dot(direction);
+                (
+                    center - direction * self.extent,
+                    center + direction * self.extent,
+                )
+            })
+    }
+}
 
 #[derive(Clone, Copy)]
 struct Edge {
@@ -73,16 +94,41 @@ pub(super) struct Hit {
 #[derive(Default)]
 pub(super) struct Index {
     source: Option<Arc<Model>>,
+    guide_frame: Option<GuideFrame>,
     edges: Vec<Edge>,
     nodes: Vec<Node>,
 }
 
 impl Index {
+    pub fn prepare_guides(&mut self, model: &Arc<Model>, frame: GuideFrame) {
+        if self
+            .source
+            .as_ref()
+            .is_some_and(|source| Arc::ptr_eq(source, model))
+            && self.guide_frame == Some(frame)
+        {
+            return;
+        }
+        self.edges.clear();
+        self.edges
+            .extend(model.guides.iter().filter_map(|(&id, guide)| {
+                let (a, b) = frame.segment(guide);
+                guide.valid().then_some(Edge { id, a, b })
+            }));
+        self.nodes.clear();
+        if !self.edges.is_empty() {
+            self.build(0, self.edges.len());
+        }
+        self.source = Some(Arc::clone(model));
+        self.guide_frame = Some(frame);
+    }
+
     pub fn prepare(&mut self, model: &Arc<Model>) {
         if self
             .source
             .as_ref()
             .is_some_and(|source| Arc::ptr_eq(source, model))
+            && self.guide_frame.is_none()
         {
             return;
         }
@@ -103,6 +149,7 @@ impl Index {
             self.build(0, self.edges.len());
         }
         self.source = Some(Arc::clone(model));
+        self.guide_frame = None;
     }
 
     fn build(&mut self, start: usize, end: usize) -> usize {
@@ -249,6 +296,78 @@ fn closest(ray: Ray, a: DVec3, b: DVec3) -> Option<(DVec3, f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn guide_points_and_displayed_line_spans_share_the_hierarchy() {
+        let mut model = Model::default();
+        model.guides.insert(
+            1,
+            ConstructionGuide {
+                origin: DVec3::new(0., 0., 2.),
+                direction: None,
+            },
+        );
+        model.guides.insert(
+            2,
+            ConstructionGuide {
+                origin: DVec3::new(0., 1., 4.),
+                direction: Some(DVec3::X),
+            },
+        );
+        let model = Arc::new(model);
+        let frame = GuideFrame {
+            center: DVec3::ZERO,
+            extent: 2.,
+        };
+        let mut index = Index::default();
+        index.prepare_guides(&model, frame);
+        assert_eq!(
+            index
+                .query(ray(), 0.01, |_, a, b| Some((a, b)), |_, _| true)
+                .unwrap()
+                .id,
+            1
+        );
+        let line_ray = Ray {
+            origin: DVec3::new(1., 1., 0.),
+            direction: DVec3::Z,
+        };
+        assert_eq!(
+            index
+                .query(line_ray, 0.01, |_, a, b| Some((a, b)), |_, _| true)
+                .unwrap()
+                .id,
+            2
+        );
+        let outside = Ray {
+            origin: DVec3::new(3., 1., 0.),
+            direction: DVec3::Z,
+        };
+        assert!(
+            index
+                .query(outside, 0.01, |_, a, b| Some((a, b)), |_, _| true)
+                .is_none()
+        );
+        index.prepare_guides(
+            &model,
+            GuideFrame {
+                center: DVec3::new(2., 0., 0.),
+                ..frame
+            },
+        );
+        assert_eq!(
+            index
+                .query(outside, 0.01, |_, a, b| Some((a, b)), |_, _| true)
+                .unwrap()
+                .id,
+            2
+        );
+        assert!(
+            index
+                .query(outside, 0.01, |_, _, _| None, |_, _| true)
+                .is_none()
+        );
+    }
+
     fn index(edges: &[(u64, DVec3, DVec3)]) -> Index {
         let mut index = Index::default();
         index

@@ -19,6 +19,7 @@ pub(crate) struct Source {
     pub tool_target: Option<DVec3>,
     pub modeling: bool,
     pub snap_edges: bool,
+    pub snap_geometry: bool,
     pub hover: Option<u64>,
     pub outliner_hover: BTreeSet<u64>,
     pub erasing: BTreeSet<u64>,
@@ -51,6 +52,7 @@ pub(super) struct Scene {
     depth: Option<([u32; 2], wgpu::TextureView)>,
     picking: crate::picking::PickingCache,
     edge_picking: super::world_picking::Index,
+    guide_picking: super::world_picking::Index,
     input: Option<super::input::SceneInput>,
     navigation: super::navigation::Navigation,
     lines: super::world_lines::Lines,
@@ -84,6 +86,7 @@ impl Scene {
             depth: None,
             picking: Default::default(),
             edge_picking: Default::default(),
+            guide_picking: Default::default(),
             input: None,
             navigation: Default::default(),
             lines: super::world_lines::Lines::new(device, format),
@@ -324,7 +327,17 @@ impl Scene {
                 self.point_visible(model_ray.origin,point)
             }
         )).flatten();
-        let (face, edge, point, target) = if let Some(hit) = edge_hit {
+        let want_guides = !source.modeling && source.display.guides && !face_tool
+            && !attachment_tool && !source.tool.is_solid()
+            && (selection_tool || source.snap_geometry);
+        let guide_hit = if want_guides && edge_hit.is_none() {
+            self.guide_picking.prepare_guides(&source.model, placement.guide_frame());
+            self.guide_picking.query(model_ray, 0.01, |id, a, b| {
+                let state = self.entities.get(id);
+                (!state.hidden && state.context.is_some()).then_some((a, b))
+            }, |_, _| true)
+        } else { None };
+        let (face, edge, guide, point, target) = if let Some(hit) = edge_hit {
             let edge = &source.model.edges[&hit.id];
             let adjacent = self.faces.adjacent_faces(edge.a,edge.b);
             let owner = self.entities.get(hit.id).context;
@@ -334,10 +347,12 @@ impl Scene {
                     !state.hidden && state.context == owner
                 }).max_by(|&a,&b|self.faces.get(a).normal.dot(model_ray.direction).abs()
                     .total_cmp(&self.faces.get(b).normal.dot(model_ray.direction).abs())));
-            (face,Some(hit.id),hit.point,hit.id)
+            (face,Some(hit.id),None,hit.point,hit.id)
+        } else if let Some(hit) = guide_hit {
+            (None,None,Some(hit.id),hit.point,hit.id)
         } else {
             let (face,_,point) = face_hit?;
-            (Some(face),None,point,face)
+            (Some(face),None,None,point,face)
         };
         let entity = self.entities.get(target).context?;
         if !source.model.contains_entity(&entity) {
@@ -348,6 +363,7 @@ impl Scene {
             entity,
             face,
             edge,
+            guide,
             point,
             distance: tracking_point.distance(ray.origin),
         })
@@ -377,6 +393,7 @@ impl Scene {
             hit: input.hit.map(|hit| {
                 crate::app::xr_tools::Hit {
                     entity:hit.entity,face:hit.face,edge:hit.edge,point:hit.point,
+                    guide:hit.guide.map(|id|placement.guide_frame().segment(&source.model.guides[&id])),
                     normal:hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal),
                     center:snapping.then(||hit.face.and_then(|face|self.faces.snap_center(&source.model,face)).filter(|&point|self.point_visible(ray.origin,point))).flatten(),
                     edge_targets:snapping.then_some(hit.edge).flatten().map_or([None;3],|id| {
@@ -661,17 +678,16 @@ impl Scene {
                             egui::Color32::from_rgb(0, 174, 214)
                         }
                         .to_normalized_gamma_f32();
-                        if let Some(direction) = guide.direction {
-                            let center =
-                                guide.origin + direction * (origin - guide.origin).dot(direction);
+                        if guide.direction.is_some() {
+                            let (a,b) = placement.guide_frame().segment(guide);
                             lines.push(Line::dashed(
-                                center - direction * half * 10.0 - origin,
-                                center + direction * half * 10.0 - origin,
+                                a - origin,
+                                b - origin,
                                 color,
                                 1.5,
                             ));
                         } else {
-                            lines.push(Line::marker(guide.origin - origin, color, 4.0));
+                            lines.push(Line::marker(guide.origin - origin, color, 4.0).overlay());
                         }
                     }
                 }
@@ -995,6 +1011,13 @@ fn paste_display(source: &DisplaySettings, offset: DVec3) -> DisplaySettings {
 }
 
 impl Placement {
+    fn guide_frame(&self) -> super::world_picking::GuideFrame {
+        super::world_picking::GuideFrame {
+            center: self.center,
+            extent: (1.6 / self.fit_scale).max(0.1) * 10.0,
+        }
+    }
+
     fn model_to_tracking(&self, scale: f64) -> DMat4 {
         // Model Z is up; OpenXR Y is up. Put the fitted model to the right of
         // the editor so the opaque UI panel does not cover the 3D scene.
