@@ -23,6 +23,8 @@ struct Camera {
     display_params: vec4<f32>,
     back_color: vec4<f32>,
     background_color: vec4<f32>,
+    tint_face:vec4<f32>,
+    tint_edge:vec4<f32>,
 }
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var interaction_states: texture_2d<u32>;
@@ -88,12 +90,13 @@ fn face_vertex(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>,
     else if (state&256u)!=0u {material=vec4<f32>((material.rgb*3.0+vec3<f32>(245.0,155.0,45.0)/255.0)/4.0,material.a);}
     else if (state&1u)!=0u {material=camera.face_selected;}
     else if (state&2u)!=0u {material=camera.face_hovered;}
+    if camera.display_flags.w!=0u {material=camera.tint_face;}
     let brightness = 0.62 + 0.38 * max(dot(n, camera.light.xyz), 0.0);
     let shaded = vec4<f32>(floor(material.rgb * brightness * 255.0 + vec3<f32>(0.5)) / 255.0, material.a);
     var output: Output;
     output.position = camera.matrix * vec4<f32>(position,1.0);
     if ((state&64u)!=0u && (camera.interaction.w&4u)==0u) || (camera.interaction.y!=0u && (state&4u)==0u) {output.position=vec4<f32>(2.0,2.0,2.0,1.0);}
-    output.color = select(shaded, material, camera.display_flags.x == 3u);
+    output.color = select(shaded, material, camera.display_flags.x == 3u || camera.display_flags.w!=0u);
     output.color *= color.a;
     if (camera.display_flags.y & 1u) != 0u { output.color *= 0.18; }
     output.world = position;
@@ -256,6 +259,7 @@ fn edge_vertex(@location(0) world_a: vec3<f32>, @location(1) world_b: vec3<f32>,
     else if (state&256u)!=0u {edge_color=vec4<f32>(245.0/255.0,155.0/255.0,45.0/255.0,1.0);}
     else if (state&1u)!=0u {edge_color=camera.edge_selected;}
     else if (state&2u)!=0u {edge_color=select(camera.edge_hovered,camera.edge_selected,(camera.interaction.w&1u)!=0u && (state&8u)==0u);}
+    if camera.display_flags.w!=0u {edge_color=camera.tint_edge;}
     output.color = target_color(edge_color);
     output.center = vec3<f32>(0.0);
     output.faces = faces;
@@ -271,6 +275,7 @@ fn edge_vertex(@location(0) world_a: vec3<f32>, @location(1) world_b: vec3<f32>,
     let normal = normalize(vec2<f32>(-screen_delta.y,screen_delta.x));
     let fringe = (abs(normal.x) + abs(normal.y)) / camera.viewport.z;
     var stroke_width=select(select(width,3.0,stroke_active),1.0,outside);
+    if camera.display_flags.w!=0u {stroke_width=2.4;}
     if (camera.display_flags.y & 4u) != 0u && !stroke_active && !outside {
         let toward = select(camera.eye.xyz-world_a,camera.direction.xyz,camera.flags.y!=0.0);
         let normals = array<vec3<f32>,4>(normal0,normal1,normal2,normal3);

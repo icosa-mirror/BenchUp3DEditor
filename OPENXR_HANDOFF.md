@@ -96,8 +96,18 @@ the existing physical spacing, deterministic jitter and face-interior anchors.
 Compact per-object axis textures support transformed instances and live previews;
 preview motion does not rebuild face meshes or CPU mark lists. The desktop path
 shares the same anchor producer. An isolated assigned-grain eye snapshot renders
-the patterns on the RTX 4090. Remaining visual work includes paste previews and
-final hint/status/handle coverage. The duplicated 2D viewport
+the patterns on the RTX 4090. Paste previews now use a separate retained model
+layer, initialized once per preview and moved by a transform uniform. Copied text
+and dimensions use retained annotation buffers with the existing green preview
+colors. Empty-scene paste can establish the initial scene placement. Section
+limits are translated into the preview's local coordinates.
+
+Annotations render after the geometry pass and sample the final scene depth in
+addition to the owner-aware face mask. This accounts for temporary preview geometry
+without breaking own-group label visibility or painter-style overlay hints. The
+hardware eye-render startup passes with the final-depth pass; interactive paste
+and headset comparison remain unconfirmed, with broad validation still deferred.
+Remaining visual work includes final hint/status/handle coverage. The duplicated 2D viewport
 remains for comparison and existing tool interaction while these gaps are closed.
 
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.

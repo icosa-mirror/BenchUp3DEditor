@@ -28,6 +28,7 @@ struct Key {
     tool_billboards: Vec<crate::app::viewport_overlays::Billboard>,
     references: usize,
     editing_text: Option<u64>,
+    tint: Option<egui::Color32>,
 }
 
 pub(super) struct Text {
@@ -63,14 +64,12 @@ impl Text {
                     attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x2,2=>Float32x2,3=>Float32x4,4=>Uint32x2] })], compilation_options: Default::default() },
             fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fragment"),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
-            primitive: Default::default(), depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::Always),
-                stencil: Default::default(), bias: wgpu::DepthBiasState { constant: -1, ..Default::default() } }),
+            primitive: Default::default(), depth_stencil: None,
             multisample: Default::default(), multiview_mask: None, cache: None,
         });
         let uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("BenchUpXR text view"),
-            size: 176,
+            size: 192,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -112,7 +111,13 @@ impl Text {
     }
 
     // Must run inside the editor's egui pass, before its atlas delta is uploaded.
-    pub fn stage(&mut self, ctx: &egui::Context, source: &Source, hover: Option<u64>) {
+    pub fn stage(
+        &mut self,
+        ctx: &egui::Context,
+        source: &Source,
+        hover: Option<u64>,
+        tint: Option<egui::Color32>,
+    ) {
         let mut key = Key {
             revision: source.revision,
             display: source.display.clone(),
@@ -125,6 +130,7 @@ impl Text {
             tool_billboards: source.overlays.billboards.clone(),
             references: std::sync::Arc::as_ptr(&source.references) as usize,
             editing_text: source.editing_text,
+            tint,
         };
         if self.key.as_ref() == Some(&key) {
             return;
@@ -134,7 +140,9 @@ impl Text {
         let colors = Palette::for_painter(&ctx.debug_painter());
         let model = &source.model;
         let color = |id| {
-            if self.entities.selected(model, id, &source.selected) {
+            if let Some(tint) = tint {
+                tint
+            } else if self.entities.selected(model, id, &source.selected) {
                 colors.accent
             } else if hover.is_some() && hover == model.entity_in_context(id) {
                 colors.green
@@ -387,6 +395,7 @@ impl Text {
         model: DMat4,
         head: DMat4,
         slot: impl Fn(u64) -> u32,
+        limits: [Option<f64>; 3],
     ) {
         if self.dirty || self.origin != Some(origin) {
             let mut vertices = Vec::new();
@@ -446,7 +455,7 @@ impl Text {
             self.origin = Some(origin);
             self.dirty = false;
         }
-        let mut data = [0.0f32; 44];
+        let mut data = [0.0f32; 48];
         data[..16].copy_from_slice(&projection.as_mat4().to_cols_array());
         data[16..32].copy_from_slice(
             &(model * DMat4::from_translation(origin))
@@ -456,7 +465,24 @@ impl Text {
         data[32..36].copy_from_slice(&head.x_axis.as_vec4().to_array());
         data[36..40].copy_from_slice(&head.y_axis.as_vec4().to_array());
         data[40..44].copy_from_slice(&head.w_axis.as_vec4().to_array());
+        for axis in 0..3 {
+            data[44 + axis] = limits[axis].map_or(f32::MAX, |v| (v - origin[axis]) as f32);
+        }
         queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&data));
+    }
+
+    pub fn clear(&mut self) {
+        if self.key.take().is_some() {
+            self.meshes.clear();
+            self.lines.clear();
+            self.ticks.clear();
+            self.count = 0;
+            self.vertices = None;
+            self.indices = None;
+            self.entities = Default::default();
+            self.markers = Default::default();
+            self.dirty = true;
+        }
     }
 
     pub fn paint(
@@ -465,6 +491,7 @@ impl Text {
         renderer: &egui_wgpu::Renderer,
         pass: &mut wgpu::RenderPass<'_>,
         visibility: Option<&wgpu::TextureView>,
+        depth: &wgpu::TextureView,
     ) {
         if self.count == 0 {
             return;
@@ -507,6 +534,10 @@ impl Text {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(visibility),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(depth),
                 },
             ],
         });

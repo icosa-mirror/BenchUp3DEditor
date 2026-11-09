@@ -85,6 +85,8 @@ struct Uniform {
     display_params: [f32; 4],
     back_color: [f32; 4],
     background_color: [f32; 4],
+    tint_face:[f32;4],
+    tint_edge:[f32;4],
 }
 #[derive(Default)]
 pub(super) struct Cache {
@@ -667,11 +669,13 @@ impl SceneCache {
                     u32::from(key.display.x_ray) | (u32::from(key.display.back_edges) << 1)
                         | (u32::from(key.display.profiles) << 2) | (u32::from(key.display.depth_cue) << 3)
                         | (u32::from(key.display.endpoints) << 4) | (u32::from(key.display.extensions) << 5)
-                        | (u32::from(key.display.fog) << 6), 0, 0,
+                        | (u32::from(key.display.fog) << 6), 0, u32::from(render_view.is_some_and(|v|v.colors.is_some())),
                 ],
                 display_params: [key.display.profile_width as f32, key.display.fog_start as f32, key.display.fog_end as f32, key.camera.distance as f32],
                 back_color: rgba(face_palette.back),
                 background_color: [key.display.background[0] as f32 / 255.0, key.display.background[1] as f32 / 255.0, key.display.background[2] as f32 / 255.0, 1.0],
+                tint_face:render_view.and_then(|v|v.colors).map_or([0.0;4],|v|rgba(v[0])),
+                tint_edge:render_view.and_then(|v|v.colors).map_or([0.0;4],|v|rgba(v[1])),
                 flags: [
                     0.,
                     if render_view.is_none() && key.camera.projection == benchup_core::Projection::Parallel {
@@ -739,6 +743,7 @@ impl Geometry {
             (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
             |(lo, hi), p| (lo.min(p), hi.max(p)),
         );
+        let bounds=if bounds.0.is_finite() && bounds.1.is_finite() {bounds} else {(DVec3::ZERO,DVec3::ZERO)};
         let origin = origin.unwrap_or((bounds.0 + bounds.1) * 0.5);
         let point = |p: DVec3| (p - origin).as_vec3().to_array();
         let mut vertices = Vec::new();

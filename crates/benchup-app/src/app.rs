@@ -205,6 +205,17 @@ struct GeometryClipboard {
 struct PastePreview {
     clipboard: GeometryClipboard,
     point: DVec3,
+    #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
+    xr_model:std::sync::Arc<Model>,
+}
+impl PastePreview {
+    fn new(clipboard:GeometryClipboard,point:DVec3)->Self {
+        Self {
+            #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
+            xr_model:std::sync::Arc::new(clipboard.model.clone()),
+            clipboard,point,
+        }
+    }
 }
 struct Gesture {
     button: egui::PointerButton,
@@ -510,6 +521,7 @@ impl BenchUpApp {
             joinery_members:self.joinery_edit_members(),
             editing_text:self.text_editor.as_ref().and_then(|editor|editor.id),
             grain_preview:self.grain_preview_axes(),
+            paste:self.paste_preview.as_ref().map(|preview|crate::xr::immersive::PasteSource {model:std::sync::Arc::clone(&preview.xr_model),offset:preview.point-preview.clipboard.anchor}),
         }
     }
 

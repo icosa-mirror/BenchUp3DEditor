@@ -14,6 +14,7 @@ pub(crate) struct RenderView {
     pub view_projection: glam::DMat4,
     pub eye: DVec3,
     pub toward_eye: DVec3,
+    pub colors:Option<[Color32;2]>,
 }
 
 /// Shared reference geometry fade, measured along the camera's forward axis.

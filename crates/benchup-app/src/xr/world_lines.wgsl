@@ -2,6 +2,7 @@ struct View { matrix: mat4x4<f32>, viewport: vec4<f32>,limits:vec4<f32> }
 @group(0) @binding(0) var<uniform> view: View;
 @group(1) @binding(0) var<storage,read> owner_slots:array<u32>;
 @group(1) @binding(1) var visibility:texture_2d<u32>;
+@group(1) @binding(2) var scene_depth:texture_depth_2d;
 struct Output {
     @builtin(position) position: vec4<f32>,
     @location(0) color: vec4<f32>,
@@ -66,6 +67,8 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
 @fragment
 fn fragment(input: Output) -> @location(0) vec4<f32> {
     let face=textureLoad(visibility,vec2<i32>(input.position.xy),0).xy;
+    let depth=textureLoad(scene_depth,vec2<i32>(input.position.xy),0);
+    if input.style.w==0.0 && depth<input.depth-0.000001 && (face.x==0u || depth<bitcast<f32>(face.y)-0.000001) {discard;}
     if input.style.w==0.0 && face.x!=0u && bitcast<f32>(face.y)<input.depth-0.000001 {
         var lo=input.owners.x;var hi=input.owners.y;
         loop {if lo>=hi {break;}let mid=lo+(hi-lo)/2u;if owner_slots[mid]<face.x {lo=mid+1u;} else {hi=mid;}}

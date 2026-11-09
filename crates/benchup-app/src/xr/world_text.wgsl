@@ -4,12 +4,14 @@ struct View {
     right: vec4<f32>,
     up: vec4<f32>,
     head: vec4<f32>,
+    limits:vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> view: View;
 @group(1) @binding(0) var atlas: texture_2d<f32>;
 @group(1) @binding(1) var atlas_sampler: sampler;
 @group(2) @binding(0) var<storage,read> owner_slots: array<u32>;
 @group(2) @binding(1) var visibility: texture_2d<u32>;
+@group(2) @binding(2) var scene_depth:texture_depth_2d;
 struct Output {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -28,10 +30,13 @@ struct Output {
     out.uv = uv;
     out.color = color;
     out.owners = owners;
+    if owners.x!=0xffffffffu && any(anchor>view.limits.xyz) {out.position=vec4<f32>(2.0,2.0,0.0,1.0);}
     return out;
 }
 @fragment fn fragment(in: Output) -> @location(0) vec4<f32> {
     let face=textureLoad(visibility,vec2<i32>(in.position.xy),0).xy;
+    let depth=textureLoad(scene_depth,vec2<i32>(in.position.xy),0);
+    if in.owners.x!=0xffffffffu && depth<in.position.z-0.000001 && (face.x==0u || depth<bitcast<f32>(face.y)-0.000001) {discard;}
     if in.owners.x!=0xffffffffu && face.x!=0u && bitcast<f32>(face.y)<in.position.z-0.00000024 {
         // Sorted slots avoid a per-fragment linear scan of large group contents.
         var lo=in.owners.x; var hi=in.owners.y;

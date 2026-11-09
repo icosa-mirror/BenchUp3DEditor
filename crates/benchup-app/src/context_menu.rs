@@ -115,7 +115,7 @@ impl BenchUpApp {
                         .infer_snap(pos, None, None, self.doc.snap_to_axes)
                         .map(|s| s.point)
                         .unwrap_or(clipboard.anchor);
-                    self.paste_preview = Some(PastePreview { clipboard, point });
+                    self.paste_preview = Some(PastePreview::new(clipboard, point));
                     self.say(ctx, tr!("context_menu.click_to_place_the_copy_escape_to_cancel"));
                 }
             }

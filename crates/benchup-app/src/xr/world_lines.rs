@@ -90,10 +90,8 @@ impl Lines {
                 buffers: &[Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Line>() as _, step_mode: wgpu::VertexStepMode::Instance,
                     attributes: &wgpu::vertex_attr_array![0=>Float32x3,3=>Float32,1=>Float32x3,2=>Float32x4,4=>Float32x4,5=>Uint32x2] })], compilation_options: Default::default() },
             fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fragment"),
-                targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
-            primitive: Default::default(), depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::Always),
-                stencil: Default::default(), bias: wgpu::DepthBiasState { constant: -1, ..Default::default() } }),
+                targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
+            primitive: Default::default(), depth_stencil: None,
             multisample: Default::default(), multiview_mask: None, cache: None,
         });
         let uniform = || {
@@ -256,6 +254,7 @@ impl Lines {
         pass: &mut wgpu::RenderPass<'_>,
         size: [u32; 2],
         visibility: Option<&wgpu::TextureView>,
+        depth: &wgpu::TextureView,
     ) {
         let Some(visibility) = visibility else {
             return;
@@ -271,6 +270,10 @@ impl Lines {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(visibility),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(depth),
                 },
             ],
         });

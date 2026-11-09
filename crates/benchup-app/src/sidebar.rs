@@ -4659,10 +4659,7 @@ impl BenchUpApp {
         let anchor = points.fold(first, |lo, point| lo.min(point));
         let clipboard = GeometryClipboard { model, anchor };
         self.set_tool(Tool::Select);
-        self.paste_preview = Some(PastePreview {
-            clipboard,
-            point: self.doc.camera.target,
-        });
+        self.paste_preview = Some(PastePreview::new(clipboard,self.doc.camera.target));
         self.say(ctx, tr!("sidebar.click_to_place_the_component_escape_to_cancel"));
     }
 

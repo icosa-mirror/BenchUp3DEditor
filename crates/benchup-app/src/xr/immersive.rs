@@ -6,6 +6,7 @@ use glam::{DMat4, DQuat, DVec2, DVec3, DVec4};
 use openxr as xr;
 use std::{collections::BTreeSet, sync::Arc};
 
+#[derive(Clone)]
 pub(crate) struct Source {
     pub model: Arc<Model>,
     pub revision: u64,
@@ -21,6 +22,13 @@ pub(crate) struct Source {
     pub joinery_members: Option<[u64; 2]>,
     pub editing_text: Option<u64>,
     pub grain_preview: std::collections::BTreeMap<u64, DVec3>,
+    pub paste: Option<PasteSource>,
+}
+
+#[derive(Clone)]
+pub(crate) struct PasteSource {
+    pub model: Arc<Model>,
+    pub offset: DVec3,
 }
 
 struct Placement {
@@ -47,6 +55,14 @@ pub(super) struct Scene {
     surfaces: super::world_surfaces::Surfaces,
     backdrop: super::backdrop::Backdrop,
     grid: super::floor_grid::Grid,
+    paste_cache: renderer::SceneCache,
+    paste_faces: renderer::FaceCache,
+    paste_entities: renderer::EntityCache,
+    paste_source: Option<Arc<Model>>,
+    paste_revision: u64,
+    paste_text: super::world_text::Text,
+    paste_lines: super::world_lines::Lines,
+    empty_references: Arc<crate::app::viewport_overlays::Overlays>,
 }
 
 impl Scene {
@@ -69,6 +85,14 @@ impl Scene {
             surfaces: super::world_surfaces::Surfaces::new(device, format),
             backdrop: super::backdrop::Backdrop::new(device, format),
             grid: super::floor_grid::Grid::new(device, format),
+            paste_cache: Default::default(),
+            paste_faces: Default::default(),
+            paste_entities: Default::default(),
+            paste_source: None,
+            paste_revision: 0,
+            paste_text: super::world_text::Text::new(device, format),
+            paste_lines: super::world_lines::Lines::new(device, format),
+            empty_references: Default::default(),
         }
     }
 
@@ -83,9 +107,32 @@ impl Scene {
         self.picking.set_display(&display);
         self.sections
             .geometry(&self.faces, &self.entities, &display);
+        if let Some(paste) = &source.paste {
+            if self
+                .paste_source
+                .as_ref()
+                .is_none_or(|old| !Arc::ptr_eq(old, &paste.model))
+            {
+                self.paste_revision = self.paste_revision.wrapping_add(1);
+                self.paste_source = Some(Arc::clone(&paste.model));
+                self.paste_faces
+                    .update_for_revision(&paste.model, self.paste_revision);
+                self.paste_entities
+                    .update_for_revision(&paste.model, self.paste_revision);
+            }
+        } else if self.paste_source.take().is_some() {
+            self.paste_cache = Default::default();
+            self.paste_faces = Default::default();
+            self.paste_entities = Default::default();
+        }
         self.picking.update(&self.faces);
         if self.placement.is_none() || fit {
-            if let Some((min, max)) = source.model.bounds() {
+            if let Some((min, max)) = source.model.bounds().or_else(|| {
+                source
+                    .paste
+                    .as_ref()
+                    .and_then(|p| p.model.bounds().map(|(a, b)| (a + p.offset, b + p.offset)))
+            }) {
                 let extent = (max - min).max_element().max(0.001);
                 self.placement = Some(Placement {
                     center: (min + max) * 0.5,
@@ -159,7 +206,37 @@ impl Scene {
             ctx,
             source,
             self.input.and_then(|input| input.hit).map(|hit| hit.entity),
+            None,
         );
+        if let Some(paste) = &source.paste {
+            let mut secondary = source.clone();
+            secondary.model = Arc::clone(&paste.model);
+            secondary.revision = Arc::as_ptr(&paste.model) as u64;
+            secondary.display = paste_display(&source.display, paste.offset);
+            secondary.display.group_names = false;
+            secondary.selected.clear();
+            secondary.hover = None;
+            secondary.outliner_hover.clear();
+            secondary.erasing.clear();
+            secondary.editing_text = None;
+            secondary.joinery_members = None;
+            secondary.grain_preview.clear();
+            secondary.overlays = Default::default();
+            secondary.references = Arc::clone(&self.empty_references);
+            secondary.paste = None;
+            let colors = crate::theme::Palette::for_painter(&ctx.debug_painter());
+            self.paste_text
+                .stage(ctx, &secondary, None, Some(colors.green));
+            // Paste text may grow the shared atlas after main labels were shaped.
+            self.text.stage(
+                ctx,
+                source,
+                self.input.and_then(|input| input.hit).map(|hit| hit.entity),
+                None,
+            );
+        } else {
+            self.paste_text.clear();
+        }
     }
 
     pub fn pick_ray(&self, ray: benchup_core::Ray, scale: f32) -> Option<super::input::SceneHit> {
@@ -217,7 +294,8 @@ impl Scene {
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
                         format: wgpu::TextureFormat::Depth32Float,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
                         view_formats: &[],
                     })
                     .create_view(&Default::default()),
@@ -244,12 +322,16 @@ impl Scene {
                         * transform,
                     eye: model_from_eye.transform_point3(DVec3::ZERO),
                     toward_eye: model_from_eye.transform_vector3(DVec3::Z).normalize(),
+                    colors: None,
                 };
-                let display = crate::app::display_scene::effective_display(
+                let mut display = crate::app::display_scene::effective_display(
                     &source.display,
                     &source.model,
                     self.dark,
                 );
+                if source.model.faces.is_empty() {
+                    display.shadows = false;
+                }
                 let mut camera = source.camera.clone();
                 camera.projection = benchup_core::Projection::Perspective;
                 let key = renderer::SceneKey {
@@ -283,6 +365,38 @@ impl Scene {
                     renderer::Mesh::new(&key.camera, key.size),
                     Some(&view),
                 );
+                if let Some(paste) = &source.paste {
+                    let paste_display = paste_display(&source.display, paste.offset);
+                    let colors = crate::theme::Palette::for_ui(ui);
+                    let paste_view = renderer::RenderView {
+                        view_projection: view.view_projection
+                            * DMat4::from_translation(paste.offset),
+                        eye: view.eye - paste.offset,
+                        toward_eye: view.toward_eye,
+                        colors: Some([crate::theme::FacePalette::for_ui(ui).paste, colors.green]),
+                    };
+                    let mut paste_key = key.clone();
+                    paste_key.display = paste_display;
+                    paste_key.model_revision = self.paste_revision;
+                    paste_key.edit_context = None;
+                    paste_key.selected.clear();
+                    paste_key.hover = None;
+                    paste_key.outliner_hover.clear();
+                    paste_key.erasing.clear();
+                    paste_key.joinery_members = None;
+                    paste_key.joint_preview = None;
+                    paste_key.grain_preview.clear();
+                    self.paste_cache.paint_resident_view(
+                        &paste_key,
+                        &paste.model,
+                        &self.paste_faces,
+                        &self.paste_entities,
+                        ui,
+                        rect,
+                        renderer::Mesh::new(&paste_key.camera, paste_key.size),
+                        Some(&paste_view),
+                    );
+                }
             },
         );
         let jobs = self
@@ -556,7 +670,49 @@ impl Scene {
                 transform,
                 self.head,
                 |id| self.cache.resident_face_slot(id),
+                source.display.section_limits(),
             );
+            if let Some(paste) = &source.paste {
+                let paste_origin = paste
+                    .model
+                    .bounds()
+                    .map_or(DVec3::ZERO, |(a, b)| (a + b) * 0.5);
+                let paste_transform = transform * DMat4::from_translation(paste.offset);
+                let limits = paste_display(&source.display, paste.offset).section_limits();
+                self.paste_text.prepare(
+                    device,
+                    queue,
+                    paste_origin,
+                    tracking_view,
+                    paste_transform,
+                    self.head,
+                    |_| 0,
+                    limits,
+                );
+                self.paste_lines.references(
+                    device,
+                    vec![self.paste_revision, self.paste_text.revision],
+                    || {
+                        let mut lines = Vec::new();
+                        for &(a, b, color) in &self.paste_text.lines {
+                            lines.push(Line::new(a - paste_origin, b - paste_origin, color, 1.5));
+                        }
+                        for &(a, b, color) in &self.paste_text.ticks {
+                            lines.push(Line::tick(a - paste_origin, b - paste_origin, color));
+                        }
+                        lines
+                    },
+                );
+                self.paste_lines.prepare(
+                    queue,
+                    tracking_view * paste_transform * DMat4::from_translation(paste_origin),
+                    tracking_view,
+                    size,
+                    &[],
+                    limits,
+                    paste_origin,
+                );
+            }
             let mut pointer = Vec::new();
             if let Some(input) = self.input {
                 if let Some(hit) = input.hit {
@@ -632,18 +788,87 @@ impl Scene {
             renderer.render(&mut pass, &jobs, &screen);
             self.grid.paint(&mut pass, size);
             self.surfaces.paint(&mut pass, size);
-            self.lines
-                .paint(device, &mut pass, size, visibility.as_ref().map(|v| &v.0));
+        }
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("BenchUpXR world hints and annotations"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            let depth = &self.depth.as_ref().unwrap().1;
+            pass.set_viewport(0.0, 0.0, size[0] as f32, size[1] as f32, 0.0, 1.0);
+            pass.set_scissor_rect(0, 0, size[0], size[1]);
+            self.lines.paint(
+                device,
+                &mut pass,
+                size,
+                visibility.as_ref().map(|v| &v.0),
+                depth,
+            );
             self.text.paint(
                 device,
                 renderer,
                 &mut pass,
                 visibility.as_ref().map(|v| &v.0),
+                depth,
             );
+            if self
+                .source
+                .as_ref()
+                .is_some_and(|source| source.paste.is_some())
+            {
+                self.paste_lines.paint(
+                    device,
+                    &mut pass,
+                    size,
+                    visibility.as_ref().map(|v| &v.0),
+                    depth,
+                );
+                self.paste_text.paint(
+                    device,
+                    renderer,
+                    &mut pass,
+                    visibility.as_ref().map(|v| &v.0),
+                    depth,
+                );
+            }
         }
         let submission = queue.submit(commands.into_iter().chain([encoder.finish()]));
         submission
     }
+}
+
+fn paste_display(source: &DisplaySettings, offset: DVec3) -> DisplaySettings {
+    let mut display = source.clone();
+    display.face_style = benchup_core::FaceStyle::Shaded;
+    display.shadows = false;
+    display.x_ray = false;
+    display.edges = true;
+    display.group_emphasis = false;
+    display.color_by_tag = false;
+    display.endpoints = false;
+    display.profiles = false;
+    display.depth_cue = false;
+    display.extensions = false;
+    display.hidden_geometry = false;
+    display.hidden_objects = false;
+    display.grain_direction = false;
+    display.section_fill = false;
+    display.section_planes = false;
+    if display.section_cuts {
+        display.section_height -= offset.z;
+        display.section_offsets[0] -= offset.x;
+        display.section_offsets[1] -= offset.y;
+    }
+    display
 }
 
 impl Placement {
