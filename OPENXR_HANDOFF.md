@@ -221,8 +221,15 @@ finite display ends do not become false endpoint targets. Attachment tools and
 face/solid operations retain geometry targets. Five isolated spatial-index checks
 pass, including guide points and span changes. Live interaction remains untested.
 
-Remaining: guide-guide intersection inference and off-face
-nearby geometry; desktop reference-acquisition parity; controller paths for
+Controller snapping now includes precise guide-guide crossings and saved guide
+points. The retained guide hierarchy gathers the nearest 16 visible candidates;
+at most 120 local line pairs are tested, and eight angularly nearest exact
+point targets reach shared constraint filtering. Skew/parallel lines and crossings
+outside the displayed spans are rejected. Point targets take precedence over
+on-guide inference. Dense clusters beyond these local limits may omit a target;
+there is no full-scene pairwise intersection scan. Seven isolated checks pass.
+
+Remaining: off-face nearby geometry; desktop reference-acquisition parity; controller paths for
 direct annotation picking and flip-plane hover feedback. Legacy desktop-only navigation modes
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup

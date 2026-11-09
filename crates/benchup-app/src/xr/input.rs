@@ -11,6 +11,7 @@ pub(super) struct SceneHit {
     pub face: Option<u64>,
     pub edge: Option<u64>,
     pub guide: Option<u64>,
+    pub guide_points: [Option<DVec3>; 8],
     pub point: DVec3,
     pub distance: f64,
 }

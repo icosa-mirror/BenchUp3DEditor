@@ -331,13 +331,19 @@ impl Scene {
         let want_guides = !source.modeling && source.display.guides && !face_tool
             && !attachment_tool && !source.tool.is_solid()
             && (selection_tool || source.snap_geometry);
-        let guide_hit = if want_guides && edge_hit.is_none() {
+        let (guide_hit, guide_points) = if want_guides && edge_hit.is_none() {
             self.guide_picking.prepare_guides(&source.model, placement.guide_frame());
-            self.guide_picking.query(model_ray, 0.01, |id, a, b| {
+            let visible = |id| {
                 let state = self.entities.get(id);
-                (!state.hidden && state.context.is_some()).then_some((a, b))
-            }, |_, _| true)
-        } else { None };
+                !state.hidden && state.context.is_some()
+            };
+            if selection_tool {
+                (self.guide_picking.query(model_ray, 0.01,
+                    |id, a, b| visible(id).then_some((a, b)), |_, _| true), [None; 8])
+            } else {
+                self.guide_picking.guide_query(model_ray, 0.01, visible)
+            }
+        } else { (None, [None; 8]) };
         let (face, edge, guide, point, target) = if let Some(hit) = edge_hit {
             let edge = &source.model.edges[&hit.id];
             let adjacent = self.faces.adjacent_faces(edge.a,edge.b);
@@ -365,6 +371,7 @@ impl Scene {
             face,
             edge,
             guide,
+            guide_points,
             point,
             distance: tracking_point.distance(ray.origin),
         })
@@ -395,6 +402,7 @@ impl Scene {
                 crate::app::xr_tools::Hit {
                     entity:hit.entity,face:hit.face,edge:hit.edge,point:hit.point,
                     guide:hit.guide.map(|id|placement.guide_frame().segment(&source.model.guides[&id])),
+                    guide_points:hit.guide_points,
                     normal:hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal),
                     center:snapping.then(||hit.face.and_then(|face|self.faces.snap_center(&source.model,face)).filter(|&point|self.point_visible(ray.origin,point))).flatten(),
                     edge_targets:snapping.then_some(hit.edge).flatten().map_or([None;3],|id| {

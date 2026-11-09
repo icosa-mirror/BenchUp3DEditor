@@ -84,6 +84,7 @@ struct Node {
     children: Option<(usize, usize)>,
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct Hit {
     pub id: u64,
     pub point: DVec3,
@@ -100,6 +101,94 @@ pub(super) struct Index {
 }
 
 impl Index {
+    /// Find precise guide targets near the ray without testing every guide pair.
+    /// Only the nearest 16 local candidates participate (at most 120 pairs).
+    pub fn guide_query(
+        &self,
+        ray: Ray,
+        slope: f64,
+        visible: impl Fn(u64) -> bool,
+    ) -> (Option<Hit>, [Option<DVec3>; 8]) {
+        let empty = (None, [None; 8]);
+        if self.nodes.is_empty() || !ray.origin.is_finite() || !slope.is_finite() || slope <= 0. {
+            return empty;
+        }
+        let Some(direction) = ray.direction.try_normalize() else {
+            return empty;
+        };
+        let ray = Ray { direction, ..ray };
+        let mut nearby: Vec<(Edge, Hit)> = Vec::with_capacity(16);
+        let mut pending = [0_usize; usize::BITS as usize + 1];
+        let mut len = 1;
+        while len > 0 {
+            len -= 1;
+            let node = &self.nodes[pending[len]];
+            if node.bounds.entry(ray, slope, f64::INFINITY).is_none() {
+                continue;
+            }
+            if let Some((a, b)) = node.children {
+                pending[len] = a;
+                pending[len + 1] = b;
+                len += 2;
+                continue;
+            }
+            for &edge in &self.edges[node.start..node.end] {
+                if !visible(edge.id) {
+                    continue;
+                }
+                let Some((point, depth, score)) =
+                    closest(ray, edge.a, edge.b).filter(|(_, _, score)| *score <= slope)
+                else {
+                    continue;
+                };
+                let hit = Hit {
+                    id: edge.id,
+                    point,
+                    depth,
+                    score,
+                };
+                let at = nearby.partition_point(|(_, old)| {
+                    old.score
+                        .total_cmp(&score)
+                        .then(old.depth.total_cmp(&depth))
+                        .then(old.id.cmp(&edge.id))
+                        .is_lt()
+                });
+                if at < 16 {
+                    nearby.insert(at, (edge, hit));
+                    nearby.truncate(16);
+                }
+            }
+        }
+        let mut points: Vec<(DVec3, f64, f64)> = Vec::new();
+        let mut add = |point| {
+            if let Some(candidate) =
+                closest(ray, point, point).filter(|(_, _, score)| *score <= slope)
+                && !points
+                    .iter()
+                    .any(|(old, _, _)| old.distance_squared(point) < 1e-12)
+            {
+                points.push(candidate);
+            }
+        };
+        for (i, (a, _)) in nearby.iter().enumerate() {
+            if a.a == a.b {
+                add(a.a);
+            }
+            for (b, _) in &nearby[i + 1..] {
+                if let Some(point) = intersection(*a, *b) {
+                    add(point);
+                }
+            }
+        }
+        points.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.1.total_cmp(&b.1)));
+        let mut targets = [None; 8];
+        for (target, (point, _, _)) in targets.iter_mut().zip(points) {
+            *target = Some(point);
+        }
+        (nearby.first().map(|(_, hit)| *hit), targets)
+    }
+
     pub fn prepare_guides(&mut self, model: &Arc<Model>, frame: GuideFrame) {
         if self
             .source
@@ -263,6 +352,27 @@ impl Index {
     }
 }
 
+fn intersection(a: Edge, b: Edge) -> Option<DVec3> {
+    let ad = (a.b - a.a).try_normalize()?;
+    let bd = (b.b - b.a).try_normalize()?;
+    let point = Ray {
+        origin: a.a,
+        direction: ad,
+    }
+    .axis(b.a, bd)?;
+    if (point - a.a).cross(ad).length() > 1e-6 {
+        return None;
+    }
+    for edge in [a, b] {
+        let segment = edge.b - edge.a;
+        let t = (point - edge.a).dot(segment) / segment.length_squared();
+        if !(0.0..=1.0).contains(&t) {
+            return None;
+        }
+    }
+    Some(point)
+}
+
 fn closest(ray: Ray, a: DVec3, b: DVec3) -> Option<(DVec3, f64, f64)> {
     let start = a - ray.origin;
     let segment = b - a;
@@ -296,6 +406,74 @@ fn closest(ray: Ray, a: DVec3, b: DVec3) -> Option<(DVec3, f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn guide_crossings_and_points_are_precise_local_targets() {
+        let crossing = DVec3::new(0.006, 0., 2.);
+        let point = DVec3::new(-0.004, 0., 2.);
+        let guides = index(&[
+            (1, DVec3::new(-1., 0., 2.), DVec3::new(1., 0., 2.)),
+            (2, crossing - DVec3::Y, crossing + DVec3::Y),
+            (3, point, point),
+        ]);
+        let (hit, targets) = guides.guide_query(ray(), 0.01, |_| true);
+        assert_eq!(hit.unwrap().id, 1);
+        let targets: Vec<_> = targets.into_iter().flatten().collect();
+        assert_eq!(targets, vec![point, crossing]);
+        let (_, targets) = guides.guide_query(ray(), 0.01, |id| id != 2);
+        assert_eq!(
+            targets.into_iter().flatten().collect::<Vec<_>>(),
+            vec![point]
+        );
+    }
+
+    #[test]
+    fn guide_intersections_reject_skew_parallel_and_out_of_span_lines() {
+        let a = Edge {
+            id: 1,
+            a: DVec3::new(-1., 0., 2.),
+            b: DVec3::new(1., 0., 2.),
+        };
+        let b = Edge {
+            id: 2,
+            a: DVec3::new(0., -1., 2.),
+            b: DVec3::new(0., 1., 2.),
+        };
+        assert_eq!(intersection(a, b), Some(DVec3::new(0., 0., 2.)));
+        assert!(
+            intersection(
+                a,
+                Edge {
+                    a: b.a + DVec3::Z * 0.01,
+                    b: b.b + DVec3::Z * 0.01,
+                    ..b
+                }
+            )
+            .is_none()
+        );
+        assert!(
+            intersection(
+                a,
+                Edge {
+                    a: b.a + DVec3::X * 2.,
+                    b: b.b + DVec3::X * 2.,
+                    ..b
+                }
+            )
+            .is_none()
+        );
+        assert!(
+            intersection(
+                a,
+                Edge {
+                    a: a.a + DVec3::Y,
+                    b: a.b + DVec3::Y,
+                    ..b
+                }
+            )
+            .is_none()
+        );
+    }
+
     #[test]
     fn guide_points_and_displayed_line_spans_share_the_hierarchy() {
         let mut model = Model::default();

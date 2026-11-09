@@ -9,6 +9,7 @@ pub(crate) struct Hit {
     pub face: Option<u64>,
     pub edge: Option<u64>,
     pub guide: Option<(DVec3, DVec3)>,
+    pub guide_points: [Option<DVec3>; 8],
     pub edge_targets: [Option<DVec3>; 3],
     pub point: DVec3,
     pub normal: DVec3,
@@ -1079,6 +1080,8 @@ impl BenchUpApp {
         if self.doc.snap_to_geometry
             && let Some(hit) = pointer.hit
         {
+            points.extend(hit.guide_points.into_iter().flatten()
+                .map(|point| (point, Inference::GuidePoint)));
             if self.snap_to_edge {
                 points.extend(hit.edge_targets.into_iter().enumerate().filter_map(
                     |(index, point)| {
