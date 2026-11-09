@@ -439,6 +439,7 @@ pub struct BenchUpApp {
     // their triangulation, BVH and the shadow cache on every pointer event.
     render_face_cache: renderer::FaceCache,
     group_marker_cache: renderer::GroupMarkerCache,
+    section_bounds:section_gizmo::BoundsCache,
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     spatial_references: viewport_overlays::ReferenceCache,
     render_entity_cache: renderer::EntityCache,
@@ -513,21 +514,22 @@ impl BenchUpApp {
         if self.render_model.revision() == 0 { self.render_model.update(&self.doc.model); }
         crate::xr::immersive::Source {
             model: self.render_model.shared(), revision: self.render_model.revision(),
-            camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected: self.selected.clone(),
+            camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
-            tool:self.tool,hover:self.hover,outliner_hover:self.outliner_hover.clone(),
+            tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),
             editing_text:self.text_editor.as_ref().and_then(|editor|editor.id),
             grain_preview:self.grain_preview_axes(),
             paste:self.paste_preview.as_ref().map(|preview|crate::xr::immersive::PasteSource {model:std::sync::Arc::clone(&preview.xr_model),offset:preview.point-preview.clipboard.anchor}),
+            status:self.xr_scene_status(ctx),
         }
     }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn xr_scene_interaction_enabled(&self, ctx: &egui::Context) -> bool {
-        !self.project.blocked() && ctx.memory(|memory| memory.top_modal_layer().is_none())
+        !self.project.blocked() && self.history_preview.is_none() && ctx.memory(|memory| memory.top_modal_layer().is_none())
     }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
@@ -672,6 +674,7 @@ impl BenchUpApp {
             picking_cache: crate::picking::PickingCache::default(),
             render_face_cache: renderer::FaceCache::default(),
             group_marker_cache: Default::default(),
+            section_bounds:Default::default(),
             #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
             spatial_references: Default::default(),
             render_entity_cache: renderer::EntityCache::default(),
@@ -2989,62 +2992,7 @@ impl BenchUpApp {
             )
             .show(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let drawing_orbit = self.drawing_orbit_modifier(ctx.input(|i| i.modifiers));
-                    let navigating = self
-                        .gesture
-                        .as_ref()
-                        .is_some_and(|g| matches!(g.kind, GestureKind::Navigate { .. }));
-                    let shared_status = self.shared_status(ctx.input(|i|i.time));
-                    let message = if let Some(status) = shared_status.as_deref() {
-                        status
-                    } else if drawing_orbit {
-                        tr!("app.move_the_cursor_to_orbit_hold_shift_to")
-                    } else if navigating {
-                        if ctx.input(|i| i.modifiers.shift) {
-                            tr!("app.panning_release_shift_to_orbit")
-                        } else {
-                            tr!("app.orbiting_hold_shift_to_pan")
-                        }
-                    } else if self.paste_preview.is_some() {
-                        tr!("app.click_to_place_the_copy_escape_to_cancel")
-                    } else if self.tool == Tool::PushPull && self.push_pull_new_faces {
-                        tr!("app.push_pull_new_faces_status")
-                    } else if self.tool == Tool::Rotate {
-                        self.rotation_status()
-                    } else if self.tool == Tool::Move {
-                        if self.last_move_copy.is_some() {
-                            tr!("app.copy_placed_type_3_to_divide_the_span")
-                        } else {
-                            match (ctx.os() == egui::os::OperatingSystem::Mac, self.move_copy) {
-                                (true, true) => tr!("app.copy_option_toggles_move_click_to_place_type"),
-                                (true, false) => tr!("app.move_option_toggles_copy_click_base_point_and"),
-                                (false, true) => tr!("app.copy_ctrl_toggles_move_click_to_place_type"),
-                                (false, false) => tr!("app.move_ctrl_toggles_copy_click_base_point_and"),
-                            }
-                        }
-                    } else if self.tool.is_solid() {
-                        self.solid_status()
-                    } else if self.tool.is_measuring() {
-                        self.measurement_status()
-                    } else if self.tool == Tool::Walk {
-                        self.walk_status()
-                    } else if self.tool == Tool::Paint {
-                        self.paint_instructions()
-                    } else if self.grain_anchor.is_some() {
-                        tr!("grain_direction.click_to_confirm")
-                    } else if self.tool == Tool::Line && self.line_start.is_some() {
-                        tr!("app.click_to_finish_type_length_enter_esc_to")
-                    } else if self.drawing.is_some() && self.tool == Tool::Rectangle {
-                        tr!("app.click_the_opposite_corner_type_width_height_5m")
-                    } else if self.drawing.is_some()
-                        && matches!(self.tool, Tool::Circle | Tool::Polygon)
-                    {
-                        tr!("app.click_to_set_the_radius_type_a_radius")
-                    } else if self.drawing.is_some() && self.tool == Tool::Freehand {
-                        tr!("app.release_to_finish_type_total_length_enter_esc")
-                    } else {
-                        self.tool.instructions()
-                    };
+                    let message = self.viewport_status_message(&ctx);
                     // Reserve the precision controls before fitting the status message.
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if self.tool == Tool::Text { return; }
@@ -5642,35 +5590,8 @@ impl BenchUpApp {
         if self.history_preview.is_some() {
             return;
         }
-        let guide = self
-            .active_drawing_guide()
-            .map(|g| (g.origin, g.axis))
-            .or_else(|| {
-                if !self.tool.is_drawing() && self.tool != Tool::GrainDirection {
-                    return None;
-                }
-                match self.line_preview_snap()?.kind {
-                    Inference::OnAxis(axis) => Some((DVec3::ZERO, axis)),
-                    Inference::Axis(axis) => self
-                        .trace_start()
-                        .or_else(|| self.drawing.as_ref().map(|d| d.origin))
-                        .map(|origin| (origin, axis)),
-                    _ => self
-                        .preview_alignment()
-                        .zip(self.trace_start())
-                        .map(|(axis, start)| (start, axis)),
-                }
-            });
-        let combined: Vec<_> = self
-            .active_drawing_axis_guides()
-            .map(|g| (g.origin, g.axis))
-            .collect();
-        for (origin, axis) in combined
-            .iter()
-            .copied()
-            .chain(guide.filter(|_| combined.is_empty()))
-            .filter(|_| display.guides)
-        {
+        let multi_axis_guides=self.active_drawing_axis_guides().next().is_some();
+        for (origin,axis) in self.drawing_hint_axes().into_iter().filter(|_|display.guides) {
             let extent = axis.vector() * camera.distance * 5.;
             if let Some((a, b)) = camera.segment(origin - extent, origin + extent, size) {
                 let a = rect.min + pv(a);
@@ -5685,7 +5606,7 @@ impl BenchUpApp {
                     );
                 }
             }
-            if self.drawing_guide.is_some() || !combined.is_empty() {
+            if self.drawing_guide.is_some() || multi_axis_guides {
                 if let Some(point) = screen(origin) {
                     p.circle_filled(point, 3., colors.paper);
                     p.circle_stroke(point, 3., Stroke::new(1.5, self.axis_color(axis)));

@@ -44,6 +44,20 @@ pub(crate) struct Billboard {
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
 #[derive(Clone, PartialEq)]
 pub(crate) enum Glyph {
+    AxisArrow {
+        axis: DVec3,
+        pivot: [f32; 2],
+        length: f32,
+        color: Color32,
+        width: f32,
+    },
+    Paragraph {
+        text: String,
+        size: f32,
+        width: f32,
+        color: Color32,
+        background: Color32,
+    },
     Circle {
         center: [f32; 2],
         radius: f32,
@@ -144,6 +158,115 @@ pub(crate) struct Triangle {
 }
 
 impl BenchUpApp {
+    pub(super) fn drawing_hint_axes(&self) -> Vec<(DVec3, Axis)> {
+        let combined: Vec<_> = self
+            .active_drawing_axis_guides()
+            .map(|guide| (guide.origin, guide.axis))
+            .collect();
+        if !combined.is_empty() {
+            return combined;
+        }
+        self.active_drawing_guide()
+            .map(|g| (g.origin, g.axis))
+            .or_else(|| {
+                if !self.tool.is_drawing() && self.tool != Tool::GrainDirection {
+                    return None;
+                }
+                match self.line_preview_snap()?.kind {
+                    Inference::OnAxis(axis) => Some((DVec3::ZERO, axis)),
+                    Inference::Axis(axis) => self
+                        .trace_start()
+                        .or_else(|| self.drawing.as_ref().map(|d| d.origin))
+                        .map(|origin| (origin, axis)),
+                    _ => self
+                        .preview_alignment()
+                        .zip(self.trace_start())
+                        .map(|(axis, start)| (start, axis)),
+                }
+            })
+            .into_iter()
+            .collect()
+    }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(super) fn xr_scene_status(&self, ctx: &egui::Context) -> String {
+        let mut lines = vec![format!(
+            "{}\n{}",
+            self.tool.label(),
+            self.viewport_status_message(ctx)
+        )];
+        if let Some(message) = self.modeling_status_text() {
+            lines.push(message);
+        }
+        if let Some((notice, until)) = &self.notice
+            && ctx.input(|i| i.time) < *until
+        {
+            lines.push(notice.clone());
+        }
+        if let Some(evaluation) = &self.joinery_geometry.result {
+            for (id, error) in evaluation.errors.iter().take(4) {
+                lines.push(tr!("joinery.wood_joint_suspended", id = id, error = error));
+            }
+        }
+        lines.join("\n")
+    }
+    pub(super) fn viewport_status_message(&self, ctx: &egui::Context) -> String {
+        let drawing_orbit = self.drawing_orbit_modifier(ctx.input(|i| i.modifiers));
+        let navigating = self
+            .gesture
+            .as_ref()
+            .is_some_and(|g| matches!(g.kind, GestureKind::Navigate { .. }));
+        let shared_status = self.shared_status(ctx.input(|i| i.time));
+        let message = if let Some(status) = shared_status.as_deref() {
+            status
+        } else if drawing_orbit {
+            tr!("app.move_the_cursor_to_orbit_hold_shift_to")
+        } else if navigating {
+            if ctx.input(|i| i.modifiers.shift) {
+                tr!("app.panning_release_shift_to_orbit")
+            } else {
+                tr!("app.orbiting_hold_shift_to_pan")
+            }
+        } else if self.paste_preview.is_some() {
+            tr!("app.click_to_place_the_copy_escape_to_cancel")
+        } else if self.tool == Tool::PushPull && self.push_pull_new_faces {
+            tr!("app.push_pull_new_faces_status")
+        } else if self.tool == Tool::Rotate {
+            self.rotation_status()
+        } else if self.tool == Tool::Move {
+            if self.last_move_copy.is_some() {
+                tr!("app.copy_placed_type_3_to_divide_the_span")
+            } else {
+                match (ctx.os() == egui::os::OperatingSystem::Mac, self.move_copy) {
+                    (true, true) => tr!("app.copy_option_toggles_move_click_to_place_type"),
+                    (true, false) => tr!("app.move_option_toggles_copy_click_base_point_and"),
+                    (false, true) => tr!("app.copy_ctrl_toggles_move_click_to_place_type"),
+                    (false, false) => tr!("app.move_ctrl_toggles_copy_click_base_point_and"),
+                }
+            }
+        } else if self.tool.is_solid() {
+            self.solid_status()
+        } else if self.tool.is_measuring() {
+            self.measurement_status()
+        } else if self.tool == Tool::Walk {
+            self.walk_status()
+        } else if self.tool == Tool::Paint {
+            self.paint_instructions()
+        } else if self.grain_anchor.is_some() {
+            tr!("grain_direction.click_to_confirm")
+        } else if self.tool == Tool::Line && self.line_start.is_some() {
+            tr!("app.click_to_finish_type_length_enter_esc_to")
+        } else if self.drawing.is_some() && self.tool == Tool::Rectangle {
+            tr!("app.click_the_opposite_corner_type_width_height_5m")
+        } else if self.drawing.is_some() && matches!(self.tool, Tool::Circle | Tool::Polygon) {
+            tr!("app.click_to_set_the_radius_type_a_radius")
+        } else if self.drawing.is_some() && self.tool == Tool::Freehand {
+            tr!("app.release_to_finish_type_total_length_enter_esc")
+        } else {
+            self.tool.instructions()
+        };
+        message.to_owned()
+    }
     pub(super) fn modeling_status_text(&self) -> Option<String> {
         let edit = self.modeling.as_ref()?;
         let text = edit.error.map(str::to_owned).unwrap_or_else(|| {
@@ -269,6 +392,48 @@ impl BenchUpApp {
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(super) fn spatial_tool_overlays(&self, colors: Palette) -> Overlays {
         let mut result = Overlays::default();
+        for (axis, point) in self.section_handle_anchors() {
+            let rgb = self.doc.display.axis_colors[axis];
+            let color = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+            let dragging = self
+                .section_drag
+                .as_ref()
+                .is_some_and(|drag| drag.axis_index() == axis);
+            result.billboards.push(Billboard {
+                point,
+                owners: Default::default(),
+                depth: false,
+                shapes: vec![
+                    Glyph::Rect {
+                        min: [-22.0, -12.0],
+                        max: [22.0, 12.0],
+                        fill: if dragging {
+                            colors.paper
+                        } else {
+                            colors.canvas
+                        },
+                        color,
+                        width: if dragging { 2.0 } else { 1.0 },
+                    },
+                    Glyph::Text {
+                        at: [-13.0, 0.0],
+                        text: ["X", "Y", "Z"][axis].into(),
+                        size: 12.0,
+                        color,
+                    },
+                    Glyph::AxisArrow {
+                        axis: [DVec3::X, DVec3::Y, DVec3::Z][axis],
+                        pivot: [10.0, 0.0],
+                        length: 10.0,
+                        color,
+                        width: 1.5,
+                    },
+                ],
+            });
+        }
+        if self.history_preview.is_some() {
+            return result;
+        }
         if self.tool == Tool::Flip {
             for (axis, quad) in self.flip_planes() {
                 let color = self.axis_color(axis);
@@ -304,41 +469,56 @@ impl BenchUpApp {
                 });
             }
         }
-        if self.history_preview.is_some() {
-            return result;
-        }
-        result.segments = self.drawing_preview_segments(colors);
+        result
+            .segments
+            .extend(self.drawing_preview_segments(colors));
         if self.doc.display.guides {
             let extent = self.doc.camera.distance.max(1.0) * 5.0;
-            for guide in self.active_drawing_axis_guides() {
-                let delta = guide.axis.vector() * extent;
+            let multi_axis_guides = self.active_drawing_axis_guides().next().is_some();
+            for (origin, axis) in self.drawing_hint_axes() {
+                let delta = axis.vector() * extent;
                 result.segments.push(Segment {
-                    a: guide.origin - delta,
-                    b: guide.origin + delta,
+                    a: origin - delta,
+                    b: origin + delta,
                     width: 1.0,
-                    color: self.axis_color(guide.axis),
+                    color: self.axis_color(axis),
                     dashed: true,
                 });
+                if self.drawing_guide.is_some() || multi_axis_guides {
+                    result.circle(origin, 3.0, self.axis_color(axis), colors.paper, false);
+                }
             }
             if let Some((a, b)) = self.active_drawing_projection() {
                 result.segments.push(Segment {
                     a,
                     b,
                     width: 1.2,
-                    color: self.inference_color(),
+                    color: self
+                        .lock
+                        .map(|axis| self.axis_color(axis))
+                        .unwrap_or_else(|| self.inference_color()),
                     dashed: true,
                 });
             }
         }
+        let modeling_anchor = matches!(
+            self.tool,
+            Tool::Move | Tool::Rotate | Tool::Scale | Tool::Offset | Tool::PushPull
+        ) && self.modeling.is_none()
+            && self.paste_preview.is_none()
+            && !self.navigating();
         if self.tool.is_drawing()
             || matches!(self.tool, Tool::Text | Tool::GrainDirection)
             || self.modeling.is_some()
+            || modeling_anchor
         {
             if let Some(start) = self
                 .trace_start()
                 .or_else(|| self.drawing.as_ref().map(|drawing| drawing.origin))
             {
-                result.circle(start, 3.5, colors.ink, colors.paper, false);
+                if !modeling_anchor {
+                    result.circle(start, 3.5, colors.ink, colors.paper, false);
+                }
             }
             let snap = if self.modeling.is_some() {
                 self.modeling_preview_snap()
@@ -354,7 +534,16 @@ impl BenchUpApp {
                     }
                     _ => self.inference_color(),
                 };
-                let text = if let Some(normal) = self.plane_lock() {
+                let color = self
+                    .lock
+                    .filter(|_| self.tool != Tool::Line && !modeling_anchor)
+                    .map(|axis| self.axis_color(axis))
+                    .unwrap_or(color);
+                let text = if modeling_anchor
+                    || (self.tool == Tool::GrainDirection && self.grain_anchor.is_none())
+                {
+                    snap.kind.label().into()
+                } else if let Some(normal) = self.plane_lock() {
                     format!(
                         "{} plane locked",
                         match normal {
@@ -364,7 +553,11 @@ impl BenchUpApp {
                         }
                     )
                 } else if let Some(axis) = self.lock {
-                    format!("{} locked", axis.label())
+                    if self.tool.is_drawing() && self.tool != Tool::Line {
+                        format!("{} plane locked", axis.label())
+                    } else {
+                        format!("{} locked", axis.label())
+                    }
                 } else {
                     snap.kind.label().to_owned()
                 };

@@ -475,7 +475,7 @@ impl BenchUpApp {
 
     #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
     pub(super) fn append_spatial_fasteners(&self,model:&Model,draft:Option<&Connection>,output:&mut super::viewport_overlays::Overlays) {
-        use super::viewport_overlays::{Segment,Label};
+        use super::viewport_overlays::{Segment,Billboard,Glyph};
         if !self.doc.display.fasteners {return;}
         for connection in model.connections.values().chain(draft).filter(|c| matches!(c.operation, ConnectionOperation::Fasteners(_))) {
             let result = connection.evaluate(model);
@@ -502,7 +502,7 @@ impl BenchUpApp {
                         .filter_map(|id| model.vertices.get(id))
                         .map(|v|v.position).next()
                     {
-                        output.labels.push(Label {point,text:tr!("fasteners.invalid_fastener_connection").into(),color:Color32::LIGHT_RED});
+                        output.billboards.push(Billboard {point,owners:Default::default(),depth:false,shapes:vec![Glyph::Hint {at:[0.0,-16.0],text:tr!("fasteners.invalid_fastener_connection").into(),size:12.0,color:Color32::LIGHT_RED,background:Color32::TRANSPARENT}]});
                     }
                 }
             }

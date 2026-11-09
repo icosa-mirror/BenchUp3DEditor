@@ -19,12 +19,21 @@ struct Output {
     @location(2) @interpolate(flat) owners: vec2<u32>,
 };
 @vertex fn vertex(@location(0) anchor: vec3<f32>, @location(1) offset: vec2<f32>,
-                  @location(2) uv: vec2<f32>, @location(3) color: vec4<f32>, @location(4) owners: vec2<u32>) -> Output {
+                  @location(2) uv: vec2<f32>, @location(3) color: vec4<f32>, @location(4) owners: vec2<u32>,
+                  @location(5) direction:vec3<f32>,@location(6) pivot:vec2<f32>) -> Output {
     let center = (view.model * vec4<f32>(anchor, 1.0)).xyz;
     // A single head basis serves both eyes. Layout is retained in egui points;
     // the GPU keeps a readable angular size without per-eye CPU projection.
-    let scale = clamp(distance(center, view.head.xyz), 0.3, 8.0) * 0.0011;
-    let world = center + (view.right.xyz * offset.x - view.up.xyz * offset.y) * scale;
+    let scale = clamp(distance(center, view.head.xyz), 0.3, 8.0) * 0.0011 * view.head.w;
+    var local=offset;
+    if dot(direction,direction)>0.0 {
+        let axis=(view.model*vec4<f32>(direction,0.0)).xyz;
+        let projected=vec2<f32>(dot(axis,view.right.xyz),-dot(axis,view.up.xyz));
+        var u=vec2<f32>(0.0,-1.0);
+        if length(projected)>length(axis)*0.15 {u=normalize(projected);}
+        let delta=offset-pivot;local=pivot+u*delta.x+vec2<f32>(-u.y,u.x)*delta.y;
+    }
+    let world = center + (view.right.xyz * local.x - view.up.xyz * local.y) * scale;
     var out: Output;
     out.position = view.projection * vec4<f32>(world, 1.0);
     out.uv = uv;

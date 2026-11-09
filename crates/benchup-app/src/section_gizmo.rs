@@ -1,7 +1,24 @@
 //! Small perimeter handles share the viewport's input routing, so planes never
 //! cover the model with an interactive surface or steal a tool's existing drag.
-use benchup_core::tr;
 use super::*;
+use benchup_core::tr;
+
+#[derive(Default)]
+pub(super) struct BoundsCache {
+    revision: std::cell::Cell<Option<u64>>,
+    bounds: std::cell::Cell<Option<(DVec3, DVec3)>>,
+}
+impl BoundsCache {
+    fn get(&self, revision: u64, model: &Model) -> (DVec3, DVec3) {
+        if self.revision.get() != Some(revision) {
+            self.bounds.set(model.bounds());
+            self.revision.set(Some(revision));
+        }
+        self.bounds
+            .get()
+            .unwrap_or((DVec3::splat(-2.0), DVec3::splat(2.0)))
+    }
+}
 
 #[derive(Clone)]
 pub(super) struct SectionDrag {
@@ -57,6 +74,9 @@ fn screen_direction(camera: &Camera, axis: usize) -> Vec2 {
 }
 
 impl SectionDrag {
+    pub(super) fn axis_index(&self) -> usize {
+        self.axis
+    }
     fn new(
         axis: usize,
         anchor: DVec3,
@@ -115,6 +135,23 @@ impl SectionDrag {
 }
 
 impl BenchUpApp {
+    pub(super) fn section_handle_anchors(&self) -> Vec<(usize, DVec3)> {
+        if !self.doc.display.section_planes {
+            return Vec::new();
+        }
+        let (lo, hi) = self
+            .section_bounds
+            .get(self.document_model.revision(), &self.doc.model);
+        let pad = (hi - lo).max_element().max(1.0) * 0.1;
+        (0..3)
+            .filter(|axis| self.doc.display.section_axes[*axis])
+            .map(|axis| {
+                let mut anchor = lo - DVec3::splat(pad);
+                anchor[axis] = offset(&self.doc.display, axis);
+                (axis, anchor)
+            })
+            .collect()
+    }
     fn move_section_plane(&mut self, ctx: &egui::Context, axis: usize, value: f64) {
         if offset(&self.doc.display, axis) != value {
             set_offset(&mut self.doc.display, axis, value);
@@ -133,24 +170,8 @@ impl BenchUpApp {
         {
             return Vec::new();
         }
-        let (lo, hi) = self
-            .doc
-            .model
-            .bounds()
-            .unwrap_or((DVec3::splat(-2.), DVec3::splat(2.)));
-        let pad = (hi - lo).max_element().max(1.) * 0.1;
         let mut handles: Vec<Handle> = Vec::new();
-        for axis in 0..3 {
-            if !self.doc.display.section_axes[axis] {
-                continue;
-            }
-            let u = (axis + 1) % 3;
-            let v = (axis + 2) % 3;
-            // Attach to a plane corner outside the object's bounds.
-            let mut anchor = lo - DVec3::splat(pad);
-            anchor[axis] = offset(&self.doc.display, axis);
-            anchor[u] = lo[u] - pad;
-            anchor[v] = lo[v] - pad;
+        for (axis, anchor) in self.section_handle_anchors() {
             let Some(projected) = self.doc.camera.project(anchor, dv(self.viewport.size())) else {
                 continue;
             };
@@ -341,7 +362,10 @@ impl BenchUpApp {
                     egui::CursorIcon::Grab
                 });
                 if hovered {
-                    response.clone().on_hover_text(tr!("section_gizmo.drag_section_along_its_axis_esc_to_cancel", ["X", "Y", "Z"][handle.axis]));
+                    response.clone().on_hover_text(tr!(
+                        "section_gizmo.drag_section_along_its_axis_esc_to_cancel",
+                        ["X", "Y", "Z"][handle.axis]
+                    ));
                 }
             }
         }

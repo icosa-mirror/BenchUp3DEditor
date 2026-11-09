@@ -107,7 +107,18 @@ addition to the owner-aware face mask. This accounts for temporary preview geome
 without breaking own-group label visibility or painter-style overlay hints. The
 hardware eye-render startup passes with the final-depth pass; interactive paste
 and headset comparison remain unconfirmed, with broad validation still deferred.
-Remaining visual work includes final hint/status/handle coverage. The duplicated 2D viewport
+The model-side HUD shares the existing status producer, including tool instructions,
+modeling confirmation/errors, temporary notices and suspended-joint warnings.
+Section-plane handles share model-space anchors with desktop; their direction
+arrows rotate on the GPU using the common head basis. Single-axis and combined
+inference guides share their original producer. Modeling anchor markers, locked
+colors, selected group-label appearance, outliner annotation hover and history
+preview selection behavior now follow the desktop state. Text +/- also scales
+world labels/HUD through the existing saved XR text preference. Overlay strokes
+use antialiased premultiplied coverage. Section caps/contours and saved labels
+render in an isolated hardware eye snapshot without a headset session.
+
+The duplicated 2D viewport
 remains for comparison and existing tool interaction while these gaps are closed.
 
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.

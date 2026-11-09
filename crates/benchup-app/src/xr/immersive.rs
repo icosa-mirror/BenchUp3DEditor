@@ -23,6 +23,7 @@ pub(crate) struct Source {
     pub editing_text: Option<u64>,
     pub grain_preview: std::collections::BTreeMap<u64, DVec3>,
     pub paste: Option<PasteSource>,
+    pub status: String,
 }
 
 #[derive(Clone)]
@@ -60,6 +61,7 @@ pub(super) struct Scene {
     paste_entities: renderer::EntityCache,
     paste_source: Option<Arc<Model>>,
     paste_revision: u64,
+    paste_origin: DVec3,
     paste_text: super::world_text::Text,
     paste_lines: super::world_lines::Lines,
     empty_references: Arc<crate::app::viewport_overlays::Overlays>,
@@ -90,6 +92,7 @@ impl Scene {
             paste_entities: Default::default(),
             paste_source: None,
             paste_revision: 0,
+            paste_origin: DVec3::ZERO,
             paste_text: super::world_text::Text::new(device, format),
             paste_lines: super::world_lines::Lines::new(device, format),
             empty_references: Default::default(),
@@ -115,6 +118,10 @@ impl Scene {
             {
                 self.paste_revision = self.paste_revision.wrapping_add(1);
                 self.paste_source = Some(Arc::clone(&paste.model));
+                self.paste_origin = paste
+                    .model
+                    .bounds()
+                    .map_or(DVec3::ZERO, |(a, b)| (a + b) * 0.5);
                 self.paste_faces
                     .update_for_revision(&paste.model, self.paste_revision);
                 self.paste_entities
@@ -192,6 +199,24 @@ impl Scene {
     }
 
     pub fn stage_labels(&mut self, ctx: &egui::Context, source: &Source) {
+        let mut main = source.clone();
+        if let Some(placement) = &self.placement {
+            use crate::app::viewport_overlays::{Billboard, Glyph};
+            let colors = crate::theme::Palette::for_painter(&ctx.debug_painter());
+            main.overlays.billboards.push(Billboard {
+                point: placement.center + DVec3::new(0.0, 0.0, 1.05 / placement.fit_scale),
+                owners: Default::default(),
+                depth: false,
+                shapes: vec![Glyph::Paragraph {
+                    text: source.status.clone(),
+                    size: 12.0,
+                    width: 320.0,
+                    color: colors.ink,
+                    background: colors.paper,
+                }],
+            });
+        }
+        let source = &main;
         let dark = ctx.global_style().visuals.dark_mode;
         if self.dark != dark || self.ctx.global_style().visuals.dark_mode != dark {
             self.dark = dark;
@@ -205,7 +230,10 @@ impl Scene {
         self.text.stage(
             ctx,
             source,
-            self.input.and_then(|input| input.hit).map(|hit| hit.entity),
+            self.input
+                .and_then(|input| input.hit)
+                .map(|hit| hit.entity)
+                .or(source.hover),
             None,
         );
         if let Some(paste) = &source.paste {
@@ -231,7 +259,10 @@ impl Scene {
             self.text.stage(
                 ctx,
                 source,
-                self.input.and_then(|input| input.hit).map(|hit| hit.entity),
+                self.input
+                    .and_then(|input| input.hit)
+                    .map(|hit| hit.entity)
+                    .or(source.hover),
                 None,
             );
         } else {
@@ -671,12 +702,10 @@ impl Scene {
                 self.head,
                 |id| self.cache.resident_face_slot(id),
                 source.display.section_limits(),
+                preferences.ui_scale / 1.3,
             );
             if let Some(paste) = &source.paste {
-                let paste_origin = paste
-                    .model
-                    .bounds()
-                    .map_or(DVec3::ZERO, |(a, b)| (a + b) * 0.5);
+                let paste_origin = self.paste_origin;
                 let paste_transform = transform * DMat4::from_translation(paste.offset);
                 let limits = paste_display(&source.display, paste.offset).section_limits();
                 self.paste_text.prepare(
@@ -688,6 +717,7 @@ impl Scene {
                     self.head,
                     |_| 0,
                     limits,
+                    preferences.ui_scale / 1.3,
                 );
                 self.paste_lines.references(
                     device,

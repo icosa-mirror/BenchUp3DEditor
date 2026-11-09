@@ -410,6 +410,8 @@ impl Editor {
 
     pub(super) fn paint_immersive_snapshot(&mut self,device:&wgpu::Device,queue:&wgpu::Queue,target:&wgpu::TextureView,size:[u32;2])->Result<()> {
         self.begin_immersive_frame(openxr::Posef::IDENTITY);
+        // Placement is now known, so settle model-side HUD anchors and fonts.
+        self.paint(device,queue,target)?;
         let eye=self.scene.diagnostic_eye(self.app.xr_panel_preferences().scene_scale,size).ok_or("The immersive snapshot needs a model with bounds")?;
         self.paint_eye(device,queue,target,size,eye);
         Ok(())

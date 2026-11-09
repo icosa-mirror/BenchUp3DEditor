@@ -10,6 +10,7 @@ struct Output {
     @location(2) @interpolate(flat) style: vec4<f32>,
     @location(3) @interpolate(flat) owners:vec2<u32>,
     @location(4) @interpolate(linear) depth:f32,
+    @location(5) @interpolate(flat) width:f32,
 }
 
 @vertex
@@ -41,7 +42,8 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     let along = select(-1.0, 1.0, at_end);
     var clip = select(a, b, at_end);
     let side = select(-1.0, 1.0, positive);
-    var offset = normal * width * side * 0.5;
+    let radius=(width+1.0)*0.5;
+    var offset = normal * radius * side;
     if style.x == 1.0 {
         clip = a;
         offset = vec2(along, side) * style.y;
@@ -49,18 +51,19 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
         clip = a;
         let tick = direction * 3.0 + normal * 4.0;
         let cross_tick = vec2(-tick.y, tick.x) / 5.0;
-        offset = tick * along + cross_tick * width * side * 0.5;
+        offset = tick * along + cross_tick * radius * side;
     } else if style.x==3.0 {
         clip=b;
         offset=direction*select(-style.y,0.0,at_end)+normal*side*style.y*0.5;
     }
     out.position = vec4(clip.xy + offset * 2.0 * clip.w / view.viewport.xy, clip.zw);
     out.color = color;
-    out.local = select(vec2(0.0), vec2(length(delta), 0.0), at_end);
+    out.local = vec2(select(0.0,length(delta),at_end),side*radius);
     if style.x == 1.0 { out.local = vec2(along, side) * style.y; }
     if style.x==3.0 {out.local=vec2(select(-style.y,0.0,at_end),side*style.y*0.5);}
     out.style = style;
     out.owners=owners;out.depth=clip.z/clip.w;
+    out.width=width;
     return out;
 }
 
@@ -75,9 +78,11 @@ fn fragment(input: Output) -> @location(0) vec4<f32> {
         if lo>=input.owners.y || owner_slots[lo]!=face.x {discard;}
     }
     if input.style.x == 0.0 && input.style.y > 0.0 && input.local.x % input.style.y > input.style.z { discard; }
-    if input.style.x == 1.0 && min(abs(input.local.x - input.local.y), abs(input.local.x + input.local.y)) > 1.2 { discard; }
-    if input.style.x==3.0 && abs(abs(input.local.y)+input.local.x*0.5)>input.style.z*0.5 {discard;}
+    var amount=clamp(input.width*0.5+0.5-abs(input.local.y),0.0,1.0);
+    if input.style.x==1.0 {let distance=min(abs(input.local.x-input.local.y),abs(input.local.x+input.local.y))*0.70710678;amount=clamp(input.width*0.5+0.5-distance,0.0,1.0);}
+    if input.style.x==3.0 {let distance=abs(abs(input.local.y)+input.local.x*0.5)/1.11803399;amount=clamp(input.style.z*0.5+0.5-distance,0.0,1.0);}
+    if amount<=0.0 {discard;}
     let gamma = input.color;
     let linear = select(gamma.rgb / 12.92, pow((gamma.rgb + 0.055) / 1.055, vec3<f32>(2.4)), gamma.rgb > vec3<f32>(0.04045));
-    return vec4(linear, gamma.a);
+    return vec4(linear, gamma.a)*amount;
 }

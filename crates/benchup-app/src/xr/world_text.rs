@@ -13,6 +13,8 @@ struct Vertex {
     uv: [f32; 2],
     color: [f32; 4],
     owners: [u32; 2],
+    direction: [f32; 3],
+    pivot: [f32; 2],
 }
 
 #[derive(PartialEq)]
@@ -20,6 +22,7 @@ struct Key {
     revision: u64,
     display: benchup_core::DisplaySettings,
     selected: std::collections::BTreeSet<u64>,
+    outliner_hover: std::collections::BTreeSet<u64>,
     hover: Option<u64>,
     pixels_per_point: f32,
     dark: bool,
@@ -39,7 +42,12 @@ pub(super) struct Text {
     key: Option<Key>,
     markers: renderer::GroupMarkerCache,
     entities: renderer::EntityCache,
-    meshes: Vec<(DVec3, egui::epaint::Mesh, Vec<u64>)>,
+    meshes: Vec<(
+        DVec3,
+        egui::epaint::Mesh,
+        Vec<u64>,
+        Option<(DVec3, [f32; 2])>,
+    )>,
     owner_slots: wgpu::Buffer,
     vertices: Option<wgpu::Buffer>,
     indices: Option<wgpu::Buffer>,
@@ -61,7 +69,7 @@ impl Text {
             label: Some("BenchUpXR world text"), layout: None,
             vertex: wgpu::VertexState { module: &shader, entry_point: Some("vertex"),
                 buffers: &[Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as _, step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x2,2=>Float32x2,3=>Float32x4,4=>Uint32x2] })], compilation_options: Default::default() },
+                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x2,2=>Float32x2,3=>Float32x4,4=>Uint32x2,5=>Float32x3,6=>Float32x2] })], compilation_options: Default::default() },
             fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fragment"),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
             primitive: Default::default(), depth_stencil: None,
@@ -122,6 +130,7 @@ impl Text {
             revision: source.revision,
             display: source.display.clone(),
             selected: source.selected.clone(),
+            outliner_hover: source.outliner_hover.clone(),
             hover,
             pixels_per_point: ctx.pixels_per_point(),
             dark: ctx.global_style().visuals.dark_mode,
@@ -144,7 +153,9 @@ impl Text {
                 tint
             } else if self.entities.selected(model, id, &source.selected) {
                 colors.accent
-            } else if hover.is_some() && hover == model.entity_in_context(id) {
+            } else if source.outliner_hover.contains(&id)
+                || (hover.is_some() && hover == model.entity_in_context(id))
+            {
                 colors.green
             } else if model.entity_in_context(id).is_none() {
                 colors.muted
@@ -154,6 +165,7 @@ impl Text {
         };
         let mut labels = Vec::new();
         let mut owners = std::collections::BTreeMap::<usize, Vec<u64>>::new();
+        let mut backgrounds = std::collections::BTreeMap::new();
         for label in source
             .overlays
             .labels
@@ -179,11 +191,19 @@ impl Text {
                         && self.entities.get(object.id).displayed(&source.display)
                 }) {
                     owners.insert(labels.len(), marker.owners.iter().copied().collect());
+                    let selected = source.selected.contains(&object.id);
+                    if selected {
+                        backgrounds.insert(labels.len(), crate::theme::ACCENT);
+                    }
                     labels.push((
                         marker.point,
                         object.name.clone(),
                         egui::FontId::proportional(13.0),
-                        color(object.id),
+                        if selected {
+                            egui::Color32::WHITE
+                        } else {
+                            colors.ink
+                        },
                         f32::INFINITY,
                     ));
                 }
@@ -240,10 +260,15 @@ impl Text {
                 (
                     anchor,
                     vec![
-                        egui::Shape::rect_filled(bounds, 4, colors.paper),
+                        egui::Shape::rect_filled(
+                            bounds,
+                            4,
+                            backgrounds.remove(&index).unwrap_or(colors.paper),
+                        ),
                         egui::Shape::galley(bounds.min + egui::vec2(6.0, 4.0), galley, ink),
                     ],
                     owners.remove(&index).unwrap_or_default(),
+                    None,
                 )
             })
             .collect();
@@ -256,7 +281,68 @@ impl Text {
             use crate::app::viewport_overlays::Glyph;
             let mut glyphs = Vec::new();
             for glyph in &billboard.shapes {
+                if let Glyph::AxisArrow {
+                    axis,
+                    pivot,
+                    length,
+                    color,
+                    width,
+                } = glyph
+                {
+                    let at = egui::pos2(pivot[0], pivot[1]);
+                    let half = *length * 0.5;
+                    let path = vec![
+                        egui::Shape::line(
+                            vec![at - egui::vec2(half, 0.0), at + egui::vec2(half, 0.0)],
+                            egui::Stroke::new(*width, *color),
+                        ),
+                        egui::Shape::line(
+                            vec![
+                                at + egui::vec2(half - 4.0, -3.0),
+                                at + egui::vec2(half, 0.0),
+                                at + egui::vec2(half - 4.0, 3.0),
+                            ],
+                            egui::Stroke::new(*width, *color),
+                        ),
+                    ];
+                    shapes.push((
+                        billboard.point,
+                        path,
+                        if billboard.depth {
+                            billboard.owners.iter().copied().collect()
+                        } else {
+                            vec![0]
+                        },
+                        Some((*axis, *pivot)),
+                    ));
+                    continue;
+                }
                 glyphs.push(match glyph {
+                    Glyph::AxisArrow { .. } => unreachable!(),
+                    Glyph::Paragraph {
+                        text,
+                        size,
+                        width,
+                        color,
+                        background,
+                    } => {
+                        let galley = ctx.fonts_mut(|fonts| {
+                            fonts.layout(
+                                text.clone(),
+                                egui::FontId::proportional(*size),
+                                *color,
+                                *width,
+                            )
+                        });
+                        let rect = egui::Rect::from_center_size(
+                            egui::Pos2::ZERO,
+                            galley.size() + egui::vec2(16.0, 12.0),
+                        );
+                        egui::Shape::Vec(vec![
+                            egui::Shape::rect_filled(rect, 5, *background),
+                            egui::Shape::galley(rect.min + egui::vec2(8.0, 6.0), galley, *color),
+                        ])
+                    }
                     Glyph::Circle {
                         center,
                         radius,
@@ -361,10 +447,11 @@ impl Text {
                 } else {
                     vec![0]
                 },
+                None,
             ));
         }
         self.meshes.clear();
-        for (anchor, shapes, owners) in shapes {
+        for (anchor, shapes, owners, rotation) in shapes {
             let jobs = ctx.tessellate(
                 shapes
                     .into_iter()
@@ -374,7 +461,7 @@ impl Text {
             );
             for job in jobs {
                 if let egui::epaint::Primitive::Mesh(mesh) = job.primitive {
-                    self.meshes.push((anchor, mesh, owners.clone()));
+                    self.meshes.push((anchor, mesh, owners.clone(), rotation));
                 }
             }
         }
@@ -396,12 +483,13 @@ impl Text {
         head: DMat4,
         slot: impl Fn(u64) -> u32,
         limits: [Option<f64>; 3],
+        font_scale: f32,
     ) {
         if self.dirty || self.origin != Some(origin) {
             let mut vertices = Vec::new();
             let mut indices = Vec::new();
             let mut owner_slots = Vec::new();
-            for (anchor, mesh, owners) in &self.meshes {
+            for (anchor, mesh, owners, rotation) in &self.meshes {
                 let begin = owner_slots.len() as u32;
                 let mut slots: Vec<_> = owners
                     .iter()
@@ -424,6 +512,8 @@ impl Text {
                     uv: [v.uv.x, v.uv.y],
                     color: v.color.to_normalized_gamma_f32(),
                     owners: range,
+                    direction: rotation.map_or([0.0; 3], |r| r.0.as_vec3().to_array()),
+                    pivot: rotation.map_or([0.0; 2], |r| r.1),
                 }));
                 indices.extend(mesh.indices.iter().map(|i| base + i));
             }
@@ -465,6 +555,7 @@ impl Text {
         data[32..36].copy_from_slice(&head.x_axis.as_vec4().to_array());
         data[36..40].copy_from_slice(&head.y_axis.as_vec4().to_array());
         data[40..44].copy_from_slice(&head.w_axis.as_vec4().to_array());
+        data[43] = font_scale;
         for axis in 0..3 {
             data[44 + axis] = limits[axis].map_or(f32::MAX, |v| (v - origin[axis]) as f32);
         }
