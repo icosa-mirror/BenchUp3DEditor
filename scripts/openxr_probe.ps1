@@ -22,7 +22,7 @@ if ($LoaderDirectory -and -not (Test-Path -LiteralPath (Join-Path $LoaderDirecto
     throw 'Loader directory does not contain openxr_loader.dll. Pass -LoaderDirectory with the installed SteamVR win64 directory.'
 }
 
-$variables = @('PATH', 'VK_LAYER_PATH', 'VK_INSTANCE_LAYERS', 'VK_LAYER_SETTINGS_PATH')
+$variables = @('PATH', 'VK_LAYER_PATH', 'BENCHUP_XR_VALIDATION', 'VK_LAYER_SETTINGS_PATH')
 $saved = @{}
 foreach ($name in $variables) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
@@ -41,10 +41,10 @@ try {
 khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG
 khronos_validation.log_filename = stdout
 khronos_validation.report_flags = error,warn,info
-khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
+khronos_validation.validate_sync = true
 '@ | Set-Content -LiteralPath (Join-Path $settings 'vk_layer_settings.txt')
         $env:VK_LAYER_PATH = $ValidationDirectory
-        $env:VK_INSTANCE_LAYERS = 'VK_LAYER_KHRONOS_validation'
+        $env:BENCHUP_XR_VALIDATION = '1'
         $env:VK_LAYER_SETTINGS_PATH = $settings
         Write-Output "[BenchUpXR] Vulkan validation requested (including synchronization): $ValidationDirectory"
     }

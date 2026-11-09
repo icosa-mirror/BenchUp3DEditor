@@ -212,3 +212,19 @@ Next: use the runtime-selected Vulkan adapter/device, validate swapchain-image
 interoperability with wgpu, then submit the first colored quad on the target
 headset. The macOS development host can compile this groundwork and exercise
 missing-loader handling, but is not the selected headset validation platform.
+
+### Windows graphics progress, 2026-11-09
+
+The optional `openxr_panel` example now creates Vulkan through the runtime's
+enable2 entry points, imports the selected adapter/device and borrowed swapchain
+images into wgpu 30.0.1, and submits a GPU-rendered orientation-pattern quad.
+The frame loop handles shouldRender, READY/STOPPING, exit and loss; rendering is
+single-frame paced with completion before release and a device drain at teardown.
+See `OPENXR_WINDOWS.md` for reproducible commands and evidence.
+
+Repeated Windows runs submitted frames on the RTX 4090 and stopped cleanly while
+the headset was unattended. They reached SYNCHRONIZED but not VISIBLE/FOCUSED.
+The pattern shader's initial validation error was corrected. Other validation
+errors remain in runtime-created shaders, external-image setup and runtime copies
+involving BlankEyeBuffer. Phase 1B's visual, restart-under-use, and clean-validation
+acceptance gate remains open. This is a graphics prototype, not phase 1 completion.

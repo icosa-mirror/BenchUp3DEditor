@@ -34,6 +34,21 @@ No headset mode is functional yet. No new UI settings have been introduced.
 The rendering host, runtime-selected Vulkan device, swapchain interoperability,
 frame loop, egui input integration and persistent XR controls remain to implement.
 
+## Windows continuation, 2026-11-09
+
+The preceding implemented/validation sections describe the original macOS
+handoff. Windows preflight now passes using SteamVR's installed loader through
+the process-scoped `scripts/openxr_probe.ps1` helper. See `OPENXR_WINDOWS.md` for
+commands, machine evidence, validation setup, and current limits.
+
+`openxr_panel` now implements the runtime-selected Vulkan/wgpu bridge, borrowed
+swapchain images, an orientation-pattern quad, frame pacing, and session shutdown.
+Successive unattended runs submitted quad frames on the RTX 4090 and stopped
+cleanly. VISIBLE/FOCUSED state and human-observed panel appearance remain untested.
+Khronos validation still reports runtime-side shader/image/copy errors, including
+the runtime's BlankEyeBuffer; the clean-validation gate has not passed. Editor
+hosting, input integration and persistent XR controls remain to implement.
+
 ## Validation already completed on macOS
 
 `cargo test -p benchup-app --features openxr --lib xr::tests` passed all four tests,
