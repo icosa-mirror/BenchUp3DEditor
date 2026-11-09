@@ -148,6 +148,15 @@ operation, and Cancel discards the ghost. This reuses the immutable paste model
 and updates its transform rather than cloning geometry each frame. XR controls
 hide while shared modal dialogs are open, so text/name dialogs stay accessible.
 
+The controls are now a docked bottom panel that reserves space for the shared
+editor and inspector instead of covering them with a foreground overlay. One
+large tool picker opens a four-column palette; Copy/Paste/Cancel/Undo/Redo remain
+visible, and extra parameters appear for the active tool only. Tool selection and
+parameters keep the same persisted preferences; no separate palette/category
+setting was added. The native build and hardware-GPU panel snapshot pass, with
+the viewport/sidebar visibly laid out above the controls. Headset testing remains
+deferred until the user is free.
+
 Outer Shell, Union, Intersect, Trim, Split and Flip accept controller clicks.
 Large tool buttons reuse desktop solid-tool setup and saved active-tool choice;
 world hits enter the shared operand validation and boolean/history operations.

@@ -230,23 +230,19 @@ impl Editor {
         let mut preferences = self.app.xr_panel_preferences();
         let mut recenter = false;
         let mut fit_scene = false;
-        let pointer = self.input.scene.and_then(|input| self.scene.tool_pointer(input, preferences.scene_scale));
+        let pointer = self
+            .input
+            .scene
+            .and_then(|input| self.scene.tool_pointer(input, preferences.scene_scale));
         // egui may repeat layout; consume a model operation only once.
         let mut activate = true;
         let mut output = self.ctx.run_ui(raw, |ui| {
-            self.app
-                .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
-            self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx);
-            activate = false;
             // Leave shared text/name/file dialogs fully visible and clickable.
             if self.ctx.memory(|memory| memory.top_modal_layer().is_none()) {
-            egui::Area::new(egui::Id::unique("benchup.xr.panel_controls"))
-                .order(egui::Order::Foreground)
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -28.0))
-                .show(&self.ctx, |ui| {
-                    egui::Frame::popup(ui.style())
-                        .inner_margin(8)
-                        .show(ui, |ui| {
+            egui::Panel::bottom("benchup.xr.panel_controls")
+                .resizable(false)
+                .frame(egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(8))
+                .show(ui, |ui| {
                             ui.label(
                                 egui::RichText::new(format!(
                                     "XR panel   {:.1} m away   {:.1} m wide   Text {:.0}%",
@@ -312,9 +308,12 @@ impl Editor {
                                 }
                             });
                             self.app.xr_tool_controls(ui, &mut self.preferences);
-                        });
                 });
             }
+            self.app
+                .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
+            self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx);
+            activate = false;
             if preferences.immersive_scene {
                 self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source(&self.ctx));
             }

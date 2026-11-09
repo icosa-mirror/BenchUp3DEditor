@@ -81,24 +81,84 @@ impl BenchUpApp {
         let ctx = ui.ctx().clone();
         ui.add_enabled_ui(self.xr_scene_interaction_enabled(&ctx), |ui| {
             ui.horizontal(|ui| {
-                for (label, tool) in [
-                    ("Select", Tool::Select),
-                    ("Line", Tool::Line),
-                    ("Tape", Tool::TapeMeasure),
-                    ("Angle", Tool::Protractor),
-                    ("Dimension", Tool::Dimensions),
-                ] {
-                    if ui
-                        .add_sized(
-                            [100., 42.],
-                            egui::Button::new(egui::RichText::new(label).size(18.))
-                                .selected(self.tool == tool),
-                        )
-                        .clicked()
-                    {
-                        self.set_tool(tool);
-                        self.persist_inspector_changes(&ctx, Some(storage), false);
-                    }
+                ui.spacing_mut().interact_size.y = 42.;
+                egui::ComboBox::from_id_salt("benchup.xr.tool_picker")
+                    .width(240.)
+                    .height(340.)
+                    .selected_text(
+                        egui::RichText::new(format!("Tool: {}", self.tool.label())).size(18.),
+                    )
+                    .show_ui(ui, |ui| {
+                        let tools = [
+                            Tool::Select,
+                            Tool::Line,
+                            Tool::Rectangle,
+                            Tool::Circle,
+                            Tool::Polygon,
+                            Tool::Freehand,
+                            Tool::TapeMeasure,
+                            Tool::Protractor,
+                            Tool::Dimensions,
+                            Tool::Text,
+                            Tool::Move,
+                            Tool::Rotate,
+                            Tool::Scale,
+                            Tool::PushPull,
+                            Tool::Offset,
+                            Tool::Paint,
+                            Tool::Erase,
+                            Tool::OuterShell,
+                            Tool::Union,
+                            Tool::Intersect,
+                            Tool::Trim,
+                            Tool::Split,
+                            Tool::Flip,
+                        ];
+                        for row in tools.chunks(4) {
+                            ui.horizontal(|ui| {
+                                for &tool in row {
+                                    if ui
+                                        .add_sized(
+                                            [132., 42.],
+                                            egui::Button::new(
+                                                egui::RichText::new(tool.label()).size(18.),
+                                            )
+                                            .selected(self.tool == tool),
+                                        )
+                                        .clicked()
+                                    {
+                                        if tool.is_solid() {
+                                            self.start_solid_tool(tool, &ctx);
+                                        } else {
+                                            self.set_tool(tool);
+                                        }
+                                        self.persist_inspector_changes(&ctx, Some(storage), false);
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                if ui
+                    .add_enabled(
+                        !self.selected.is_empty(),
+                        egui::Button::new(egui::RichText::new("Copy").size(18.))
+                            .min_size(egui::vec2(84., 42.)),
+                    )
+                    .clicked()
+                {
+                    self.copy_selection(&ctx);
+                }
+                if ui
+                    .add_enabled(
+                        self.clipboard.is_some(),
+                        egui::Button::new(egui::RichText::new("Paste").size(18.))
+                            .min_size(egui::vec2(84., 42.)),
+                    )
+                    .clicked()
+                {
+                    self.context_position = None;
+                    self.context_action(&ctx, ContextAction::Paste);
                 }
                 for (label, action) in [("Cancel", 0), ("Undo", 1), ("Redo", 2)] {
                     if ui
@@ -115,168 +175,71 @@ impl BenchUpApp {
                     }
                 }
             });
-            ui.horizontal(|ui| {
-                for (label, tool) in [
-                    ("Rectangle", Tool::Rectangle),
-                    ("Circle", Tool::Circle),
-                    ("Polygon", Tool::Polygon),
-                    ("Freehand", Tool::Freehand),
-                ] {
-                    if ui
-                        .add_sized(
-                            [110., 42.],
-                            egui::Button::new(egui::RichText::new(label).size(18.))
-                                .selected(self.tool == tool),
-                        )
-                        .clicked()
-                    {
-                        self.set_tool(tool);
-                        self.persist_inspector_changes(&ctx, Some(storage), false);
-                    }
-                }
-                if self.tool == Tool::Polygon {
-                    ui.label(
-                        egui::RichText::new(format!("{} sides", self.polygon_sides)).size(18.),
-                    );
-                    for (label, increase) in [("Sides -", false), ("Sides +", true)] {
-                        if ui
-                            .add_sized(
-                                [100., 42.],
-                                egui::Button::new(egui::RichText::new(label).size(18.)),
-                            )
-                            .clicked()
-                        {
-                            self.polygon_sides = if increase {
-                                self.polygon_sides + 1
-                            } else {
-                                self.polygon_sides.saturating_sub(1)
+            let mut changed = false;
+            match self.tool {
+                Tool::Polygon => {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(format!("{} sides", self.polygon_sides)).size(18.),
+                        );
+                        for (label, increase) in [("Sides -", false), ("Sides +", true)] {
+                            if ui
+                                .add_sized(
+                                    [100., 42.],
+                                    egui::Button::new(egui::RichText::new(label).size(18.)),
+                                )
+                                .clicked()
+                            {
+                                self.polygon_sides = if increase {
+                                    self.polygon_sides + 1
+                                } else {
+                                    self.polygon_sides.saturating_sub(1)
+                                }
+                                .clamp(3, 64);
+                                changed = true;
                             }
-                            .clamp(3, 64);
-                            self.persist_inspector_changes(&ctx, Some(storage), false);
                         }
-                    }
+                    });
                 }
-            });
-            ui.horizontal(|ui| {
-                for (label, tool) in [
-                    ("Paint", Tool::Paint),
-                    ("Erase", Tool::Erase),
-                    ("Text", Tool::Text),
-                ] {
-                    if ui
-                        .add_sized(
-                            [100., 42.],
-                            egui::Button::new(egui::RichText::new(label).size(18.))
-                                .selected(self.tool == tool),
+                Tool::Paint => {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Colour").size(18.));
+                        changed |= ui
+                            .scope(|ui| {
+                                ui.spacing_mut().interact_size = egui::vec2(48., 42.);
+                                ui.color_edit_button_srgb(&mut self.paint_color).changed()
+                            })
+                            .inner;
+                        for (label, target) in
+                            [("Face", PaintTarget::Face), ("Group", PaintTarget::Group)]
+                        {
+                            if ui
+                                .add_sized(
+                                    [100., 42.],
+                                    egui::Button::new(egui::RichText::new(label).size(18.))
+                                        .selected(self.paint_target == target),
+                                )
+                                .clicked()
+                            {
+                                self.paint_target = target;
+                                changed = true;
+                            }
+                        }
+                    });
+                }
+                Tool::PushPull => {
+                    changed |= ui
+                        .checkbox(
+                            &mut self.push_pull_new_faces,
+                            egui::RichText::new("Keep starting face").size(18.),
                         )
-                        .clicked()
-                    {
-                        self.set_tool(tool);
-                        self.persist_inspector_changes(&ctx, Some(storage), false);
-                    }
+                        .changed();
                 }
-                ui.label(egui::RichText::new("Colour").size(18.));
-                let changed = ui
-                    .scope(|ui| {
-                        ui.spacing_mut().interact_size = egui::vec2(48., 42.);
-                        ui.color_edit_button_srgb(&mut self.paint_color).changed()
-                    })
-                    .inner;
-                if changed {
-                    self.set_tool(Tool::Paint);
-                    self.persist_inspector_changes(&ctx, Some(storage), false);
-                }
-                for (label, target) in [("Face", PaintTarget::Face), ("Group", PaintTarget::Group)]
-                {
-                    if ui
-                        .add_sized(
-                            [100., 42.],
-                            egui::Button::new(egui::RichText::new(label).size(18.))
-                                .selected(self.paint_target == target),
-                        )
-                        .clicked()
-                    {
-                        self.paint_target = target;
-                        self.set_tool(Tool::Paint);
-                        self.persist_inspector_changes(&ctx, Some(storage), false);
-                    }
-                }
-            });
-            ui.horizontal(|ui| {
-                for (label, tool) in [
-                    ("Move", Tool::Move),
-                    ("Push/Pull", Tool::PushPull),
-                    ("Scale", Tool::Scale),
-                    ("Rotate", Tool::Rotate),
-                    ("Offset", Tool::Offset),
-                ] {
-                    if ui
-                        .add_sized(
-                            [100., 42.],
-                            egui::Button::new(egui::RichText::new(label).size(18.))
-                                .selected(self.tool == tool),
-                        )
-                        .clicked()
-                    {
-                        self.set_tool(tool);
-                        self.persist_inspector_changes(&ctx, Some(storage), false);
-                    }
-                }
-                if ui
-                    .checkbox(
-                        &mut self.push_pull_new_faces,
-                        egui::RichText::new("Keep starting face").size(18.),
-                    )
-                    .changed()
-                {
-                    self.persist_inspector_changes(&ctx, Some(storage), false);
-                }
-            });
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(
-                        !self.selected.is_empty(),
-                        egui::Button::new(egui::RichText::new("Copy").size(18.))
-                            .min_size(egui::vec2(100., 42.)),
-                    )
-                    .clicked()
-                {
-                    self.copy_selection(&ctx);
-                }
-                if ui
-                    .add_enabled(
-                        self.clipboard.is_some(),
-                        egui::Button::new(egui::RichText::new("Paste").size(18.))
-                            .min_size(egui::vec2(100., 42.)),
-                    )
-                    .clicked()
-                {
-                    self.context_position = None;
-                    self.context_action(&ctx, ContextAction::Paste);
-                }
-            });
-            ui.horizontal(|ui| {
-                for (label, tool) in [
-                    ("Outer Shell", Tool::OuterShell),
-                    ("Union", Tool::Union),
-                    ("Intersect", Tool::Intersect),
-                    ("Trim", Tool::Trim),
-                    ("Split", Tool::Split),
-                    ("Flip", Tool::Flip),
-                ] {
-                    if ui
-                        .add_sized(
-                            [110., 42.],
-                            egui::Button::new(egui::RichText::new(label).size(18.))
-                                .selected(self.tool == tool),
-                        )
-                        .clicked()
-                    {
-                        self.start_solid_tool(tool, &ctx);
-                        self.persist_inspector_changes(&ctx, Some(storage), false);
-                    }
-                }
-            });
+                _ => {}
+            }
+            if changed {
+                self.persist_inspector_changes(&ctx, Some(storage), false);
+            }
             let hint = if self.paste_preview.is_some() {
                 "Trigger places the copy. Cancel discards the preview."
             } else {

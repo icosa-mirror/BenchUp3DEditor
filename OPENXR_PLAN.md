@@ -49,6 +49,10 @@ Solid tools accept world-ray operand hits through desktop's shared validation,
 setup and boolean/history operations. Trim retains cutter-then-target order;
 Flip clicks intersect the shared model-space flip quads and use the existing
 flip operation. Plane queries occur only on clicks; live plane hover is pending.
+XR controls use a docked bottom panel with a large tool-picker palette and
+parameters for the active tool. The shared editor/inspector receive the remaining
+layout space; controls do not cover them. Existing tool/parameter preferences
+remain authoritative, and shared modal dialogs retain full access.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 
