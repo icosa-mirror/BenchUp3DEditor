@@ -238,6 +238,8 @@ impl Editor {
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
             self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx);
             activate = false;
+            // Leave shared text/name/file dialogs fully visible and clickable.
+            if self.ctx.memory(|memory| memory.top_modal_layer().is_none()) {
             egui::Area::new(egui::Id::unique("benchup.xr.panel_controls"))
                 .order(egui::Order::Foreground)
                 .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -28.0))
@@ -312,6 +314,7 @@ impl Editor {
                             self.app.xr_tool_controls(ui, &mut self.preferences);
                         });
                 });
+            }
             if preferences.immersive_scene {
                 self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source(&self.ctx));
             }
