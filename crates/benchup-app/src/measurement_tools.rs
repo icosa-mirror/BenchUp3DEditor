@@ -379,7 +379,7 @@ impl BenchUpApp {
         }
         points
     }
-    fn dimension_preview(&self) -> Option<Dimension> {
+    pub(super) fn dimension_preview(&self) -> Option<Dimension> {
         let points = self.measurement_points();
         if points.len() != 2 {
             return None;

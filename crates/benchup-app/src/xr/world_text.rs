@@ -23,6 +23,7 @@ struct Key {
     pixels_per_point: f32,
     dark: bool,
     atlas: [usize; 2],
+    tool_labels: Vec<crate::app::viewport_overlays::Label>,
 }
 
 pub(super) struct Text {
@@ -110,6 +111,7 @@ impl Text {
             pixels_per_point: ctx.pixels_per_point(),
             dark: ctx.global_style().visuals.dark_mode,
             atlas: ctx.fonts(|fonts| fonts.font_image_size()),
+            tool_labels: source.overlays.labels.clone(),
         };
         if self.key.as_ref() == Some(&key) {
             return;
@@ -130,6 +132,15 @@ impl Text {
             }
         };
         let mut labels = Vec::new();
+        for label in &source.overlays.labels {
+            labels.push((
+                label.point,
+                label.text.clone(),
+                egui::FontId::monospace(12.0),
+                label.color,
+                320.0,
+            ));
+        }
         let mut lines = Vec::new();
         let mut ticks = Vec::new();
         if source.display.group_names {

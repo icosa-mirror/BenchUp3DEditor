@@ -46,6 +46,22 @@ theme. Guide lines are currently bounded to the fitted scene neighbourhood, and
 guide points use a screen-facing cross. Exact infinite-grid/guide clipping and
 owner-aware annotation occlusion remain parity work.
 
+Live tool overlays now have model-space descriptors in `viewport_overlays.rs`.
+Desktop and XR share the drawing-preview segment producer. XR also consumes
+current inference/lock labels, drawing axes/projections, tape/protractor arcs and
+values, dimension-placement previews, and modeling directions/value/error labels.
+The descriptors use existing precision, measurement and snap state; they do not
+implement a separate model-operation pipeline. Tool line/marker buffers are
+retained separately from the grid and saved-reference buffer. World labels are
+reshaped only when the corresponding content changes.
+
+Controller scene clicks still select entities; world-ray drawing/manipulation is
+not yet wired. Current transient overlays reflect operations performed through the
+editor panel. Exact inference glyph shapes, rotation handles/arcs, section planes
+and caps, joinery/fastener markers, display-mode parity, label layout/ownership and
+direct tool interaction remain open. The duplicated 2D viewport remains until
+these parity gaps are closed.
+
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.
 - Native `crates/benchup-app/src/xr.rs`: physical panel dimensions and validated
   controller-ray-to-logical-UI mapping, with four regression tests.

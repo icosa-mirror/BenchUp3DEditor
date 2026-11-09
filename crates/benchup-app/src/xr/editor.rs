@@ -297,7 +297,7 @@ impl Editor {
                         });
                 });
             if preferences.immersive_scene {
-                self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source());
+                self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source(&self.ctx));
             }
         });
         preferences = preferences.sanitized();
@@ -381,7 +381,7 @@ impl Editor {
     }
 
     pub(super) fn begin_immersive_frame(&mut self, anchor: openxr::Posef) {
-        let source = self.app.xr_scene_source();
+        let source = self.app.xr_scene_source(&self.ctx);
         self.scene.begin_frame(
             source,
             anchor,

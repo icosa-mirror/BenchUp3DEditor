@@ -3,7 +3,7 @@ use eframe::wgpu;
 use wgpu::util::DeviceExt as _;
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub(super) struct Line {
     a: [f32; 3],
     width: f32,
@@ -50,6 +50,8 @@ pub(super) struct Lines {
     references: wgpu::Buffer,
     reference_count: u32,
     reference_key: Vec<u64>,
+    tools: wgpu::Buffer,
+    tool_instances: Vec<Line>,
     pointer: wgpu::Buffer,
     pointer_count: u32,
     uniforms: [wgpu::Buffer; 2],
@@ -107,6 +109,8 @@ impl Lines {
             references: empty(),
             reference_count: 0,
             reference_key: Vec::new(),
+            tools: empty(),
+            tool_instances: Vec::new(),
             pointer: empty(),
             pointer_count: 0,
             uniforms,
@@ -159,12 +163,27 @@ impl Lines {
         }
     }
 
+    pub fn tools(&mut self, device: &wgpu::Device, instances: Vec<Line>) {
+        if self.tool_instances == instances {
+            return;
+        }
+        if !instances.is_empty() {
+            self.tools = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("BenchUpXR retained tool overlays"),
+                contents: bytemuck::cast_slice(&instances),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        }
+        self.tool_instances = instances;
+    }
+
     pub fn paint(&self, pass: &mut wgpu::RenderPass<'_>, size: [u32; 2]) {
         pass.set_viewport(0.0, 0.0, size[0] as f32, size[1] as f32, 0.0, 1.0);
         pass.set_scissor_rect(0, 0, size[0], size[1]);
         pass.set_pipeline(&self.pipeline);
         for (index, buffer, count) in [
             (0, &self.references, self.reference_count),
+            (0, &self.tools, self.tool_instances.len() as u32),
             (1, &self.pointer, self.pointer_count),
         ] {
             if count != 0 {

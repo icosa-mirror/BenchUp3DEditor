@@ -12,6 +12,7 @@ pub(crate) struct Source {
     pub camera: Camera,
     pub display: DisplaySettings,
     pub selected: BTreeSet<u64>,
+    pub overlays: crate::app::viewport_overlays::Overlays,
 }
 
 struct Placement {
@@ -226,6 +227,26 @@ impl Scene {
             let spacing = crate::app::grid::configured_spacing(&source.camera, &source.display);
             let half = (1.6 / placement.fit_scale).max(0.1);
             let origin = placement.center;
+            let mut tools = Vec::new();
+            for line in &source.overlays.segments {
+                let color = line.color.to_normalized_gamma_f32();
+                tools.push(if line.dashed {
+                    Line::dashed(line.a - origin, line.b - origin, color, line.width)
+                } else {
+                    Line::new(line.a - origin, line.b - origin, color, line.width)
+                });
+            }
+            tools.extend(source.overlays.markers.iter().map(|(point, color)| {
+                Line::marker(*point - origin, color.to_normalized_gamma_f32(), 4.0)
+            }));
+            tools.extend(source.overlays.ticks.iter().map(|(point, toward, color)| {
+                Line::tick(
+                    *point - origin,
+                    *toward - origin,
+                    color.to_normalized_gamma_f32(),
+                )
+            }));
+            self.lines.tools(device, tools);
             let reference_key = vec![
                 origin.x.to_bits(),
                 origin.y.to_bits(),

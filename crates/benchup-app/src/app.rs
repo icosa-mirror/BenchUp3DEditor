@@ -59,6 +59,8 @@ mod section_gizmo;
 mod finish_settings;
 #[path = "grid.rs"]
 pub(crate) mod grid;
+#[path = "viewport_overlays.rs"]
+pub(crate) mod viewport_overlays;
 #[path = "grain_direction.rs"]
 mod grain_direction;
 #[path = "measurement_tools.rs"]
@@ -494,11 +496,12 @@ impl BenchUpApp {
     pub(crate) fn xr_panel_preferences(&self) -> crate::app_host::XrPanelPreferences { self.xr_panel }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
-    pub(crate) fn xr_scene_source(&mut self) -> crate::xr::immersive::Source {
+    pub(crate) fn xr_scene_source(&mut self, ctx: &egui::Context) -> crate::xr::immersive::Source {
         if self.render_model.revision() == 0 { self.render_model.update(&self.doc.model); }
         crate::xr::immersive::Source {
             model: self.render_model.shared(), revision: self.render_model.revision(),
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected: self.selected.clone(),
+            overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
         }
     }
 
@@ -4976,25 +4979,8 @@ impl BenchUpApp {
     }
 
     fn add_drawing_preview(&self, mesh: &mut renderer::Mesh, camera: &Camera, ui: &egui::Ui) {
-        let colors = Palette::for_ui(ui);
-        if let (Some(start), Some(snap)) = (self.trace_start(), self.line_preview_snap()) {
-            let color = self
-                .preview_alignment()
-                .or_else(|| self.active_drawing_guide().map(|g| g.axis))
-                .map(|axis| self.axis_color(axis))
-                .unwrap_or(colors.ink);
-            mesh.world_line(camera, start, snap.point, 2.2, color);
-        }
-        for pair in self.drawing_points().windows(2) {
-            mesh.world_line(
-                camera,
-                pair[0],
-                pair[1],
-                2.2,
-                self.lock
-                    .map(|axis| self.axis_color(axis))
-                    .unwrap_or(ACCENT),
-            );
+        for line in self.drawing_preview_segments(Palette::for_ui(ui)) {
+            mesh.world_line(camera, line.a, line.b, f64::from(line.width), line.color);
         }
     }
 
