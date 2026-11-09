@@ -53,6 +53,11 @@ XR controls use a docked bottom panel with a large tool-picker palette and
 parameters for the active tool. The shared editor/inspector receive the remaining
 layout space; controls do not cover them. Existing tool/parameter preferences
 remain authoritative, and shared modal dialogs retain full access.
+Grain Direction also accepts controller anchor/direction picks through shared
+multi-part/component-reference validation and document/history assignment, with
+the existing retained GPU preview. Geometry anchors work with snapping disabled;
+selection changes invalidate unfinished assignments instead of editing stale
+targets. Headset input validation remains deferred.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

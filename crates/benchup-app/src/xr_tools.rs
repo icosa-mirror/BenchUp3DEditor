@@ -49,6 +49,9 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
         Tool::Text => "Trigger: attach, then label position. Edit text on the panel.",
+        Tool::GrainDirection => {
+            "Trigger: choose a part and starting point, then the grain direction."
+        }
         Tool::Select => "Trigger selects. Cancel clears selection.",
         Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
         Tool::Erase => "Trigger erases the highlighted entity. Undo restores it.",
@@ -113,6 +116,7 @@ impl BenchUpApp {
                             Tool::Trim,
                             Tool::Split,
                             Tool::Flip,
+                            Tool::GrainDirection,
                         ];
                         for row in tools.chunks(4) {
                             ui.horizontal(|ui| {
@@ -402,10 +406,11 @@ impl BenchUpApp {
                 | Tool::Protractor
                 | Tool::Dimensions
                 | Tool::Text
+                | Tool::GrainDirection
         ) {
             self.snap = None;
             if clicked {
-                self.say(ctx, "This tool currently uses the editor panel. Choose a drawing or measurement tool from the XR controls to edit in 3D.");
+                self.say(ctx, "Use both grips to navigate the VR scene, or choose an editing tool from the XR picker.");
             }
             return;
         }
@@ -415,6 +420,8 @@ impl BenchUpApp {
         }
         let start = if self.tool == Tool::Line {
             self.line_start
+        } else if self.tool == Tool::GrainDirection {
+            self.grain_anchor.as_ref().map(|anchor| anchor.point)
         } else if self.tool.is_drawing() {
             self.drawing.as_ref().map(|drawing| drawing.origin)
         } else {
@@ -438,13 +445,14 @@ impl BenchUpApp {
                     .and_then(|m| m.normal.try_normalize())
             })
             .flatten()
+            .or_else(|| self.grain_plane())
             .or_else(|| self.measurement_plane().map(|p| p.1))
             .or_else(|| self.drawing.as_ref().map(|drawing| drawing.normal))
             .or(state.line_normal)
             .unwrap_or(DVec3::Z);
         self.snap = self.xr_ray_snap(pointer, start, normal);
         self.xr_shape_plane(pointer.ray);
-        if self.tool == Tool::Text && start.is_none() {
+        if matches!(self.tool, Tool::Text | Tool::GrainDirection) && start.is_none() {
             // A new leader must attach to geometry, even with snapping disabled.
             self.snap = pointer.hit.map(|hit| {
                 self.snap
@@ -457,6 +465,21 @@ impl BenchUpApp {
                         kind: Inference::OnFace,
                     })
             });
+            if self.tool == Tool::GrainDirection {
+                self.hover = pointer.hit.map(|hit| hit.entity).filter(|id| {
+                    self.doc.model.objects.contains_key(id)
+                        && !self.doc.model.is_locked(*id)
+                        && !self.doc.model.is_hidden(*id)
+                });
+                if self.hover.is_none() {
+                    self.snap = None;
+                }
+            }
+        }
+        if self.tool == Tool::GrainDirection
+            && let Some(anchor) = &self.grain_anchor
+        {
+            self.hover = Some(anchor.part);
         }
         let plane = self
             .drawing
@@ -495,6 +518,23 @@ impl BenchUpApp {
             } else {
                 self.xr_begin_shape(pointer);
             }
+        } else if self.tool == Tool::GrainDirection {
+            let hit = if self.grain_anchor.is_none() {
+                let anchor = pointer.hit.zip(self.snap).and_then(|(hit, snap)| {
+                    self.grain_anchor_at_hit(hit.entity, snap.point, Some(hit.normal))
+                });
+                if anchor.is_none() {
+                    self.say(
+                        ctx,
+                        "Choose an unlocked group or component for the grain direction.",
+                    );
+                    return;
+                }
+                anchor
+            } else {
+                None
+            };
+            self.grain_click_at_anchor(hit, ctx);
         } else if self.tool == Tool::Text {
             if self.snap.is_none() {
                 self.say(

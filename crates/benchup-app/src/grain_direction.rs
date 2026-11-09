@@ -187,6 +187,22 @@ impl BenchUpApp {
 
     pub(super) fn grain_click(&mut self, pos: Pos2, ctx: &egui::Context) {
         let hit = self.update_grain_pointer(pos);
+        self.grain_click_at_anchor(hit, ctx);
+    }
+
+    pub(super) fn grain_anchor_at_hit(&self, part: u64, point: DVec3, normal: Option<DVec3>) -> Option<Anchor> {
+        let targets = self.grain_parts();
+        (self.doc.model.objects.contains_key(&part) && !self.doc.model.is_hidden(part)
+            && !self.doc.model.is_locked(part) && (targets.len() < 2 || targets.contains(&part)))
+            .then(|| Anchor {part,point,normal,targets:if targets.contains(&part) {targets} else {BTreeSet::from([part])}})
+    }
+
+    pub(super) fn grain_click_at_anchor(&mut self, hit: Option<Anchor>, ctx: &egui::Context) {
+        if self.grain_anchor.as_ref().is_some_and(|anchor| anchor.targets != self.grain_parts()) {
+            self.stop_drawing();
+            self.say(ctx, "The selection changed. Choose a new grain starting point.");
+            return;
+        }
         if let Some(anchor) = &self.grain_anchor {
             let Some(direction) = self.grain_preview().map(|(_, direction)| direction) else {
                 return;

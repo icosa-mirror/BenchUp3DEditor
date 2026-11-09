@@ -172,6 +172,14 @@ run only on a click, not as a per-frame scan of selected geometry; plane hover
 feedback remains to be added. Cancel clears pending operands and paste previews,
 and cancelling a paste keeps the original selection. Headset tests are pending.
 
+Grain Direction uses two controller picks on an unlocked group/component and a
+direction endpoint. It shares desktop's anchor validation, multi-part targets,
+linked-instance reference frames, retained GPU preview and atomic document/undo
+assignment. The first point remains on hit geometry with snapping disabled, and
+the second supports face-plane/axis/grid inference. A changed selection cancels
+the pending assignment before it can edit stale targets. The tool is included
+in the same persisted picker. Headset interaction remains untested.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
 section handles. Those tools
