@@ -27,6 +27,7 @@ pub(crate) struct State {
     tool: Option<Tool>,
     line_normal: Option<DVec3>,
     stroke: bool,
+    grab_depth: Option<f64>,
 }
 
 pub(crate) fn hint(tool: Tool) -> &'static str {
@@ -35,6 +36,10 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::Rectangle => "Trigger: first corner, then opposite corner. Cancel clears.",
         Tool::Circle | Tool::Polygon => "Trigger: centre, then radius. Cancel clears.",
         Tool::Freehand => "Hold trigger to draw; release to finish. Cancel discards the stroke.",
+        Tool::Move => {
+            "Hold trigger on the selection and move it; release to commit. Cancel discards."
+        }
+        Tool::PushPull => "Hold trigger on a face and pull it; release to commit. Cancel discards.",
         Tool::TapeMeasure => "Trigger: first point, then second point. Cancel clears.",
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
@@ -93,6 +98,7 @@ impl BenchUpApp {
                     {
                         self.stop_drawing();
                         self.measurement = None;
+                        self.modeling = None;
                         if action == 0 && self.tool == Tool::Select {
                             self.selected.clear();
                         }
@@ -189,6 +195,30 @@ impl BenchUpApp {
                     }
                 }
             });
+            ui.horizontal(|ui| {
+                for (label, tool) in [("Move", Tool::Move), ("Push/Pull", Tool::PushPull)] {
+                    if ui
+                        .add_sized(
+                            [100., 42.],
+                            egui::Button::new(egui::RichText::new(label).size(18.))
+                                .selected(self.tool == tool),
+                        )
+                        .clicked()
+                    {
+                        self.set_tool(tool);
+                        self.persist_inspector_changes(&ctx, Some(storage), false);
+                    }
+                }
+                if ui
+                    .checkbox(
+                        &mut self.push_pull_new_faces,
+                        egui::RichText::new("Keep starting face").size(18.),
+                    )
+                    .changed()
+                {
+                    self.persist_inspector_changes(&ctx, Some(storage), false);
+                }
+            });
             ui.label(egui::RichText::new(hint(self.tool)).size(16.));
         });
     }
@@ -201,6 +231,10 @@ impl BenchUpApp {
         ctx: &egui::Context,
     ) {
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
+            if state.grab_depth.take().is_some() {
+                self.modeling = None;
+                self.length_input.clear();
+            }
             if state.stroke {
                 self.stop_drawing();
                 state.stroke = false;
@@ -220,6 +254,7 @@ impl BenchUpApp {
             state.tool = Some(self.tool);
             state.line_normal = None;
             state.stroke = false;
+            state.grab_depth = None;
         }
         self.hover = pointer.hit.map(|hit| hit.entity);
         // Desktop reference acquisition uses screen coordinates; don't retain
@@ -231,8 +266,10 @@ impl BenchUpApp {
         if activate && pointer.cancel {
             self.stop_drawing();
             self.measurement = None;
+            self.modeling = None;
             state.line_normal = None;
             state.stroke = false;
+            state.grab_depth = None;
             if self.tool == Tool::Select {
                 self.selected.clear();
             }
@@ -240,6 +277,10 @@ impl BenchUpApp {
             return;
         }
         let clicked = activate && pointer.activate;
+        if matches!(self.tool, Tool::Move | Tool::PushPull) {
+            self.xr_model_grab(pointer, state, clicked, activate, ctx);
+            return;
+        }
         if self.tool == Tool::Paint {
             self.snap = None;
             if self.paint_target == PaintTarget::Face {
@@ -416,6 +457,129 @@ impl BenchUpApp {
                 pointer.ray.origin,
                 ctx,
             );
+        }
+        ctx.request_repaint();
+    }
+
+    fn xr_model_grab(
+        &mut self,
+        pointer: &Pointer,
+        state: &mut State,
+        clicked: bool,
+        activate: bool,
+        ctx: &egui::Context,
+    ) {
+        self.snap = None;
+        if self.tool == Tool::PushPull {
+            self.hover = pointer
+                .hit
+                .map(|hit| hit.face)
+                .filter(|id| self.doc.model.faces.contains_key(id));
+        }
+        if !activate {
+            return;
+        }
+        if clicked {
+            let Some(hit) = pointer.hit else {
+                return;
+            };
+            let (face, direction) = if self.tool == Tool::PushPull {
+                let Some(face) = self.doc.model.faces.get(&hit.face) else {
+                    self.say(ctx, "Choose an original document face to pull.");
+                    return;
+                };
+                if self.doc.model.is_locked(face.id) {
+                    self.say(ctx, "Unlock the face before pulling it.");
+                    return;
+                }
+                let Some(plane) = benchup_core::faces::plane(&self.doc.model, &face.vertices)
+                else {
+                    return;
+                };
+                if (hit.point - plane.origin).dot(plane.normal).abs() > 1e-6 {
+                    self.say(ctx, "Choose an original document face to pull.");
+                    return;
+                }
+                let direction = plane.normal
+                    * if plane.normal.dot(pointer.ray.origin - hit.point) >= 0. {
+                        1.
+                    } else {
+                        -1.
+                    };
+                if self.selected_modeling_face() != Some(hit.face) {
+                    self.selected = BTreeSet::from([hit.face]);
+                }
+                (Some(hit.face), direction)
+            } else {
+                if !self.doc.model.contains_entity(&hit.entity) {
+                    self.say(ctx, "Choose an original document entity to move.");
+                    return;
+                }
+                self.prepare_picking();
+                if !self
+                    .entity_cache
+                    .selected(&self.doc.model, hit.entity, &self.selected)
+                {
+                    self.selected = BTreeSet::from([hit.entity]);
+                }
+                if self.doc.model.selection_locked(&self.selected) {
+                    self.say(ctx, "Unlock the selection before moving it.");
+                    return;
+                }
+                (None, DVec3::ZERO)
+            };
+            self.begin_modeling_at_anchor(hit.point, direction, face, Pos2::ZERO, pointer.ray);
+            state.grab_depth = Some(
+                (hit.point - pointer.ray.origin)
+                    .dot(pointer.ray.direction)
+                    .max(1e-6),
+            );
+        }
+        let (Some(depth), Some(edit)) = (state.grab_depth, self.modeling.as_ref()) else {
+            state.grab_depth = None;
+            return;
+        };
+        // Keep the grabbed anchor at its original distance along the aim ray.
+        // This supports controller translation and swinging the ray naturally,
+        // including pulls where the ray is parallel to the extrusion axis.
+        let mut delta = pointer.ray.origin + pointer.ray.direction * depth - edit.anchor;
+        let constraint = self.axis_constraint();
+        let pull_direction = self.pull_direction(edit.unlocked_direction);
+        let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
+        let edit = self.modeling.as_mut().unwrap();
+        edit.snap = None;
+        edit.guides.clear();
+        if self.tool == Tool::Move {
+            if let Some(constraint) = constraint {
+                delta = constraint.project(delta);
+            }
+            if self.snap_to_grid {
+                delta = (delta / spacing).round() * spacing;
+            }
+            edit.direction = delta;
+            edit.value = delta.length();
+        } else {
+            edit.direction = pull_direction;
+            edit.value = delta.dot(pull_direction);
+            if self.snap_to_grid {
+                edit.value = (edit.value / spacing).round() * spacing;
+            }
+        }
+        self.refresh_modeling_preview();
+        if !pointer.primary_down {
+            state.grab_depth = None;
+            if self
+                .modeling
+                .as_ref()
+                .is_some_and(|edit| edit.value.abs() >= 1e-7)
+                || !self.length_input.trim().is_empty()
+            {
+                self.commit_modeling_at_value(ctx);
+            }
+            // Errors leave the authoritative model untouched; do not retain a
+            // released grab or commit a frozen preview after tracking loss.
+            self.modeling = None;
+            self.length_input.clear();
         }
         ctx.request_repaint();
     }

@@ -520,7 +520,7 @@ impl BenchUpApp {
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
-            tool_target: self.snap.map(|snap| snap.point),
+            tool_target: self.snap.or_else(|| self.modeling_preview_snap()).map(|snap| snap.point),
             tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),
@@ -1655,6 +1655,10 @@ impl BenchUpApp {
             };
             (snap.point, DVec3::ZERO)
         };
+        self.begin_modeling_at_anchor(anchor, direction, face_id, pos, ray);
+    }
+    fn begin_modeling_at_anchor(&mut self, anchor: DVec3, direction: DVec3, face_id: Option<u64>, pos: Pos2, ray: benchup_core::Ray) {
+        self.last_move_copy = None;
         let center = self
             .doc
             .model
@@ -1945,6 +1949,10 @@ impl BenchUpApp {
             let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
             edit.value = (edit.value / spacing).round() * spacing;
         }
+        self.refresh_modeling_preview();
+    }
+    fn refresh_modeling_preview(&mut self) {
+        let Some(edit) = self.modeling.as_mut() else { return; };
         let value =
             precision::modeling_value_with_units(self.tool, &self.length_input, self.doc.display.units)
                 .unwrap_or(edit.value);
@@ -2081,6 +2089,9 @@ impl BenchUpApp {
         if self.tool == Tool::Rotate && self.choose_rotation_reference(ctx) {
             return;
         }
+        self.commit_modeling_at_value(ctx);
+    }
+    fn commit_modeling_at_value(&mut self, ctx: &egui::Context) {
         let Some(edit) = self.modeling.as_ref() else {
             return;
         };

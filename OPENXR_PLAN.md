@@ -10,7 +10,7 @@ shared GPU previews. A large XR tool bar exposes these tools, cancellation and
 undo/redo with persisted active-tool selection. Initial inference is local to the
 hit face plus drawing planes and axis constraints. Remaining direct interaction
 work includes standalone-edge/guide snapping, shared reference acquisition,
-modeling transforms, solid tools and section-handle manipulation.
+rotation/scale/Offset, solid tools and section-handle manipulation.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
 large XR buttons and polygon side controls persist through existing preferences.
@@ -27,6 +27,12 @@ drawing/history operation. Cancellation or loss of focus/tracking/pointer owners
 discards uncommitted samples. Angular sample spacing and a 2048-sample active-stroke
 limit bound the preview workload; the limit finishes the stroke and requires a
 trigger release before another can start.
+Move and Push/Pull support trigger grabs using the shared Modeling state, retained
+MovePreview plan, preview producer and commit/history operations. The grabbed
+point stays at its original ray distance; movement or projected extrusion follows
+the controller until tracked release. Axis/plane locks and grid snapping apply.
+Cancellation, pointer/focus/tracking loss or grip navigation discards the preview.
+Reference snapping during grabs and rotation/scale/Offset remain future work.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

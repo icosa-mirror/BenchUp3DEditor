@@ -99,9 +99,24 @@ focus/tracking loss, panel capture or grip navigation discards unfinished sample
 without changing the document. Repeated layout passes cannot sample or commit
 twice. This controller behaviour still awaits headset validation.
 
+Move and Push/Pull use trigger grabs. The picked anchor stays at its initial
+distance along the controller aim ray; controller translation and ray rotation
+move that anchor, or project its displacement onto the face's extrusion direction.
+This also works when the ray is parallel to that direction. Start/preview/commit
+share the desktop Modeling state, MovePreview plan and document/history operations.
+Existing explicit axis/plane locks and grid snapping apply. The large XR controls
+expose Move, Push/Pull and the already saved Keep starting face option.
+
+Tracked release commits once. Cancel, loss of pointer ownership/focus/tracking or
+grip navigation discards the uncommitted preview. Zero-distance release does not
+create an edit. Locked or generated-only targets cannot start a grab. The beam
+follows the modeling preview marker even when the ray no longer hits geometry.
+Geometry/reference snapping during grabs, standalone-edge grabs, rotation, scale
+and Offset remain future work. Controller behavior awaits headset validation.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-transforms, solid tools and section handles. Those tools
+rotation, scale, Offset, solid tools and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;
