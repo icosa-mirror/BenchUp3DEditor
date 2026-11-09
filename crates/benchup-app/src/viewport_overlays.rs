@@ -144,6 +144,67 @@ pub(crate) struct Triangle {
 }
 
 impl BenchUpApp {
+    pub(super) fn modeling_status_text(&self) -> Option<String> {
+        let edit = self.modeling.as_ref()?;
+        let text = edit.error.map(str::to_owned).unwrap_or_else(|| {
+            let value = precision::modeling_value_with_units(
+                self.tool,
+                &self.length_input,
+                self.doc.display.units,
+            )
+            .unwrap_or(edit.value);
+            if self.tool == Tool::Rotate {
+                if edit
+                    .rotation
+                    .as_ref()
+                    .is_some_and(|rotation| rotation.reference.is_none())
+                {
+                    tr!("app.click_a_reference_point_away_from_the_pivot_2").into()
+                } else {
+                    tr!(
+                        "app.click_to_confirm_esc_to_cancel",
+                        self.doc.display.units.format_angle(value)
+                    )
+                }
+            } else if self.tool == Tool::Scale {
+                tr!("app.click_to_confirm_esc_to_cancel_2", value = value)
+            } else {
+                let alignment = if edit.guides.len() > 1 && self.length_input.is_empty() {
+                    tr!(
+                        "app.aligned",
+                        edit.guides
+                            .iter()
+                            .map(|g| match g.axis {
+                                Axis::X => "X",
+                                Axis::Y => "Y",
+                                Axis::Z => "Z",
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" + ")
+                    )
+                } else {
+                    String::new()
+                };
+                tr!(
+                    "app.click_to_confirm_esc_to_cancel_3",
+                    if self.tool == Tool::Move {
+                        if edit.copy {
+                            tr!("app.copy")
+                        } else {
+                            tr!("app.move")
+                        }
+                    } else if self.tool == Tool::PushPull && edit.keep_starting_face {
+                        tr!("app.new_faces")
+                    } else {
+                        ""
+                    },
+                    self.doc.display.units.format_length(value),
+                    alignment = alignment,
+                )
+            }
+        });
+        Some(text)
+    }
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(super) fn xr_reference_overlays(
         &mut self,
@@ -432,23 +493,115 @@ impl BenchUpApp {
                 }
             }
         }
+        if self.doc.display.dimensions
+            && self.tool.is_measuring()
+            && self.tool != Tool::Text
+            && !self.measurement.as_ref().is_some_and(|m| m.complete)
+            && let Some(snap) = self.snap
+        {
+            result.circle(snap.point, 4.0, colors.green, Color32::TRANSPARENT, false);
+            if snap.kind != Inference::Plane {
+                result.billboards.push(Billboard {
+                    point: snap.point,
+                    owners: Default::default(),
+                    depth: false,
+                    shapes: vec![Glyph::Hint {
+                        at: [45.0, 18.0],
+                        text: snap.kind.label().into(),
+                        size: 12.0,
+                        color: colors.green,
+                        background: colors.paper,
+                    }],
+                });
+            }
+        }
+        for text in self.transient_text_annotations() {
+            let [a, b] = text.layout(&self.doc.model);
+            result.segments.push(Segment {
+                a,
+                b,
+                color: colors.green,
+                width: 1.5,
+                dashed: false,
+            });
+            result.labels.push(Label {
+                point: b,
+                text: text.text,
+                color: colors.green,
+            });
+        }
         if let Some(edit) = &self.modeling {
             result.circle(edit.anchor, 3.5, colors.ink, colors.paper, false);
-            let end = if matches!(self.tool, Tool::Move | Tool::Scale | Tool::Rotate) {
+            let mut end = if matches!(self.tool, Tool::Move | Tool::Scale | Tool::Rotate) {
                 edit.anchor + edit.direction
             } else {
                 edit.anchor + edit.direction * edit.value
             };
-            result.segments.push(Segment {
-                a: edit.anchor,
-                b: end,
-                color: self.inference_color(),
-                width: 1.5,
-                dashed: false,
-            });
-            if self.doc.display.guides {
+            if self.tool == Tool::Rotate {
+                if let Some(rotation) = self.rotation_preview_geometry() {
+                    end = rotation.endpoint;
+                    result.overlay_segments.push(Segment {
+                        a: rotation.anchor,
+                        b: rotation.endpoint,
+                        color: rotation.color,
+                        width: 1.5,
+                        dashed: false,
+                    });
+                    if let Some(reference) = rotation.reference {
+                        result.overlay_segments.push(Segment {
+                            a: rotation.anchor,
+                            b: reference,
+                            color: rotation.color,
+                            width: 1.5,
+                            dashed: false,
+                        });
+                        result.circle(reference, 3.5, rotation.color, Color32::TRANSPARENT, false);
+                        result.circle(
+                            rotation.endpoint,
+                            4.0,
+                            rotation.color,
+                            Color32::TRANSPARENT,
+                            false,
+                        );
+                    }
+                    result
+                        .overlay_segments
+                        .extend(rotation.arc.windows(2).map(|p| Segment {
+                            a: p[0],
+                            b: p[1],
+                            color: rotation.color,
+                            width: 1.5,
+                            dashed: false,
+                        }));
+                }
+            } else if matches!(self.tool, Tool::Move | Tool::Scale) {
+                result.overlay_segments.push(Segment {
+                    a: edit.anchor,
+                    b: end,
+                    color: self
+                        .lock
+                        .map(|axis| self.axis_color(axis))
+                        .unwrap_or_else(|| self.inference_color()),
+                    width: 1.5,
+                    dashed: false,
+                });
+            } else if self.doc.display.guides
+                && let Some(snap) = edit.snap
+            {
+                result.overlay_segments.push(Segment {
+                    a: snap.point,
+                    b: end,
+                    color: self.inference_color(),
+                    width: 1.2,
+                    dashed: true,
+                });
+            }
+            if self.doc.display.guides
+                && self.length_input.is_empty()
+                && matches!(self.tool, Tool::Move | Tool::Scale)
+            {
                 for guide in &edit.guides {
-                    result.segments.push(Segment {
+                    result.overlay_segments.push(Segment {
                         a: guide.origin,
                         b: end,
                         color: self.axis_color(guide.axis),
@@ -457,21 +610,7 @@ impl BenchUpApp {
                     });
                 }
             }
-            let value = precision::modeling_value_with_units(
-                self.tool,
-                &self.length_input,
-                self.doc.display.units,
-            )
-            .unwrap_or(edit.value);
-            let text = edit.error.map(str::to_owned).unwrap_or_else(|| {
-                if self.tool == Tool::Rotate {
-                    self.doc.display.units.format_angle(value)
-                } else if self.tool == Tool::Scale {
-                    format!("{value:.3}×")
-                } else {
-                    self.doc.display.units.format_length(value)
-                }
-            });
+            let text = self.modeling_status_text().unwrap_or_default();
             result.labels.push(Label {
                 point: end,
                 text,

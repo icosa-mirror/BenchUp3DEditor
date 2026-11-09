@@ -27,6 +27,7 @@ struct Key {
     tool_labels: Vec<crate::app::viewport_overlays::Label>,
     tool_billboards: Vec<crate::app::viewport_overlays::Billboard>,
     references: usize,
+    editing_text: Option<u64>,
 }
 
 pub(super) struct Text {
@@ -123,6 +124,7 @@ impl Text {
             tool_labels: source.overlays.labels.clone(),
             tool_billboards: source.overlays.billboards.clone(),
             references: std::sync::Arc::as_ptr(&source.references) as usize,
+            editing_text: source.editing_text,
         };
         if self.key.as_ref() == Some(&key) {
             return;
@@ -202,11 +204,9 @@ impl Text {
                 ));
             }
         }
-        for text in model
-            .texts
-            .values()
-            .filter(|t| self.entities.get(t.id).displayed(&source.display))
-        {
+        for text in model.texts.values().filter(|t| {
+            self.entities.get(t.id).displayed(&source.display) && source.editing_text != Some(t.id)
+        }) {
             let points = text.layout(model);
             let ink = color(text.id);
             lines.push((points[0], points[1], ink.to_normalized_gamma_f32()));

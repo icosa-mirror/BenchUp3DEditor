@@ -508,6 +508,7 @@ impl BenchUpApp {
             tool:self.tool,hover:self.hover,outliner_hover:self.outliner_hover.clone(),
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),
+            editing_text:self.text_editor.as_ref().and_then(|editor|editor.id),
         }
     }
 
@@ -5861,52 +5862,7 @@ impl BenchUpApp {
             }
         }
         if let Some(edit) = &self.modeling {
-            let text = edit.error.map(str::to_owned).unwrap_or_else(|| {
-                let value = precision::modeling_value_with_units(
-                    self.tool,
-                    &self.length_input,
-                    self.doc.display.units,
-                )
-                .unwrap_or(edit.value);
-                if self.tool == Tool::Rotate {
-                    if edit.rotation.as_ref().is_some_and(|rotation| rotation.reference.is_none()) {
-                        tr!("app.click_a_reference_point_away_from_the_pivot_2").into()
-                    } else {
-                        tr!("app.click_to_confirm_esc_to_cancel", self.doc.display.units.format_angle(value))
-                    }
-                } else if self.tool == Tool::Scale {
-                    tr!("app.click_to_confirm_esc_to_cancel_2", value = value)
-                } else {
-                    let alignment = if edit.guides.len() > 1 && self.length_input.is_empty() {
-                        tr!(
-                            "app.aligned",
-                            edit.guides
-                                .iter()
-                                .map(|g| match g.axis {
-                                    Axis::X => "X",
-                                    Axis::Y => "Y",
-                                    Axis::Z => "Z",
-                                })
-                                .collect::<Vec<_>>()
-                                .join(" + ")
-                        )
-                    } else {
-                        String::new()
-                    };
-                    tr!(
-                        "app.click_to_confirm_esc_to_cancel_3",
-                        if self.tool == Tool::Move {
-                            if edit.copy { tr!("app.copy") } else { tr!("app.move") }
-                        } else if self.tool == Tool::PushPull && edit.keep_starting_face {
-                            tr!("app.new_faces")
-                        } else {
-                            ""
-                        },
-                        self.doc.display.units.format_length(value),
-                        alignment = alignment,
-                    )
-                }
-            });
+            let text = self.modeling_status_text().unwrap_or_default();
             let galley = p.layout_no_wrap(
                 text,
                 FontId::monospace(12.),

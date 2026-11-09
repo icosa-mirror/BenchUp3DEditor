@@ -11,6 +11,16 @@ pub(super) struct TextEditor {
 }
 
 impl BenchUpApp {
+    pub(super) fn transient_text_annotations(&self)->Vec<TextAnnotation> {
+        let mut texts=Vec::new();
+        if let Some(editor)=&self.text_editor {
+            texts.push(TextAnnotation {id:0,anchor:DimensionAnchor {point:editor.point,weights:Vec::new()},offset:editor.offset,text:editor.text.clone()});
+        }
+        if self.tool==Tool::Text && let Some(measurement)=&self.measurement && let Some(&point)=measurement.points.first() {
+            texts.push(TextAnnotation {id:0,anchor:DimensionAnchor {point,weights:Vec::new()},offset:measurement.offset,text:measurement.text.clone()});
+        }
+        texts
+    }
     pub(super) fn update_text_pointer(&mut self, pos: Pos2) {
         self.prepare_picking();
         let start = self
@@ -337,47 +347,8 @@ impl BenchUpApp {
                 ));
             }
         }
-        if let Some(editor) = &self.text_editor {
-            let text = TextAnnotation {
-                id: 0,
-                anchor: DimensionAnchor {
-                    point: editor.point,
-                    weights: vec![],
-                },
-                offset: editor.offset,
-                text: editor.text.clone(),
-            };
-            shapes.extend(text_shapes(
-                mesh,
-                p,
-                &self.doc.camera,
-                rect,
-                model,
-                &text,
-                colors.green,
-            ));
-        }
-        if self.tool == Tool::Text {
-            if let Some(m) = &self.measurement {
-                let text = TextAnnotation {
-                    id: 0,
-                    anchor: DimensionAnchor {
-                        point: m.points[0],
-                        weights: vec![],
-                    },
-                    offset: m.offset,
-                    text: m.text.clone(),
-                };
-                shapes.extend(text_shapes(
-                    mesh,
-                    p,
-                    &self.doc.camera,
-                    rect,
-                    model,
-                    &text,
-                    colors.green,
-                ));
-            }
+        for text in self.transient_text_annotations() {
+            shapes.extend(text_shapes(mesh,p,&self.doc.camera,rect,model,&text,colors.green));
         }
         shapes
     }

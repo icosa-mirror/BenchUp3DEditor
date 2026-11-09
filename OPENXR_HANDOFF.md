@@ -88,7 +88,10 @@ with the editor rather than synthesized independently by XR.
 
 Controller scene clicks still select entities; world-ray drawing/manipulation is
 not yet wired. Current transient overlays reflect operations performed through the
-editor panel. Remaining visual work includes grain patterns, rotation graphics,
+editor panel. Rotation graphics now share world-space arc/reference geometry with
+desktop. Modeling confirmation/value/error messages and transient text annotations
+also share their original producers. Incomplete measurement snap markers and hints
+use the retained billboard path. Remaining visual work includes grain patterns,
 paste previews and final hint/status/handle coverage. The duplicated 2D viewport
 remains for comparison and existing tool interaction while these gaps are closed.
 

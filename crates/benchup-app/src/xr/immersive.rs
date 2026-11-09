@@ -14,11 +14,12 @@ pub(crate) struct Source {
     pub selected: BTreeSet<u64>,
     pub overlays: crate::app::viewport_overlays::Overlays,
     pub references: Arc<crate::app::viewport_overlays::Overlays>,
-    pub tool:benchup_core::Tool,
-    pub hover:Option<u64>,
-    pub outliner_hover:BTreeSet<u64>,
-    pub erasing:BTreeSet<u64>,
-    pub joinery_members:Option<[u64;2]>,
+    pub tool: benchup_core::Tool,
+    pub hover: Option<u64>,
+    pub outliner_hover: BTreeSet<u64>,
+    pub erasing: BTreeSet<u64>,
+    pub joinery_members: Option<[u64; 2]>,
+    pub editing_text: Option<u64>,
 }
 
 struct Placement {
@@ -262,7 +263,11 @@ impl Scene {
                     dark: self.dark,
                     tool: source.tool,
                     selected: source.selected.clone(),
-                    hover: self.input.and_then(|input| input.hit).map(|hit| hit.entity).or(source.hover),
+                    hover: self
+                        .input
+                        .and_then(|input| input.hit)
+                        .map(|hit| hit.entity)
+                        .or(source.hover),
                     outliner_hover: source.outliner_hover.clone(),
                     erasing: source.erasing.clone(),
                 };

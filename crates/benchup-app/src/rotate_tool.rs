@@ -1,6 +1,6 @@
 //! Pivot/reference/angle rotation using the same targets and grid as Move.
-use benchup_core::tr;
 use super::*;
+use benchup_core::tr;
 
 pub(super) struct Rotation {
     pub normal: DVec3,
@@ -8,7 +8,56 @@ pub(super) struct Rotation {
     pub reference: Option<DVec3>,
 }
 
+pub(super) struct RotationGeometry {
+    pub anchor: DVec3,
+    pub reference: Option<DVec3>,
+    pub endpoint: DVec3,
+    pub arc: Vec<DVec3>,
+    pub color: Color32,
+}
+
 impl BenchUpApp {
+    pub(super) fn rotation_preview_geometry(&self) -> Option<RotationGeometry> {
+        let edit = self.modeling.as_ref()?;
+        let rotation = edit.rotation.as_ref()?;
+        let color = self
+            .shape_lock()
+            .map_or_else(|| self.inference_color(), |axis| self.axis_color(axis));
+        let value = precision::modeling_value_with_units(
+            Tool::Rotate,
+            &self.length_input,
+            self.doc.display.units,
+        )
+        .unwrap_or(edit.value);
+        let mut arc = Vec::new();
+        let (reference, endpoint) = if let Some(reference) = rotation.reference {
+            let reference = reference - rotation.normal * reference.dot(rotation.normal);
+            let endpoint = Self::rotation_marker(edit, value)?;
+            if let Some(unit) = reference.try_normalize() {
+                let degrees = value.clamp(-360.0, 360.0);
+                let steps = ((degrees.abs() / 5.0).ceil() as usize).max(1);
+                arc.extend((0..=steps).map(|i| {
+                    edit.anchor
+                        + glam::DMat3::from_axis_angle(
+                            rotation.normal,
+                            (degrees * i as f64 / steps as f64).to_radians(),
+                        ) * unit
+                            * reference.length()
+                            * 0.3
+                }));
+            }
+            (Some(edit.anchor + reference), endpoint)
+        } else {
+            (None, edit.anchor + edit.direction)
+        };
+        Some(RotationGeometry {
+            anchor: edit.anchor,
+            reference,
+            endpoint,
+            arc,
+            color,
+        })
+    }
     pub(super) fn rotation_at(&self, anchor: DVec3, ray: benchup_core::Ray) -> Rotation {
         let surface_normal = self
             .doc
@@ -84,32 +133,45 @@ impl BenchUpApp {
         // Resolve its geometry target first, then project into the locked plane;
         // never let the target change the rotation axis or enable disabled snaps.
         let projected = if in_plane.is_none() && self.doc.snap_to_geometry {
-            edit.move_snap.as_mut().unwrap().infer_with_constraint(
-                &self.doc.camera,
-                size,
-                cursor,
-                edit.anchor,
-                None,
-                true,
-                false,
-                benchup_core::inference::SnapTargets {
-                    edges: self.snap_to_edge,
-                    faces: self.snap_to_face,
-                    face_centers: self.snap_to_face_center,
-                },
-            ).filter(|inference| matches!(inference.snap.kind,
-                Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter
-                    | Inference::Origin | Inference::OnEdge | Inference::OnFace))
-            .and_then(|mut inference| {
-                let offset = (inference.snap.point - edit.anchor).dot(normal);
-                inference.snap.point -= normal * offset;
-                ((inference.snap.point - edit.anchor).length_squared() > 1e-12)
-                    .then_some(inference)
-            })
+            edit.move_snap
+                .as_mut()
+                .unwrap()
+                .infer_with_constraint(
+                    &self.doc.camera,
+                    size,
+                    cursor,
+                    edit.anchor,
+                    None,
+                    true,
+                    false,
+                    benchup_core::inference::SnapTargets {
+                        edges: self.snap_to_edge,
+                        faces: self.snap_to_face,
+                        face_centers: self.snap_to_face_center,
+                    },
+                )
+                .filter(|inference| {
+                    matches!(
+                        inference.snap.kind,
+                        Inference::Endpoint
+                            | Inference::Midpoint
+                            | Inference::FaceCenter
+                            | Inference::Origin
+                            | Inference::OnEdge
+                            | Inference::OnFace
+                    )
+                })
+                .and_then(|mut inference| {
+                    let offset = (inference.snap.point - edit.anchor).dot(normal);
+                    inference.snap.point -= normal * offset;
+                    ((inference.snap.point - edit.anchor).length_squared() > 1e-12)
+                        .then_some(inference)
+                })
         } else {
             None
         };
-        let snap = in_plane.or(projected)
+        let snap = in_plane
+            .or(projected)
             .map(|inference| {
                 edit.guides = inference.guides;
                 inference.snap
@@ -156,9 +218,9 @@ impl BenchUpApp {
         let reference = reference - normal * reference.dot(normal);
         let target = edit.direction;
         if reference.length_squared() < 1e-12 {
-            edit.error = Some(
-                tr!("rotate_tool.the_reference_lies_on_the_rotation_axis_clear"),
-            );
+            edit.error = Some(tr!(
+                "rotate_tool.the_reference_lies_on_the_rotation_axis_clear"
+            ));
             return;
         }
         if target.length_squared() > 1e-12 {
@@ -189,7 +251,10 @@ impl BenchUpApp {
             return false;
         }
         if edit.direction.length_squared() < 1e-12 {
-            self.say(ctx, tr!("rotate_tool.click_a_reference_point_away_from_the_pivot_2"));
+            self.say(
+                ctx,
+                tr!("rotate_tool.click_a_reference_point_away_from_the_pivot_2"),
+            );
             return true;
         }
         rotation.reference = Some(edit.direction);
@@ -214,62 +279,33 @@ impl BenchUpApp {
     }
 
     pub(super) fn paint_rotation(&self, painter: &egui::Painter, rect: Rect) {
-        let Some(edit) = self.modeling.as_ref() else {
+        let Some(geometry) = self.rotation_preview_geometry() else {
             return;
         };
-        let rotation = edit.rotation.as_ref().unwrap();
-        let size = dv(rect.size());
         let screen = |point| {
             self.doc
                 .camera
-                .project(point, size)
+                .project(point, dv(rect.size()))
                 .map(|p| rect.min + pv(p))
         };
-        let color = self
-            .shape_lock()
-            .map_or_else(|| self.inference_color(), |axis| self.axis_color(axis));
-        let stroke = Stroke::new(1.5, color);
-        let value = precision::modeling_value_with_units(
-            Tool::Rotate,
-            &self.length_input,
-            self.doc.display.units,
-        )
-        .unwrap_or(edit.value);
-        if let Some(reference) = rotation.reference {
-            let reference = reference - rotation.normal * reference.dot(rotation.normal);
-            let endpoint = Self::rotation_marker(edit, value).unwrap();
+        let stroke = Stroke::new(1.5, geometry.color);
+        if let Some(reference) = geometry.reference {
             if let (Some(center), Some(start), Some(end)) = (
-                screen(edit.anchor),
-                screen(edit.anchor + reference),
-                screen(endpoint),
+                screen(geometry.anchor),
+                screen(reference),
+                screen(geometry.endpoint),
             ) {
                 painter.line_segment([center, start], stroke);
                 painter.line_segment([center, end], stroke);
                 painter.circle_stroke(start, 3.5, stroke);
-                painter.circle_stroke(end, 4., stroke);
+                painter.circle_stroke(end, 4.0, stroke);
             }
-            let radius = reference.length() * 0.3;
-            if let Some(unit) = reference.try_normalize() {
-                // Bound the arc even for large typed angles while retaining full rotations.
-                let degrees = value.clamp(-360., 360.);
-                let steps = ((degrees.abs() / 5.).ceil() as usize).max(1);
-                let points: Vec<_> = (0..=steps)
-                    .filter_map(|i| {
-                        let angle = (degrees * i as f64 / steps as f64).to_radians();
-                        screen(
-                            edit.anchor
-                                + glam::DMat3::from_axis_angle(rotation.normal, angle)
-                                    * unit
-                                    * radius,
-                        )
-                    })
-                    .collect();
-                if points.len() > 1 {
-                    painter.add(egui::Shape::line(points, stroke));
-                }
+            let points: Vec<_> = geometry.arc.into_iter().filter_map(screen).collect();
+            if points.len() > 1 {
+                painter.add(egui::Shape::line(points, stroke));
             }
         } else if let (Some(center), Some(end)) =
-            (screen(edit.anchor), screen(edit.anchor + edit.direction))
+            (screen(geometry.anchor), screen(geometry.endpoint))
         {
             painter.line_segment([center, end], stroke);
         }
