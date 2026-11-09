@@ -91,9 +91,17 @@ editor panel; no XR virtual keyboard is implemented. Editing an existing label
 by directly ray-picking its billboard remains future work. The shared grid helper
 accepts an explicit working-plane normal for XR while keeping desktop defaults.
 
+Freehand uses trigger-hold sampling and a tracked release to commit through the
+shared drawing operation as one undo action. Samples use angular spacing in
+model space. The active stroke is capped at 2048 samples; reaching the cap finishes
+it and requires a trigger release before another starts. Secondary Cancel,
+focus/tracking loss, panel capture or grip navigation discards unfinished samples
+without changing the document. Repeated layout passes cannot sample or commit
+twice. This controller behaviour still awaits headset validation.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-freehand, transforms, solid tools and section handles. Those tools
+transforms, solid tools and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

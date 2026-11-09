@@ -18,6 +18,7 @@ pub(crate) struct Pointer {
     pub hit: Option<Hit>,
     pub activate: bool,
     pub cancel: bool,
+    pub primary_down: bool,
 }
 
 #[derive(Default)]
@@ -25,6 +26,7 @@ pub(crate) struct State {
     active: bool,
     tool: Option<Tool>,
     line_normal: Option<DVec3>,
+    stroke: bool,
 }
 
 pub(crate) fn hint(tool: Tool) -> &'static str {
@@ -32,6 +34,7 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::Line => "Trigger: start / next endpoint. Cancel ends the chain.",
         Tool::Rectangle => "Trigger: first corner, then opposite corner. Cancel clears.",
         Tool::Circle | Tool::Polygon => "Trigger: centre, then radius. Cancel clears.",
+        Tool::Freehand => "Hold trigger to draw; release to finish. Cancel discards the stroke.",
         Tool::TapeMeasure => "Trigger: first point, then second point. Cancel clears.",
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
@@ -104,6 +107,7 @@ impl BenchUpApp {
                     ("Rectangle", Tool::Rectangle),
                     ("Circle", Tool::Circle),
                     ("Polygon", Tool::Polygon),
+                    ("Freehand", Tool::Freehand),
                 ] {
                     if ui
                         .add_sized(
@@ -197,6 +201,10 @@ impl BenchUpApp {
         ctx: &egui::Context,
     ) {
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
+            if state.stroke {
+                self.stop_drawing();
+                state.stroke = false;
+            }
             if state.active {
                 self.snap = None;
                 self.hover = None;
@@ -211,6 +219,7 @@ impl BenchUpApp {
         if state.tool != Some(self.tool) {
             state.tool = Some(self.tool);
             state.line_normal = None;
+            state.stroke = false;
         }
         self.hover = pointer.hit.map(|hit| hit.entity);
         // Desktop reference acquisition uses screen coordinates; don't retain
@@ -223,6 +232,7 @@ impl BenchUpApp {
             self.stop_drawing();
             self.measurement = None;
             state.line_normal = None;
+            state.stroke = false;
             if self.tool == Tool::Select {
                 self.selected.clear();
             }
@@ -269,6 +279,7 @@ impl BenchUpApp {
                 | Tool::Rectangle
                 | Tool::Circle
                 | Tool::Polygon
+                | Tool::Freehand
                 | Tool::TapeMeasure
                 | Tool::Protractor
                 | Tool::Dimensions
@@ -346,6 +357,10 @@ impl BenchUpApp {
             m.offset = snap.point - m.points[0];
         }
         let valid_offset = self.xr_measurement_offset(pointer.ray);
+        if self.tool == Tool::Freehand {
+            self.xr_freehand(pointer, state, clicked, activate, ctx);
+            return;
+        }
         if !clicked || !valid_offset {
             return;
         }
@@ -360,11 +375,7 @@ impl BenchUpApp {
             if self.drawing.is_some() {
                 self.commit_drawing_at_snap(ctx, false);
             } else {
-                let surface = pointer.hit.filter(|hit| {
-                    self.snap
-                        .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
-                });
-                self.begin_drawing_at_snap(surface.map(|hit| hit.normal));
+                self.xr_begin_shape(pointer);
             }
         } else if self.tool == Tool::Text {
             if self.snap.is_none() {
@@ -405,6 +416,75 @@ impl BenchUpApp {
                 pointer.ray.origin,
                 ctx,
             );
+        }
+        ctx.request_repaint();
+    }
+
+    fn xr_begin_shape(&mut self, pointer: &Pointer) {
+        let surface = pointer.hit.filter(|hit| {
+            self.snap
+                .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
+        });
+        self.begin_drawing_at_snap(surface.map(|hit| hit.normal));
+    }
+
+    fn xr_freehand(
+        &mut self,
+        pointer: &Pointer,
+        state: &mut State,
+        clicked: bool,
+        activate: bool,
+        ctx: &egui::Context,
+    ) {
+        if !activate {
+            return;
+        }
+        if clicked {
+            self.xr_begin_shape(pointer);
+            state.stroke = self.drawing.is_some();
+        }
+        if !state.stroke {
+            return;
+        }
+        if self.drawing.is_none() {
+            state.stroke = false;
+            return;
+        }
+        if let (Some(drawing), Some(snap)) = (&mut self.drawing, self.snap) {
+            let last = *drawing.points.last().unwrap();
+            // Angular spacing remains consistent when navigating/scaling the
+            // model. Only the active stroke receives incremental samples.
+            let spacing = (last.distance(pointer.ray.origin) * 0.003).max(1e-6);
+            if last.distance(snap.point) >= spacing {
+                drawing.points.push(snap.point);
+            }
+        }
+        let full = self
+            .drawing
+            .as_ref()
+            .is_some_and(|drawing| drawing.points.len() >= 2048);
+        if !pointer.primary_down || full {
+            state.stroke = false;
+            // A valid tracked release can finish at the last sample when its
+            // ray is parallel to the plane. Missing tracking/focus takes the
+            // cancellation path above instead of committing.
+            if self.snap.is_none() {
+                self.snap = self
+                    .drawing
+                    .as_ref()
+                    .and_then(|drawing| drawing.points.last())
+                    .map(|&point| Snap {
+                        point,
+                        kind: Inference::Plane,
+                    });
+            }
+            self.commit_drawing_at_snap(ctx, false);
+            if full {
+                self.say(
+                    ctx,
+                    "Stroke limit reached. Release the trigger to start another stroke.",
+                );
+            }
         }
         ctx.request_repaint();
     }

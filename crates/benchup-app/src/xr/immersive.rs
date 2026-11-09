@@ -336,6 +336,7 @@ impl Scene {
             }),
             activate: input.select,
             cancel: input.clear,
+            primary_down: input.primary_down,
         })
     }
 

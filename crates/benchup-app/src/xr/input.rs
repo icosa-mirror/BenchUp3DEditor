@@ -20,6 +20,7 @@ pub(super) struct SceneInput {
     pub select: bool,
     pub clear: bool,
     pub pressed: bool,
+    pub primary_down: bool,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -493,6 +494,7 @@ impl Controllers {
                     select,
                     clear,
                     pressed: self.scene_captured,
+                    primary_down: hands[index].buttons[0],
                 });
             } else {
                 self.scene_owner = None;
