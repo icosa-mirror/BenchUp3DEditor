@@ -43,6 +43,9 @@ mod frame_rate;
 
 mod system_info;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod xr;
+
 #[cfg(test)]
 mod test_ui;
 
