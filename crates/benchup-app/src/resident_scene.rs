@@ -523,15 +523,24 @@ impl SceneCache {
         rect: Rect,
         references: Mesh,
     ) {
+        self.paint_resident_view(key, model, faces, entities, ui, rect, references, None);
+    }
+
+    pub(crate) fn paint_resident_view(
+        &mut self, key: &SceneKey, model: &Model, faces: &FaceCache,
+        entities: &EntityCache, ui: &egui::Ui, rect: Rect, references: Mesh,
+        render_view: Option<&RenderView>,
+    ) {
         self.prepare_resident(key, model, faces, entities, ui);
         let geometry = Arc::clone(self.resident.geometry.as_ref().unwrap());
         let (near, far) = clip_planes(&key.camera, self.resident.bounds.unwrap_or(geometry.bounds));
-        let matrix = key.camera.matrix_with_clip_planes(key.size, near, far)
+        let matrix = render_view.map_or_else(|| key.camera.matrix_with_clip_planes(key.size, near, far), |view| view.view_projection)
             * glam::DMat4::from_translation(geometry.origin);
-        let eye = key.camera.eye();
-        let toward_eye = (eye - key.camera.target).normalize();
+        let eye = render_view.map_or_else(|| key.camera.eye(), |view| view.eye);
+        let toward_eye = render_view.map_or_else(|| (eye - key.camera.target).normalize(), |view| view.toward_eye);
+        let light_direction = (key.camera.eye() - key.camera.target).normalize();
         let light =
-            (toward_eye * 0.8 - key.camera.right() * 0.45 + key.camera.up() * 0.65).normalize();
+            (light_direction * 0.8 - key.camera.right() * 0.45 + key.camera.up() * 0.65).normalize();
         let appearance = self.resident.hierarchy.as_ref().unwrap().update(
             &mut self.resident.appearance,
             key,
@@ -606,7 +615,7 @@ impl SceneCache {
                 marker_fill: rgba(palette.paper),
                 flags: [
                     0.,
-                    if key.camera.projection == benchup_core::Projection::Parallel {
+                    if render_view.is_none() && key.camera.projection == benchup_core::Projection::Parallel {
                         1.
                     } else {
                         0.

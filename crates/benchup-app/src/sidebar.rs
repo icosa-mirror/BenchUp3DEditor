@@ -174,7 +174,7 @@ mod guide_preference_tests {
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
-        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5 };
+        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, ..Default::default() };
         app.persist_inspector_changes(&ctx, Some(&mut storage), false);
         assert!(storage.flushed);
         assert!(!app.project.modified);
@@ -182,7 +182,7 @@ mod guide_preference_tests {
         let mut restored = BenchUpApp::with_document(Document::default(), None, true);
         restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
         assert_eq!(restored.xr_panel, app.xr_panel);
-        let invalid = crate::app_host::XrPanelPreferences { distance_metres: f32::NAN, width_metres: -2.0, ui_scale: 99.0 }.sanitized();
+        let invalid = crate::app_host::XrPanelPreferences { distance_metres: f32::NAN, width_metres: -2.0, ui_scale: 99.0, ..Default::default() }.sanitized();
         assert_eq!(invalid.distance_metres, 1.0);
         assert_eq!(invalid.width_metres, 0.6);
         assert_eq!(invalid.ui_scale, 1.6);

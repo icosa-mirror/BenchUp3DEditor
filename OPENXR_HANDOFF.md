@@ -72,6 +72,25 @@ mirroring, native window services and persistent XR controls remain.
 
 ## Validation already completed on macOS
 
+## Immersive 3D continuation
+
+The user asked to prioritize 3D rendering and defer validation. A native
+stereoscopic projection layer is now implemented alongside the editor quad.
+Both eyes use runtime poses/FOVs and share retained GPU world geometry from the
+editor's evaluated render-model snapshot. A separate navigation transform handles
+Z-up/Y-up conversion, fitting and scale; it does not modify model coordinates or
+the document camera. The initial opaque materials/edges view appears to the right
+of the panel. Annotation/special display previews remain on the editor panel.
+
+The XR bar has persistent 3D-view/scale options and a Fit 3D action. Native build
+and ten-second runtime startup succeeded: 404 faces were fitted, stereo frames
+were submitted and the session stopped cleanly after 650 frames. The user's
+five-minute preview is running. No additional test suites or validation-layer
+runs were performed, as requested. Logs are `.local/openxr/immersive-build.log`,
+`immersive-startup.log` and `immersive-live.log`.
+
+## Historical macOS validation
+
 `cargo test -p benchup-app --features openxr --lib xr::tests` passed all four tests,
 compiling the optional runtime module as well. Cargo metadata confirms the native
 dependency is optional and the diagnostic example is feature-gated. Earlier missing

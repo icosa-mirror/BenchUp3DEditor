@@ -20,6 +20,9 @@ mod input;
 #[cfg(feature = "openxr")]
 mod cursor;
 
+#[cfg(feature = "openxr")]
+pub(crate) mod immersive;
+
 /// A flat editor surface. Logical size is in egui points, not texture pixels.
 #[derive(Clone, Copy, Debug)]
 pub struct EditorPanel {

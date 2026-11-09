@@ -22,6 +22,66 @@ struct Graphics {
     binding: xr::vulkan::SessionCreateInfo,
 }
 
+struct Stereo {
+    chains: [xr::Swapchain<xr::Vulkan>; 2],
+    images: [Vec<xr::sys::platform::VkImage>; 2],
+    size: wgpu::Extent3d,
+}
+
+impl Stereo {
+    fn new(
+        instance: &xr::Instance,
+        session: &xr::Session<xr::Vulkan>,
+        system: xr::SystemId,
+        format: vk::Format,
+    ) -> Result<Self> {
+        let views = instance.enumerate_view_configuration_views(
+            system,
+            xr::ViewConfigurationType::PRIMARY_STEREO,
+        )?;
+        if views.len() != 2 {
+            return Err("Stereo rendering requires exactly two OpenXR views".into());
+        }
+        let size = wgpu::Extent3d {
+            width: views
+                .iter()
+                .map(|view| view.recommended_image_rect_width)
+                .max()
+                .unwrap(),
+            height: views
+                .iter()
+                .map(|view| view.recommended_image_rect_height)
+                .max()
+                .unwrap(),
+            depth_or_array_layers: 1,
+        };
+        let create = || {
+            session.create_swapchain(&xr::SwapchainCreateInfo {
+                create_flags: xr::SwapchainCreateFlags::EMPTY,
+                usage_flags: xr::SwapchainUsageFlags::COLOR_ATTACHMENT,
+                format: format.as_raw() as _,
+                sample_count: 1,
+                width: size.width,
+                height: size.height,
+                face_count: 1,
+                array_size: 1,
+                mip_count: 1,
+            })
+        };
+        let chains = [create()?, create()?];
+        let images = [chains[0].enumerate_images()?, chains[1].enumerate_images()?];
+        println!(
+            "[BenchUpXR] Stereo eye targets: {} x {} per eye",
+            size.width, size.height
+        );
+        Ok(Self {
+            chains,
+            images,
+            size,
+        })
+    }
+}
+
 // xrEndFrame can enqueue compositor work on the bound queue after wgpu's
 // submission fence. Drain that work before destroying XR images/session objects.
 // Declare this guard after the XR resources so it also covers early returns.
@@ -213,6 +273,7 @@ impl Graphics {
         size: wgpu::Extent3d,
         pipeline: &wgpu::RenderPipeline,
         editor: Option<&mut super::editor::Editor>,
+        eye: Option<xr::View>,
     ) -> Result<()> {
         let descriptor = wgpu::TextureDescriptor {
             label: Some("BenchUpXR borrowed image"),
@@ -259,7 +320,17 @@ impl Graphics {
         };
         let view = texture.create_view(&Default::default());
         let submission = if let Some(editor) = editor {
-            editor.paint(&self.device, &self.queue, &view)?
+            if let Some(eye) = eye {
+                editor.paint_eye(
+                    &self.device,
+                    &self.queue,
+                    &view,
+                    [size.width, size.height],
+                    eye,
+                )
+            } else {
+                editor.paint(&self.device, &self.queue, &view)?
+            }
         } else {
             let mut encoder = self.device.create_command_encoder(&Default::default());
             {
@@ -561,6 +632,11 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     } else {
         None
     };
+    let mut stereo = if show_editor {
+        Some(Stereo::new(&instance, &session, system, vk_format)?)
+    } else {
+        None
+    };
     let blend = instance
         .enumerate_environment_blend_modes(system, xr::ViewConfigurationType::PRIMARY_STEREO)?
         .into_iter()
@@ -582,6 +658,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     let mut anchored = false;
     let mut stopping = false;
     let mut submitted = 0u64;
+    let mut stereo_submitted = 0u64;
     loop {
         while let Some(event) = instance.poll_event(&mut events)? {
             match event {
@@ -707,8 +784,67 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
         swapchain.wait_image(xr::Duration::INFINITE)?;
         // On graphics failure, never hand a possibly in-flight image back to the
         // compositor: unwind session resources before destroying the GPU owner.
-        graphics.paint(images[index], format, size, &pipeline, editor.as_mut())?;
+        graphics.paint(
+            images[index],
+            format,
+            size,
+            &pipeline,
+            editor.as_mut(),
+            None,
+        )?;
         swapchain.release_image()?;
+        let mut projection_views = Vec::new();
+        if let (Some(stereo), Some(editor)) = (&mut stereo, &mut editor) {
+            if editor.panel_preferences().immersive_scene {
+                let (state, views) = session.locate_views(
+                    xr::ViewConfigurationType::PRIMARY_STEREO,
+                    frame.predicted_display_time,
+                    &space,
+                )?;
+                if views.len() == 2
+                    && state.contains(
+                        xr::ViewStateFlags::POSITION_VALID | xr::ViewStateFlags::ORIENTATION_VALID,
+                    )
+                {
+                    let head = view_space.locate(&space, frame.predicted_display_time)?;
+                    let scene_anchor = upright_anchor(head.pose).unwrap_or(anchor);
+                    editor.begin_immersive_frame(scene_anchor);
+                    for (eye_index, eye) in views.iter().enumerate() {
+                        let chain = &mut stereo.chains[eye_index];
+                        let image = chain.acquire_image()? as usize;
+                        chain.wait_image(xr::Duration::INFINITE)?;
+                        graphics.paint(
+                            stereo.images[eye_index][image],
+                            format,
+                            stereo.size,
+                            &pipeline,
+                            Some(&mut *editor),
+                            Some(*eye),
+                        )?;
+                        chain.release_image()?;
+                    }
+                    for (eye_index, eye) in views.iter().enumerate() {
+                        projection_views.push(
+                            xr::CompositionLayerProjectionView::new()
+                                .pose(eye.pose)
+                                .fov(eye.fov)
+                                .sub_image(
+                                    xr::SwapchainSubImage::new()
+                                        .swapchain(&stereo.chains[eye_index])
+                                        .image_array_index(0)
+                                        .image_rect(xr::Rect2Di {
+                                            offset: xr::Offset2Di { x: 0, y: 0 },
+                                            extent: xr::Extent2Di {
+                                                width: stereo.size.width as _,
+                                                height: stereo.size.height as _,
+                                            },
+                                        }),
+                                ),
+                        );
+                    }
+                }
+            }
+        }
         let quad = xr::CompositionLayerQuad::new()
             .space(&space)
             .eye_visibility(xr::EyeVisibility::BOTH)
@@ -726,7 +862,20 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
             )
             .pose(panel_pose)
             .size(panel_size);
-        stream.end(frame.predicted_display_time, blend, &[&quad])?;
+        if projection_views.is_empty() {
+            stream.end(frame.predicted_display_time, blend, &[&quad])?;
+        } else {
+            let projection = xr::CompositionLayerProjection::new()
+                .space(&space)
+                .views(&projection_views);
+            stream.end(frame.predicted_display_time, blend, &[&projection, &quad])?;
+            stereo_submitted += 1;
+            if stereo_submitted == 1 {
+                println!(
+                    "[BenchUpXR] First head-tracked stereoscopic 3D frame submitted. Look right of the editor panel; Fit 3D reframes the model."
+                );
+            }
+        }
         submitted += 1;
         if submitted == 1 {
             if show_editor {

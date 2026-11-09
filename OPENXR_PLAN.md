@@ -267,3 +267,22 @@ tests plus one preference regression passed; desktop/WASM compilation and a
 hardware snapshot of the larger controls also passed. A 582-frame restart stopped
 cleanly and retained the chosen settings on disk; human visual confirmation of
 that restart is pending. These controls do not complete the remaining phase 1 gates.
+
+## Priority change: immersive 3D functionality
+
+The user requested deferring further validation work and reaching head-tracked
+3D scene rendering promptly. The next implementation adds an OpenXR projection
+layer alongside the existing editor quad. Each eye uses its runtime pose and
+asymmetric FOV; a shared retained GPU scene supplies geometry for both eyes.
+The scene uses the editor's evaluated model snapshot, not a second document.
+
+Initial functionality is opaque materials/edges and selection appearance. Scene
+annotations and special display previews remain on the editor panel. The model
+is fitted as a world-locked inspection view to the right of the panel so the
+opaque UI does not cover it. Model Z-up to XR Y-up, fitting and scale are view
+transforms; the source model and desktop camera are unchanged. Persistent
+3D-view and scale controls plus a Fit 3D action are included. The executable built
+and a ten-second runtime run submitted stereo scene frames, reached VISIBLE/
+FOCUSED and stopped cleanly after 650 frames. A five-minute user preview is now
+running. Further test suites, graphics validation and broad backend checks are
+deferred at the user's request while functionality is prioritized.

@@ -494,6 +494,15 @@ impl BenchUpApp {
     pub(crate) fn xr_panel_preferences(&self) -> crate::app_host::XrPanelPreferences { self.xr_panel }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn xr_scene_source(&mut self) -> crate::xr::immersive::Source {
+        if self.render_model.revision() == 0 { self.render_model.update(&self.doc.model); }
+        crate::xr::immersive::Source {
+            model: self.render_model.shared(), revision: self.render_model.revision(),
+            camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected: self.selected.clone(),
+        }
+    }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn update_xr_panel_preferences(&mut self, ctx: &egui::Context, storage: &mut dyn eframe::Storage, preferences: crate::app_host::XrPanelPreferences) {
         self.xr_panel = preferences.sanitized();
         self.persist_inspector_changes(ctx, Some(storage), false);

@@ -98,6 +98,8 @@ pub(super) struct Editor {
     input: super::input::FrameInput,
     cursor: super::cursor::Cursor,
     recenter_requested: bool,
+    scene: super::immersive::Scene,
+    fit_scene_requested: bool,
 }
 
 impl Editor {
@@ -149,6 +151,8 @@ impl Editor {
             input: Default::default(),
             cursor: super::cursor::Cursor::new(device, format),
             recenter_requested: false,
+            scene: super::immersive::Scene::new(),
+            fit_scene_requested: true,
         })
     }
 
@@ -217,6 +221,7 @@ impl Editor {
         };
         let mut preferences = self.app.xr_panel_preferences();
         let mut recenter = false;
+        let mut fit_scene = false;
         let output = self.ctx.run_ui(raw, |ui| {
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
@@ -266,6 +271,29 @@ impl Editor {
                                     recenter = true;
                                 }
                             });
+                            ui.horizontal(|ui| {
+                                ui.checkbox(
+                                    &mut preferences.immersive_scene,
+                                    egui::RichText::new("3D view (look right)").size(18.0),
+                                );
+                                let mut button = |label: &str| {
+                                    ui.add_sized(
+                                        [84.0, 42.0],
+                                        egui::Button::new(egui::RichText::new(label).size(18.0)),
+                                    )
+                                    .clicked()
+                                };
+                                if button("Fit 3D") {
+                                    fit_scene = true;
+                                    preferences.scene_scale = 1.0;
+                                }
+                                if button("3D -") {
+                                    preferences.scene_scale *= 0.8;
+                                }
+                                if button("3D +") {
+                                    preferences.scene_scale *= 1.25;
+                                }
+                            });
                         });
                 });
         });
@@ -276,6 +304,7 @@ impl Editor {
             self.ctx.set_zoom_factor(preferences.ui_scale);
         }
         self.recenter_requested |= recenter;
+        self.fit_scene_requested |= fit_scene;
         // Immediate preference persistence uses the same shared capture/restore
         // path as desktop, even without document edits or framework autosave.
         self.preferences.flush();
@@ -322,6 +351,34 @@ impl Editor {
 
     pub(super) fn take_recenter_request(&mut self) -> bool {
         std::mem::take(&mut self.recenter_requested)
+    }
+
+    pub(super) fn begin_immersive_frame(&mut self, anchor: openxr::Posef) {
+        let source = self.app.xr_scene_source();
+        self.scene.begin_frame(
+            source,
+            anchor,
+            std::mem::take(&mut self.fit_scene_requested),
+        );
+    }
+
+    pub(super) fn paint_eye(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target: &wgpu::TextureView,
+        size: [u32; 2],
+        eye: openxr::View,
+    ) -> wgpu::SubmissionIndex {
+        self.scene.paint_eye(
+            device,
+            queue,
+            &mut self.renderer,
+            target,
+            size,
+            eye,
+            self.app.xr_panel_preferences(),
+        )
     }
 
     pub(super) fn cancel_input(

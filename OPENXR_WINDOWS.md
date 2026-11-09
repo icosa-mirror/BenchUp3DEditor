@@ -276,3 +276,27 @@ human visual confirmation of that restart has not been received. The log is
 `.local/openxr/readability-restoration.log`. Other evidence uses
 `.local/openxr/readability-*.log` and
 `.local/openxr/editor-readability.png`. Known Vulkan/Naga diagnostics remain.
+
+## Immersive 3D functionality preview
+
+The user requested prioritizing functionality and deferring validation. The
+editor now submits a stereoscopic OpenXR projection layer as well as its UI quad.
+Each eye uses its predicted display-time pose and asymmetric runtime FOV. Shared
+retained GPU geometry renders both eyes; the scene comes from the same evaluated
+model snapshot used by the editor. No CPU image transfer or per-eye model copy is
+introduced.
+
+The model initially appears to the right of the editor as a fitted, world-locked
+inspection view. The XR bar supplies a persistent 3D-view toggle, 3D -/+ scale
+controls and Fit 3D. These alter the navigation transform, not document geometry
+or the desktop camera. Model coordinates are metres with Z up; XR coordinates use
+Y up. The first path renders opaque materials/edges and selection appearance;
+annotations, special display previews and editing tools remain on the panel.
+
+The native executable built. A ten-second run selected the RTX 4090, created
+2112 × 2304 targets per eye, fitted the 404-face model, submitted head-tracked
+stereo frames, reached VISIBLE/FOCUSED and stopped cleanly after 650 frames. The
+user's five-minute preview is running. Validation layers, test suites and broad
+backend checks are deferred as requested; existing validation issues are not
+claimed resolved. Evidence is `.local/openxr/immersive-build.log`,
+`immersive-startup.log` and `immersive-live.log`.

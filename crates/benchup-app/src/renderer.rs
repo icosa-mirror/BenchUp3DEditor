@@ -8,6 +8,14 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod resident;
 pub(crate) use resident::{edited_geometry as geometry_changes, supported as resident_supported};
 
+/// Explicit perspective view for GPU scene rendering outside a desktop camera.
+/// Coordinates remain in authoritative model units; navigation is external.
+pub(crate) struct RenderView {
+    pub view_projection: glam::DMat4,
+    pub eye: DVec3,
+    pub toward_eye: DVec3,
+}
+
 /// Shared reference geometry fade, measured along the camera's forward axis.
 pub(crate) struct ReferenceFade {
     eye: DVec3,
