@@ -17,6 +17,8 @@ pub(crate) struct Source {
     pub references: Arc<crate::app::viewport_overlays::Overlays>,
     pub tool: benchup_core::Tool,
     pub tool_target: Option<DVec3>,
+    pub modeling: bool,
+    pub snap_edges: bool,
     pub hover: Option<u64>,
     pub outliner_hover: BTreeSet<u64>,
     pub erasing: BTreeSet<u64>,
@@ -48,6 +50,7 @@ pub(super) struct Scene {
     placement: Option<Placement>,
     depth: Option<([u32; 2], wgpu::TextureView)>,
     picking: crate::picking::PickingCache,
+    edge_picking: super::world_picking::Index,
     input: Option<super::input::SceneInput>,
     navigation: super::navigation::Navigation,
     lines: super::world_lines::Lines,
@@ -80,6 +83,7 @@ impl Scene {
             placement: None,
             depth: None,
             picking: Default::default(),
+            edge_picking: Default::default(),
             input: None,
             navigation: Default::default(),
             lines: super::world_lines::Lines::new(device, format),
@@ -292,7 +296,7 @@ impl Scene {
         }
     }
 
-    pub fn pick_ray(&self, ray: benchup_core::Ray, scale: f32) -> Option<super::input::SceneHit> {
+    pub fn pick_ray(&mut self, ray: benchup_core::Ray, scale: f32) -> Option<super::input::SceneHit> {
         let (Some(source), Some(placement)) = (&self.source, &self.placement) else {
             return None;
         };
@@ -302,10 +306,38 @@ impl Scene {
             origin: inverse.transform_point3(ray.origin),
             direction: inverse.transform_vector3(ray.direction).normalize(),
         };
-        let (face, _, point) =
-            self.picking
-                .nearest(&self.faces, &self.entities, model_ray, false)?;
-        let entity = self.entities.get(face).context?;
+        let face_hit = self.picking.nearest(&self.faces, &self.entities, model_ray, false);
+        let face_tool = matches!(source.tool,benchup_core::Tool::Paint | benchup_core::Tool::PushPull | benchup_core::Tool::Offset);
+        let selection_tool = (matches!(source.tool,benchup_core::Tool::Select | benchup_core::Tool::Move | benchup_core::Tool::Rotate | benchup_core::Tool::Scale | benchup_core::Tool::Erase) || source.tool.is_solid()) && source.paste.is_none();
+        let attachment_tool = matches!(source.tool,benchup_core::Tool::Text | benchup_core::Tool::GrainDirection);
+        let want_edges = !face_tool && (selection_tool || attachment_tool || source.snap_edges);
+        if !source.modeling && want_edges { self.edge_picking.prepare(&source.model); }
+        let edge_hit = (!source.modeling && want_edges).then(|| self.edge_picking.query(model_ray,0.01,
+            |id,a,b| {
+                let state = self.entities.get(id);
+                if state.hidden || state.context.is_none() { return None; }
+                source.display.section_segment(a,b)
+            },
+            |_,point| {
+                self.point_visible(model_ray.origin,point)
+            }
+        )).flatten();
+        let (face, edge, point, target) = if let Some(hit) = edge_hit {
+            let edge = &source.model.edges[&hit.id];
+            let adjacent = self.faces.adjacent_faces(edge.a,edge.b);
+            let owner = self.entities.get(hit.id).context;
+            let face = face_hit.filter(|(id,_,_)|adjacent.contains(id) && self.entities.get(*id).context == owner).map(|(id,_,_)|id)
+                .or_else(||adjacent.iter().copied().filter(|&id| {
+                    let state = self.entities.get(id);
+                    !state.hidden && state.context == owner
+                }).max_by(|&a,&b|self.faces.get(a).normal.dot(model_ray.direction).abs()
+                    .total_cmp(&self.faces.get(b).normal.dot(model_ray.direction).abs())));
+            (face,Some(hit.id),hit.point,hit.id)
+        } else {
+            let (face,_,point) = face_hit?;
+            (Some(face),None,point,face)
+        };
+        let entity = self.entities.get(target).context?;
         if !source.model.contains_entity(&entity) {
             return None;
         }
@@ -313,25 +345,42 @@ impl Scene {
         Some(super::input::SceneHit {
             entity,
             face,
+            edge,
             point,
             distance: tracking_point.distance(ray.origin),
         })
     }
 
+    fn point_visible(&self, origin: DVec3, point: DVec3) -> bool {
+        let Some(source) = &self.source else {return false;};
+        if !source.display.section_contains(point) {return false;}
+        let distance = point.distance(origin);
+        if distance < 1e-12 {return false;}
+        let ray = benchup_core::Ray {origin,direction:(point-origin)/distance};
+        self.picking.nearest(&self.faces,&self.entities,ray,false)
+            .is_none_or(|(_,t,_)|t+1e-5 >= distance)
+    }
+
     pub fn tool_pointer(&self, input: super::input::SceneInput, scale: f32) -> Option<crate::app::xr_tools::Pointer> {
         let (source, placement) = (self.source.as_ref()?, self.placement.as_ref()?);
         let inverse = (self.navigation.matrix() * placement.model_to_tracking(scale as f64)).inverse();
+        let ray = benchup_core::Ray {
+            origin: inverse.transform_point3(input.ray.origin),
+            direction: inverse.transform_vector3(input.ray.direction).normalize(),
+        };
+        let snapping = !source.modeling && (source.tool.is_drawing() || source.tool.is_measuring() || source.tool == benchup_core::Tool::GrainDirection || source.paste.is_some());
         Some(crate::app::xr_tools::Pointer {
-            ray: benchup_core::Ray {
-                origin: inverse.transform_point3(input.ray.origin),
-                direction: inverse.transform_vector3(input.ray.direction).normalize(),
-            },
+            ray,
             model: source.model.clone(),
             hit: input.hit.map(|hit| {
-                let face = self.faces.get(hit.face);
                 crate::app::xr_tools::Hit {
-                    entity: hit.entity, face: hit.face, point: hit.point,
-                    normal: face.normal, center: self.faces.snap_center(&source.model, hit.face),
+                    entity:hit.entity,face:hit.face,edge:hit.edge,point:hit.point,
+                    normal:hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal),
+                    center:snapping.then(||hit.face.and_then(|face|self.faces.snap_center(&source.model,face)).filter(|&point|self.point_visible(ray.origin,point))).flatten(),
+                    edge_targets:snapping.then_some(hit.edge).flatten().map_or([None;3],|id| {
+                        let (a,b) = source.model.points(&source.model.edges[&id]);
+                        [a,b,(a+b)*0.5].map(|point|self.point_visible(ray.origin,point).then_some(point))
+                    }),
                 }
             }),
             activate: input.select,

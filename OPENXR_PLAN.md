@@ -9,7 +9,7 @@ Protractor and Dimensions through shared document commit/undo operations and
 shared GPU previews. A large XR tool bar exposes these tools, cancellation and
 undo/redo with persisted active-tool selection. Initial inference is local to the
 hit face plus drawing planes and axis constraints. Remaining direct interaction
-work includes standalone-edge/guide snapping, shared reference acquisition,
+work includes guide snapping, shared reference acquisition,
 section-handle manipulation.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
@@ -58,6 +58,12 @@ multi-part/component-reference validation and document/history assignment, with
 the existing retained GPU preview. Geometry anchors work with snapping disabled;
 selection changes invalidate unfinished assignments instead of editing stale
 targets. Headset input validation remains deferred.
+Standalone edges now use a retained world-space hierarchy for angular controller
+picking, clipping/occlusion and endpoint/midpoint/on-edge inference. Selection,
+erase and transforms can target loose lines. Face-edit tools keep face-only
+targeting. The hierarchy is prepared lazily by model identity and skips temporary
+modeling previews. Four focused exact-source math checks and the native build
+pass; controller validation and large-scene measurements remain deferred.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

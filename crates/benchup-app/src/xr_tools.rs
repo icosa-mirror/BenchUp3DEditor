@@ -6,10 +6,32 @@ use std::sync::Arc;
 #[derive(Clone, Copy)]
 pub(crate) struct Hit {
     pub entity: u64,
-    pub face: u64,
+    pub face: Option<u64>,
+    pub edge: Option<u64>,
+    pub edge_targets: [Option<DVec3>; 3],
     pub point: DVec3,
     pub normal: DVec3,
     pub center: Option<DVec3>,
+}
+
+impl Hit {
+    fn contains(&self, model: &Model, point: DVec3) -> bool {
+        if let Some(edge) = self.edge.and_then(|edge| model.edges.get(&edge)) {
+            let (a, b) = model.points(edge);
+            let direction = b - a;
+            let t = (point - a).dot(direction) / direction.length_squared();
+            point.distance(a + direction * t.clamp(0., 1.)) < 1e-7
+        } else {
+            (point - self.point).dot(self.normal).abs() < 1e-6
+        }
+    }
+    fn inference(&self) -> Inference {
+        if self.edge.is_some() {
+            Inference::OnEdge
+        } else {
+            Inference::OnFace
+        }
+    }
 }
 
 pub(crate) struct Pointer {
@@ -367,11 +389,11 @@ impl BenchUpApp {
             if self.paint_target == PaintTarget::Face {
                 self.hover = pointer
                     .hit
-                    .map(|hit| hit.face)
+                    .and_then(|hit| hit.face)
                     .filter(|id| self.doc.model.faces.contains_key(id));
             }
             if clicked {
-                self.paint_model_face(pointer.hit.map(|hit| hit.face), ctx);
+                self.paint_model_face(pointer.hit.and_then(|hit| hit.face), ctx);
             }
             return;
         }
@@ -457,12 +479,11 @@ impl BenchUpApp {
             self.snap = pointer.hit.map(|hit| {
                 self.snap
                     .filter(|snap| {
-                        snap.kind != Inference::Plane
-                            && (snap.point - hit.point).dot(hit.normal).abs() < 1e-6
+                        snap.kind != Inference::Plane && hit.contains(&pointer.model, snap.point)
                     })
                     .unwrap_or(Snap {
                         point: hit.point,
-                        kind: Inference::OnFace,
+                        kind: hit.inference(),
                     })
             });
             if self.tool == Tool::GrainDirection {
@@ -521,7 +542,7 @@ impl BenchUpApp {
         } else if self.tool == Tool::GrainDirection {
             let hit = if self.grain_anchor.is_none() {
                 let anchor = pointer.hit.zip(self.snap).and_then(|(hit, snap)| {
-                    self.grain_anchor_at_hit(hit.entity, snap.point, Some(hit.normal))
+                    self.grain_anchor_at_hit(hit.entity, snap.point, hit.face.map(|_| hit.normal))
                 });
                 if anchor.is_none() {
                     self.say(
@@ -615,7 +636,7 @@ impl BenchUpApp {
         if matches!(self.tool, Tool::PushPull | Tool::Offset) {
             self.hover = pointer
                 .hit
-                .map(|hit| hit.face)
+                .and_then(|hit| hit.face)
                 .filter(|id| self.doc.model.faces.contains_key(id));
         }
         if !activate {
@@ -626,7 +647,7 @@ impl BenchUpApp {
                 return;
             };
             let (face, direction) = if matches!(self.tool, Tool::PushPull | Tool::Offset) {
-                let Some(face) = self.doc.model.faces.get(&hit.face) else {
+                let Some(face) = hit.face.and_then(|face| self.doc.model.faces.get(&face)) else {
                     self.say(ctx, "Choose an original document face to edit.");
                     return;
                 };
@@ -652,10 +673,10 @@ impl BenchUpApp {
                             -1.
                         }
                 };
-                if self.selected_modeling_face() != Some(hit.face) {
-                    self.selected = BTreeSet::from([hit.face]);
+                if self.selected_modeling_face() != hit.face {
+                    self.selected = BTreeSet::from([face.id]);
                 }
-                (Some(hit.face), direction)
+                (hit.face, direction)
             } else {
                 if !self.doc.model.contains_entity(&hit.entity) {
                     self.say(ctx, "Choose an original document entity to transform.");
@@ -818,8 +839,10 @@ impl BenchUpApp {
 
     fn xr_begin_shape(&mut self, pointer: &Pointer) {
         let surface = pointer.hit.filter(|hit| {
-            self.snap
-                .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
+            hit.face.is_some()
+                && self
+                    .snap
+                    .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
         });
         self.begin_drawing_at_snap(surface.map(|hit| hit.normal));
     }
@@ -908,10 +931,10 @@ impl BenchUpApp {
                 return None;
             }
             let tolerance = depth * 0.01;
-            if pointer
-                .hit
-                .is_some_and(|hit| depth > (hit.point - ray.origin).dot(ray.direction) + tolerance)
-            {
+            if pointer.hit.is_some_and(|hit| {
+                hit.edge.is_none()
+                    && depth > (hit.point - ray.origin).dot(ray.direction) + tolerance
+            }) {
                 return None;
             }
             let distance = (delta - ray.direction * depth).length();
@@ -921,26 +944,29 @@ impl BenchUpApp {
         if let Some(start) = start {
             points.push((start, Inference::Endpoint));
         }
-        let face = pointer
-            .hit
-            .and_then(|hit| pointer.model.faces.get(&hit.face));
-        if self.doc.snap_to_geometry {
-            if let Some(face) = face {
-                if self.snap_to_edge {
-                    for ring in std::iter::once(&face.vertices).chain(face.holes.iter()) {
-                        for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
-                            let a = pointer.model.vertices[&a].position;
-                            let b = pointer.model.vertices[&b].position;
-                            points.push((a, Inference::Endpoint));
-                            points.push(((a + b) * 0.5, Inference::Midpoint));
-                        }
-                    }
-                }
-                if self.snap_to_face_center {
-                    if let Some(center) = pointer.hit.and_then(|hit| hit.center) {
-                        points.push((center, Inference::FaceCenter));
-                    }
-                }
+        if self.doc.snap_to_geometry
+            && let Some(hit) = pointer.hit
+        {
+            if self.snap_to_edge {
+                points.extend(hit.edge_targets.into_iter().enumerate().filter_map(
+                    |(index, point)| {
+                        point.map(|point| {
+                            (
+                                point,
+                                if index == 2 {
+                                    Inference::Midpoint
+                                } else {
+                                    Inference::Endpoint
+                                },
+                            )
+                        })
+                    },
+                ));
+            }
+            if self.snap_to_face_center
+                && let Some(center) = hit.center
+            {
+                points.push((center, Inference::FaceCenter));
             }
         }
         if let Some((point, kind)) = points
@@ -951,31 +977,16 @@ impl BenchUpApp {
         {
             return Some(Snap { point, kind });
         }
-        if self.doc.snap_to_geometry && self.snap_to_edge {
-            let mut nearest: Option<(DVec3, f64)> = None;
-            if let Some(face) = face {
-                for ring in std::iter::once(&face.vertices).chain(face.holes.iter()) {
-                    for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
-                        let a = pointer.model.vertices[&a].position;
-                        let b = pointer.model.vertices[&b].position;
-                        if a.distance_squared(b) < 1e-16 {
-                            continue;
-                        }
-                        let point = ray.segment_point(a, b);
-                        if let Some(distance) = near(point) {
-                            if nearest.is_none_or(|(_, old)| distance < old) {
-                                nearest = Some((point, distance));
-                            }
-                        }
-                    }
-                }
-            }
-            if let Some((point, _)) = nearest {
-                return Some(Snap {
-                    point,
-                    kind: Inference::OnEdge,
-                });
-            }
+        if self.doc.snap_to_geometry
+            && self.snap_to_edge
+            && let Some(hit) = pointer
+                .hit
+                .filter(|hit| hit.edge.is_some() && allowed(hit.point))
+        {
+            return Some(Snap {
+                point: hit.point,
+                kind: Inference::OnEdge,
+            });
         }
         if let Some(start) = start {
             if let Some(constraint) = constraint {
@@ -1011,7 +1022,7 @@ impl BenchUpApp {
         }
         if self.snap_to_face
             && self.doc.snap_to_geometry
-            && let Some(hit) = pointer.hit
+            && let Some(hit) = pointer.hit.filter(|hit| hit.face.is_some())
         {
             return Some(Snap {
                 point: hit.point,

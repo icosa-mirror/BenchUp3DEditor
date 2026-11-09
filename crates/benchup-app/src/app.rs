@@ -522,6 +522,8 @@ impl BenchUpApp {
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
             tool_target: self.snap.or_else(|| self.modeling_preview_snap()).map(|snap| snap.point),
+            modeling: self.modeling.is_some(),
+            snap_edges: self.snap_to_edge,
             tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),

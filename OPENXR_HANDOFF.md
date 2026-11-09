@@ -180,7 +180,22 @@ the second supports face-plane/axis/grid inference. A changed selection cancels
 the pending assignment before it can edit stale targets. The tool is included
 in the same persisted picker. Headset interaction remains untested.
 
-Remaining: world snapping to standalone edges, construction guides and off-face
+Standalone edges now participate in controller picking through a retained,
+model-space spatial hierarchy. Angular hit tolerance stays consistent under
+scene scaling. Queries apply editing scope, hidden state, section clipping and
+exact-point face occlusion, then fall back to face hits. Select/Erase/transforms
+can target loose lines; drawing and measurements get visible endpoint/midpoint
+and on-edge targets. Paint/PushPull/Offset retain face-only targeting.
+
+The index is prepared lazily on a world query and reused by model Arc identity;
+head motion, navigation and UI-only work do not rebuild it. Temporary modeling
+previews skip edge preparation/query and use the existing grabbed anchor. Snap
+targets are local to the picked edge/face, with no full-model CPU projection.
+Four isolated checks against the exact index source pass (cone bounds,
+sloping/crossing angular minima, clipping/occlusion filtering, and hierarchy
+traversal). The native build passes; live edge picking still awaits the headset.
+
+Remaining: world snapping to construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
 section handles. Those tools
 remain available through the panel and no longer silently switch to Select.

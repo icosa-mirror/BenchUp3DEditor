@@ -413,7 +413,7 @@ impl Editor {
         self.app.xr_panel_preferences().immersive_scene && self.ctx.memory(|memory|memory.top_modal_layer().is_none())
     }
 
-    pub(super) fn pick_scene_ray(&self, ray: benchup_core::Ray) -> Option<super::input::SceneHit> {
+    pub(super) fn pick_scene_ray(&mut self, ray: benchup_core::Ray) -> Option<super::input::SceneHit> {
         self.scene
             .pick_ray(ray, self.app.xr_panel_preferences().scene_scale)
     }

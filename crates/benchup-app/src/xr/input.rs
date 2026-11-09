@@ -8,7 +8,8 @@ use openxr as xr;
 #[derive(Clone, Copy)]
 pub(super) struct SceneHit {
     pub entity: u64,
-    pub face: u64,
+    pub face: Option<u64>,
+    pub edge: Option<u64>,
     pub point: DVec3,
     pub distance: f64,
 }
