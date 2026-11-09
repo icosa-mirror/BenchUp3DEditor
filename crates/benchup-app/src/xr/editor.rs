@@ -101,6 +101,8 @@ pub(super) struct Editor {
     scene: super::immersive::Scene,
     fit_scene_requested: bool,
     world_tools: crate::app::xr_tools::State,
+    native_output: Option<super::desktop::NativeOutput>,
+    keyboard_modifiers: egui::Modifiers,
 }
 
 impl Editor {
@@ -155,6 +157,8 @@ impl Editor {
             scene: super::immersive::Scene::new(device, format),
             fit_scene_requested: true,
             world_tools: Default::default(),
+            native_output: None,
+            keyboard_modifiers: Default::default(),
         })
     }
 
@@ -211,6 +215,8 @@ impl Editor {
     }
 
     fn update_ui(&mut self) -> Result<egui::FullOutput> {
+        let mut events = std::mem::take(&mut self.input.events);
+        events.insert(0, egui::Event::ModifiersChanged(self.keyboard_modifiers));
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
@@ -218,7 +224,7 @@ impl Editor {
             )),
             time: Some(self.start.elapsed().as_secs_f64()),
             focused: self.input.focused,
-            events: std::mem::take(&mut self.input.events),
+            events,
             ..Default::default()
         };
         let mut preferences = self.app.xr_panel_preferences();
@@ -227,7 +233,7 @@ impl Editor {
         let pointer = self.input.scene.and_then(|input| self.scene.tool_pointer(input, preferences.scene_scale));
         // egui may repeat layout; consume a model operation only once.
         let mut activate = true;
-        let output = self.ctx.run_ui(raw, |ui| {
+        let mut output = self.ctx.run_ui(raw, |ui| {
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
             self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx);
@@ -324,6 +330,9 @@ impl Editor {
         if let Some(error) = self.preferences.error.take() {
             return Err(error.into());
         }
+        if let Some(native) = &self.native_output {
+            native.platform_output(std::mem::take(&mut output.platform_output));
+        }
         Ok(output)
     }
 
@@ -347,6 +356,13 @@ impl Editor {
     }
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
+        if self.input.focused && !input.focused {
+            self.input.events.push(egui::Event::WindowFocused(false));
+        }
+        if !input.focused { self.keyboard_modifiers = Default::default(); }
+        for event in &mut input.events {
+            if let egui::Event::PointerButton {modifiers,..} = event { *modifiers = self.keyboard_modifiers; }
+        }
         self.scene.navigate(input.navigation,self.app.xr_panel_preferences());
         self.scene.set_input(input.scene);
         // Retain releases/cancellation accumulated while XR skipped rendering.
@@ -356,6 +372,22 @@ impl Editor {
         self.input.focused = input.focused;
         self.input.scene = input.scene;
         self.input.navigation=input.navigation;
+    }
+
+    pub(super) fn attach_native(&mut self, output: super::desktop::NativeOutput) {
+        output.ready(self.ctx.clone());
+        self.native_output = Some(output);
+    }
+
+    pub(super) fn native_keyboard(&mut self, mut input: super::desktop::KeyboardInput, active: bool) {
+        if active {
+            for event in &input.events {
+                if let egui::Event::ModifiersChanged(modifiers) = event { self.keyboard_modifiers = *modifiers; }
+            }
+            self.input.events.append(&mut input.events);
+        } else {
+            self.keyboard_modifiers = Default::default();
+        }
     }
 
     pub(super) fn logical_size(&self) -> egui::Vec2 {
@@ -428,6 +460,9 @@ impl Editor {
         queue: &wgpu::Queue,
     ) -> Result<()> {
         self.set_input(input);
+        // Cancellation must reach world tools even when rendering is skipped
+        // and no panel pointer events need a UI pass.
+        self.app.xr_world_pointer(None, &mut self.world_tools, false, &self.ctx);
         if !self.input.events.is_empty() {
             let mut output = self.update_ui()?;
             self.update_textures(device, queue, &mut output);

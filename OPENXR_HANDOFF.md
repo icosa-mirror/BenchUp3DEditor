@@ -41,6 +41,20 @@ XR worker confirmed a visible native window, Close delivery, worker notification
 and clean exit code 0. The native OpenXR editor build also passes. Live OpenXR
 teardown remains to be checked in the next interactive launch.
 
+The desktop window also forwards keyboard/text/IME and modifier events through
+egui-winit to the XR editor's shared context. Focus this desktop window to type
+into a field selected on the headset panel or use physical-keyboard shortcuts.
+Platform output is returned to the native thread for clipboard/IME handling;
+the Windows arboard backend is enabled. No desktop mouse coordinates are routed
+into the headset panel. Native-window focus loss releases held keys/modifiers
+without changing controller focus; inactive XR frames discard queued keyboard
+input. The original lifetime check predates this bridge, and physical typing,
+clipboard and IME behavior still require an interactive check.
+
+Cancellation now reaches unfinished world tools even on skipped render frames
+with no panel events. This prevents a pending stroke or grab from being committed
+as an apparent release when XR tracking/focus returns.
+
 ### Direct controller-ray drawing and measurements
 
 Scene clicks now honor the active tool instead of switching to Select. Line,

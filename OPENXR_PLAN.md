@@ -41,6 +41,12 @@ run until the user closes it or the runtime exits. The main-thread window signal
 the separate XR worker to shut down; `--seconds N` is opt-in diagnostics only.
 Desktop mirroring can be added later without tying window responsiveness to the
 headset frame loop.
+The native window forwards physical keyboard/text/IME and modifier events to the
+shared XR egui context, and platform output returns to the native thread. The
+Windows clipboard backend is enabled. Desktop mouse/focus events do not replace
+the headset pointer/focus; lost keyboard focus releases keys and inactive XR
+frames discard queued input. Direct world cancellation also runs when rendering
+is skipped, preventing resumed frames from committing an interrupted grab/stroke.
 
 1. Run the complete existing editor as an interactive 2D panel in a headset.
 2. Separate the editor UI from the model viewport: retain readable floating UI

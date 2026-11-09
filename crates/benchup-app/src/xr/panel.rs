@@ -376,7 +376,7 @@ impl Graphics {
 /// Display an orientation panel for `duration`, then request an orderly session stop.
 /// The timeout includes waiting for the headset/session to become ready.
 pub fn run(duration: Duration) -> Result<()> {
-    run_content(Some(duration), false, &AtomicBool::new(false))
+    run_content(Some(duration), false, &AtomicBool::new(false), None)
 }
 
 /// Shared-editor panel preview with controller input and shared preferences.
@@ -386,8 +386,8 @@ pub fn run_editor(duration: Option<Duration>) -> Result<()> {
     super::desktop::run(duration)
 }
 
-pub(super) fn run_editor_session(duration: Option<Duration>, close: &AtomicBool) -> Result<()> {
-    run_content(duration, true, close)
+pub(super) fn run_editor_session(duration: Option<Duration>, close: &AtomicBool, native: super::desktop::NativeInput) -> Result<()> {
+    run_content(duration, true, close, Some(native))
 }
 
 /// Diagnose the shared editor renderer on the runtime-selected GPU without a
@@ -523,7 +523,7 @@ fn snapshot_editor_on_device(
     Ok(())
 }
 
-fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool) -> Result<()> {
+fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool, native: Option<super::desktop::NativeInput>) -> Result<()> {
     if let Some(duration) = duration {
         println!("[BenchUpXR] Explicit diagnostic limit: {}s", duration.as_secs());
     } else {
@@ -633,6 +633,9 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
     } else {
         None
     };
+    if let (Some(native), Some(editor)) = (&native, &mut editor) {
+        editor.attach_native(native.output.clone());
+    }
     let mut panel_pose = xr::Posef {
         orientation: xr::Quaternionf::IDENTITY,
         position: xr::Vector3f {
@@ -749,11 +752,17 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             return Err("Runtime did not stop the session within five seconds".into());
         }
         if !running {
+            if let Some(native) = &native { for _ in native.events.try_iter() {} }
             std::thread::sleep(Duration::from_millis(20));
             continue;
         }
         let frame = waiter.wait()?;
         stream.begin()?;
+        if let (Some(native), Some(editor)) = (&native, &mut editor) {
+            for input in native.events.try_iter() {
+                editor.native_keyboard(input, focused && frame.should_render);
+            }
+        }
         if let Some(editor) = &mut editor {
             let preferences = editor.panel_preferences();
             let recenter = editor.take_recenter_request();

@@ -425,6 +425,7 @@ dependencies = [
  "cc",
  "directories",
  "eframe",
+ "egui-winit",
  "flate2",
  "glam",
  "image",
