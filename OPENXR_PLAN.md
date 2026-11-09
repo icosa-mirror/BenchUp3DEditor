@@ -10,7 +10,7 @@ shared GPU previews. A large XR tool bar exposes these tools, cancellation and
 undo/redo with persisted active-tool selection. Initial inference is local to the
 hit face plus drawing planes and axis constraints. Remaining direct interaction
 work includes standalone-edge/guide snapping, shared reference acquisition,
-rotation, solid tools and section-handle manipulation.
+solid tools and section-handle manipulation.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
 large XR buttons and polygon side controls persist through existing preferences.
@@ -36,7 +36,10 @@ Scale and Offset also use the trigger-grab lifecycle with shared modeling
 previews, document operations and undo. Scale uses the selection-centre radius
 with axis/plane constraints; Offset shares desktop's nearest-boundary direction.
 Grid steps apply to radius/inset distance. Reference snapping during grabs and
-rotation remain future work.
+standalone-edge grabs remain future work. Rotate also supports a trigger grab
+about the selection centre, sharing desktop rotation-axis rules, angle, arc
+preview and authoritative commit. World-driven modeling ignores desktop pointer
+refreshes, including refreshes caused by keyboard lock/modifier changes.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

@@ -41,6 +41,9 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         }
         Tool::PushPull => "Hold trigger on a face and pull it; release to commit. Cancel discards.",
         Tool::Scale => "Hold trigger away from the selection centre, move to resize, then release.",
+        Tool::Rotate => {
+            "Hold trigger away from the selection centre, move around it, then release."
+        }
         Tool::Offset => "Hold trigger near a face edge, move inward or outward, then release.",
         Tool::TapeMeasure => "Trigger: first point, then second point. Cancel clears.",
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
@@ -202,6 +205,7 @@ impl BenchUpApp {
                     ("Move", Tool::Move),
                     ("Push/Pull", Tool::PushPull),
                     ("Scale", Tool::Scale),
+                    ("Rotate", Tool::Rotate),
                     ("Offset", Tool::Offset),
                 ] {
                     if ui
@@ -286,7 +290,7 @@ impl BenchUpApp {
         let clicked = activate && pointer.activate;
         if matches!(
             self.tool,
-            Tool::Move | Tool::PushPull | Tool::Scale | Tool::Offset
+            Tool::Move | Tool::PushPull | Tool::Scale | Tool::Offset | Tool::Rotate
         ) {
             self.xr_model_grab(pointer, state, clicked, activate, ctx);
             return;
@@ -542,7 +546,33 @@ impl BenchUpApp {
                 }
                 (None, DVec3::ZERO)
             };
-            self.begin_modeling_at_anchor(hit.point, direction, face, Pos2::ZERO, pointer.ray);
+            let anchor = if self.tool == Tool::Rotate {
+                self.doc
+                    .model
+                    .selection_center(&self.selected)
+                    .unwrap_or(hit.point)
+            } else {
+                hit.point
+            };
+            self.begin_modeling_at_anchor(anchor, direction, face, Pos2::ZERO, pointer.ray);
+            self.modeling.as_mut().unwrap().world_input = true;
+            if self.tool == Tool::Rotate
+                && let Some(edit) = &mut self.modeling
+            {
+                let rotation = edit.rotation.as_mut().unwrap();
+                let reference = hit.point - edit.anchor;
+                let reference = reference - rotation.normal * reference.dot(rotation.normal);
+                if reference.length_squared() < 1e-12 {
+                    self.modeling = None;
+                    self.say(
+                        ctx,
+                        "Grab a point away from the selection centre and rotation axis.",
+                    );
+                    return;
+                }
+                rotation.reference = Some(reference);
+                edit.direction = reference;
+            }
             if self.tool == Tool::Scale
                 && let Some(edit) = &self.modeling
             {
@@ -574,6 +604,7 @@ impl BenchUpApp {
         // including pulls where the ray is parallel to the extrusion axis.
         let mut delta = pointer.ray.origin + pointer.ray.direction * depth - edit.anchor;
         let constraint = self.axis_constraint();
+        let rotation_lock = self.shape_lock();
         let direction = if self.tool == Tool::PushPull {
             self.pull_direction(edit.unlocked_direction)
         } else {
@@ -592,6 +623,24 @@ impl BenchUpApp {
             }
             edit.direction = delta;
             edit.value = delta.length();
+        } else if self.tool == Tool::Rotate {
+            let rotation = edit.rotation.as_mut().unwrap();
+            rotation.set_lock(rotation_lock);
+            let normal = rotation.normal;
+            let reference = rotation.reference.unwrap();
+            let reference = reference - normal * reference.dot(normal);
+            let target = delta - normal * delta.dot(normal);
+            if reference.length_squared() < 1e-12 || target.length_squared() < 1e-12 {
+                state.grab_depth = None;
+                self.modeling = None;
+                self.say(ctx, "The rotation reference lies on its axis. Grab another point or change the axis lock.");
+                return;
+            }
+            edit.direction = target;
+            edit.value = normal
+                .dot(reference.cross(target))
+                .atan2(reference.dot(target))
+                .to_degrees();
         } else if self.tool == Tool::Scale {
             edit.scale_constraint = constraint;
             let reference = edit.anchor - edit.center;

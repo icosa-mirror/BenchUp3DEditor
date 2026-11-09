@@ -131,12 +131,18 @@ constraints); Offset uses the same nearest-boundary direction as desktop. Scale
 is positive and bounded, and a reference on a locked axis cancels with a message.
 Grid snapping uses radial distance for Scale and inset distance for Offset.
 Their previews, authoritative operations and undo commits are shared with desktop.
-Geometry/reference snapping during grabs, standalone-edge grabs and rotation
-remain future work. Controller behavior awaits headset validation.
+Rotate also uses a trigger grab around the selection centre: the initial picked
+point supplies the reference and the controller supplies its new direction.
+It shares desktop's default/locked rotation normal, angle calculation, arc
+preview and commit operation. References on the rotation axis are rejected.
+World-driven Modeling previews ignore desktop pointer refreshes, including those
+requested by keyboard axis or modifier changes. Geometry/reference snapping
+during grabs and standalone-edge grabs remain future work. Controller behavior
+awaits headset validation.
 
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-rotation, solid tools and section handles. Those tools
+solid tools and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

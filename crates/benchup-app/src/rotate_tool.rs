@@ -8,6 +8,12 @@ pub(super) struct Rotation {
     pub reference: Option<DVec3>,
 }
 
+impl Rotation {
+    pub(super) fn set_lock(&mut self, lock: Option<Axis>) {
+        self.normal = lock.map_or(self.surface_normal, Axis::vector);
+    }
+}
+
 pub(super) struct RotationGeometry {
     pub anchor: DVec3,
     pub reference: Option<DVec3>,
@@ -94,6 +100,7 @@ impl BenchUpApp {
     }
 
     pub(super) fn update_rotation(&mut self, pos: Pos2) {
+        if self.modeling.as_ref().is_some_and(|edit| edit.world_input) { return; }
         let lock = self.shape_lock();
         let size = dv(self.viewport.size());
         let cursor = dv(pos - self.viewport.min);
@@ -101,7 +108,7 @@ impl BenchUpApp {
             return;
         };
         let rotation = edit.rotation.as_mut().unwrap();
-        rotation.normal = lock.map_or(rotation.surface_normal, Axis::vector);
+        rotation.set_lock(lock);
         let normal = rotation.normal;
         edit.pointer = pos;
         edit.guides.clear();

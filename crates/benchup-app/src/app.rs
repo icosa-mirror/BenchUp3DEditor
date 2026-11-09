@@ -228,6 +228,7 @@ struct Gesture {
 }
 
 struct Modeling {
+    world_input: bool,
     base: Model,
     entities: BTreeSet<u64>,
     face: Option<u64>,
@@ -1670,6 +1671,7 @@ impl BenchUpApp {
         let snap_excluded = self.modeling_snap_exclusions(face_id);
         let rotation = (self.tool == Tool::Rotate).then(|| self.rotation_at(anchor, ray));
         self.modeling = Some(Modeling {
+            world_input: false,
             base: self.doc.model.clone(),
             entities: self.selected.clone(),
             face: face_id,
@@ -1796,6 +1798,7 @@ impl BenchUpApp {
     }
 
     fn update_modeling(&mut self, pos: Pos2) {
+        if self.modeling.as_ref().is_some_and(|edit| edit.world_input) { return; }
         if self.tool == Tool::Rotate {
             self.update_rotation(pos);
             return;
