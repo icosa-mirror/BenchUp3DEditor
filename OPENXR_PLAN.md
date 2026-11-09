@@ -264,5 +264,6 @@ feature. Defaults are 1.0 m and 130% text; a large always-visible XR bar also
 provides recentering in a fresh gravity-aligned tracking-relative frame. The user
 confirmed the controls are readable and work, including recentering. Nine XR
 tests plus one preference regression passed; desktop/WASM compilation and a
-hardware snapshot of the larger controls also passed. Live restart restoration
-is being checked. These controls do not complete the remaining phase 1 gates.
+hardware snapshot of the larger controls also passed. A 582-frame restart stopped
+cleanly and retained the chosen settings on disk; human visual confirmation of
+that restart is pending. These controls do not complete the remaining phase 1 gates.

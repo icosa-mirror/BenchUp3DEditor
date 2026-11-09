@@ -65,8 +65,9 @@ after 12,191 frames. A drag test was not completed: the user found the text too
 small and could not bring the fixed-distance panel closer. Persistent panel
 distance, width, UI scale and recenter controls are now implemented; the user
 confirmed they are readable and work. Ten focused checks cover XR behavior and
-preference defaults/immediate-save/restoration. Restart restoration is being
-verified. Keyboard/text entry, desktop
+preference defaults/immediate-save/restoration. A restart stopped cleanly after
+582 frames and retained the chosen settings on disk; human visual confirmation
+of that restart is still pending. Keyboard/text entry, desktop
 mirroring, native window services and persistent XR controls remain.
 
 ## Validation already completed on macOS

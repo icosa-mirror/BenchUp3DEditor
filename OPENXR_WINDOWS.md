@@ -269,6 +269,10 @@ Nine focused XR tests and the preference regression passed, including old-data
 defaults, immediate saves without a model edit, restoration and invalid values.
 The executable, default desktop check and default WASM check passed. A hardware
 Vulkan PNG of the larger toolbar was inspected; a five-second XR startup check
-submitted 331 frames and stopped cleanly. Live settings restoration after restart
-is being verified. Evidence uses `.local/openxr/readability-*.log` and
+submitted 331 frames and stopped cleanly. A subsequent 60-second restart reached
+VISIBLE, submitted 582 frames and stopped cleanly. Its preference roundtrip
+retained 0.8 m distance, 1.1 m width and 130% text instead of resetting to defaults;
+human visual confirmation of that restart has not been received. The log is
+`.local/openxr/readability-restoration.log`. Other evidence uses
+`.local/openxr/readability-*.log` and
 `.local/openxr/editor-readability.png`. Known Vulkan/Naga diagnostics remain.
