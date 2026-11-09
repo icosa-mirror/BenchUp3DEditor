@@ -241,7 +241,7 @@ errors remain in runtime-created shaders, external-image setup and runtime copie
 involving BlankEyeBuffer. Phase 1B's visual, restart-under-use, and clean-validation
 acceptance gate remains open. This is a graphics prototype, not phase 1 completion.
 
-Phase 1C now has a render-only `openxr_editor` example. It calls the same editor
+Phase 1C initially added a render-only `openxr_editor` example. It calls the same editor
 constructor/UI through a small host-services adapter and installs the existing
 GPU viewport callbacks on the XR device. Preferences retain the shared RON
 key/value format and immediate capture/restore persistence. The desktop and web
@@ -256,4 +256,13 @@ A second session reached VISIBLE, submitted 4,258 frames and stopped cleanly
 without restarting SteamVR. The independent
 snapshot also reproduces the known wgpu/Naga #7696 SPIR-V validation
 errors without an XR session. Desktop mirroring, input, native window-command
-services, live headset validation and phase 1 acceptance remain outstanding.
+services and phase 1 acceptance remain outstanding.
+
+Persistent distance, width and UI-scale controls are now implemented using shared
+InspectorPreferences capture/restore, including builds without the OpenXR
+feature. Defaults are 1.0 m and 130% text; a large always-visible XR bar also
+provides recentering in a fresh gravity-aligned tracking-relative frame. The user
+confirmed the controls are readable and work, including recentering. Nine XR
+tests plus one preference regression passed; desktop/WASM compilation and a
+hardware snapshot of the larger controls also passed. Live restart restoration
+is being checked. These controls do not complete the remaining phase 1 gates.

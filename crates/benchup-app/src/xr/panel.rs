@@ -531,6 +531,8 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
         });
     let space =
         session.create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)?;
+    let view_space =
+        session.create_reference_space(xr::ReferenceSpaceType::VIEW, xr::Posef::IDENTITY)?;
     let mut editor = if show_editor {
         println!("[BenchUpXR] Installing the shared editor and GPU viewport callbacks.");
         Some(super::editor::Editor::new(
@@ -542,7 +544,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     } else {
         None
     };
-    let panel_pose = xr::Posef {
+    let mut panel_pose = xr::Posef {
         orientation: xr::Quaternionf::IDENTITY,
         position: xr::Vector3f {
             x: 0.0,
@@ -550,7 +552,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
             z: -1.5,
         },
     };
-    let panel_size = xr::Extent2Df {
+    let mut panel_size = xr::Extent2Df {
         width: 1.2,
         height: 0.75,
     };
@@ -576,6 +578,8 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     let mut running = false;
     let mut focused = false;
     let mut last_input = Instant::now();
+    let mut anchor = xr::Posef::IDENTITY;
+    let mut anchored = false;
     let mut stopping = false;
     let mut submitted = 0u64;
     loop {
@@ -651,6 +655,27 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
         }
         let frame = waiter.wait()?;
         stream.begin()?;
+        if let Some(editor) = &mut editor {
+            let preferences = editor.panel_preferences();
+            let recenter = editor.take_recenter_request();
+            if !anchored || recenter {
+                let head = view_space.locate(&space, frame.predicted_display_time)?;
+                if head.location_flags.contains(
+                    xr::SpaceLocationFlags::POSITION_VALID
+                        | xr::SpaceLocationFlags::ORIENTATION_VALID,
+                ) {
+                    if let Some(pose) = upright_anchor(head.pose) {
+                        anchor = pose;
+                        anchored = true;
+                    }
+                }
+            }
+            panel_pose = panel_from_anchor(anchor, preferences.distance_metres);
+            panel_size = xr::Extent2Df {
+                width: preferences.width_metres,
+                height: preferences.width_metres * size.height as f32 / size.width as f32,
+            };
+        }
         if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
             let logical = editor.logical_size();
             let panel = super::EditorPanel::new(
@@ -720,4 +745,89 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
         return Err("Session ended without rendering a quad".into());
     }
     Ok(())
+}
+
+// Recenter in a transient gravity-aligned frame. Saved preferences contain only
+// distance/size/scale, never headset positions from a previous tracking session.
+fn upright_anchor(head: xr::Posef) -> Option<xr::Posef> {
+    let q = glam::DQuat::from_xyzw(
+        head.orientation.x as f64,
+        head.orientation.y as f64,
+        head.orientation.z as f64,
+        head.orientation.w as f64,
+    );
+    let position = glam::DVec3::new(
+        head.position.x as f64,
+        head.position.y as f64,
+        head.position.z as f64,
+    );
+    if !q.is_finite() || q.length_squared() < 1e-12 || !position.is_finite() {
+        return None;
+    }
+    let q = q.normalize();
+    let forward = q * -glam::DVec3::Z;
+    let yaw = if forward.x * forward.x + forward.z * forward.z > 1e-12 {
+        (-forward.x).atan2(-forward.z)
+    } else {
+        let right = q * glam::DVec3::X;
+        (-right.z).atan2(right.x)
+    };
+    let q = glam::DQuat::from_rotation_y(yaw);
+    Some(xr::Posef {
+        orientation: xr::Quaternionf {
+            x: q.x as f32,
+            y: q.y as f32,
+            z: q.z as f32,
+            w: q.w as f32,
+        },
+        position: head.position,
+    })
+}
+
+fn panel_from_anchor(anchor: xr::Posef, distance: f32) -> xr::Posef {
+    let q = glam::Quat::from_xyzw(
+        anchor.orientation.x,
+        anchor.orientation.y,
+        anchor.orientation.z,
+        anchor.orientation.w,
+    );
+    let offset = q * glam::vec3(0.0, 0.0, -distance);
+    xr::Posef {
+        orientation: anchor.orientation,
+        position: xr::Vector3f {
+            x: anchor.position.x + offset.x,
+            y: anchor.position.y + offset.y,
+            z: anchor.position.z + offset.z,
+        },
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+    #[test]
+    fn recenter_places_panel_ahead_of_head_without_persisting_tracking_coordinates() {
+        let q = glam::Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+            * glam::Quat::from_rotation_x(0.2);
+        let anchor = upright_anchor(xr::Posef {
+            orientation: xr::Quaternionf {
+                x: q.x,
+                y: q.y,
+                z: q.z,
+                w: q.w,
+            },
+            position: xr::Vector3f {
+                x: 2.0,
+                y: 1.7,
+                z: -3.0,
+            },
+        })
+        .unwrap();
+        let panel = panel_from_anchor(anchor, 1.0);
+        assert!((panel.position.x - 1.0).abs() < 1e-5);
+        assert!((panel.position.y - 1.7).abs() < 1e-5);
+        assert!((panel.position.z + 3.0).abs() < 1e-5);
+        assert_eq!(panel.orientation.x, 0.0);
+        assert_eq!(panel.orientation.z, 0.0);
+    }
 }

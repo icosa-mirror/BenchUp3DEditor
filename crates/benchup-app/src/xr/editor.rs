@@ -97,6 +97,7 @@ pub(super) struct Editor {
     start: Instant,
     input: super::input::FrameInput,
     cursor: super::cursor::Cursor,
+    recenter_requested: bool,
 }
 
 impl Editor {
@@ -124,6 +125,7 @@ impl Editor {
             true,
             Some((device.clone(), queue.clone())),
         );
+        ctx.set_zoom_factor(app.xr_panel_preferences().ui_scale);
         let depth = device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("BenchUpXR editor depth"),
@@ -146,6 +148,7 @@ impl Editor {
             start: Instant::now(),
             input: Default::default(),
             cursor: super::cursor::Cursor::new(device, format),
+            recenter_requested: false,
         })
     }
 
@@ -212,10 +215,67 @@ impl Editor {
             events: std::mem::take(&mut self.input.events),
             ..Default::default()
         };
+        let mut preferences = self.app.xr_panel_preferences();
+        let mut recenter = false;
         let output = self.ctx.run_ui(raw, |ui| {
             self.app
-                .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences))
+                .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
+            egui::Area::new(egui::Id::unique("benchup.xr.panel_controls"))
+                .order(egui::Order::Foreground)
+                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -28.0))
+                .show(&self.ctx, |ui| {
+                    egui::Frame::popup(ui.style())
+                        .inner_margin(8)
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "XR panel   {:.1} m away   {:.1} m wide   Text {:.0}%",
+                                    preferences.distance_metres,
+                                    preferences.width_metres,
+                                    preferences.ui_scale * 100.0
+                                ))
+                                .size(18.0),
+                            );
+                            ui.horizontal(|ui| {
+                                let mut button = |label: &str| {
+                                    ui.add_sized(
+                                        [84.0, 42.0],
+                                        egui::Button::new(egui::RichText::new(label).size(18.0)),
+                                    )
+                                    .clicked()
+                                };
+                                if button("Closer") {
+                                    preferences.distance_metres -= 0.1;
+                                }
+                                if button("Farther") {
+                                    preferences.distance_metres += 0.1;
+                                }
+                                if button("Text -") {
+                                    preferences.ui_scale -= 0.1;
+                                }
+                                if button("Text +") {
+                                    preferences.ui_scale += 0.1;
+                                }
+                                if button("Panel -") {
+                                    preferences.width_metres -= 0.1;
+                                }
+                                if button("Panel +") {
+                                    preferences.width_metres += 0.1;
+                                }
+                                if button("Recenter") {
+                                    recenter = true;
+                                }
+                            });
+                        });
+                });
         });
+        preferences = preferences.sanitized();
+        if preferences != self.app.xr_panel_preferences() {
+            self.app
+                .update_xr_panel_preferences(&self.ctx, &mut self.preferences, preferences);
+            self.ctx.set_zoom_factor(preferences.ui_scale);
+        }
+        self.recenter_requested |= recenter;
         // Immediate preference persistence uses the same shared capture/restore
         // path as desktop, even without document edits or framework autosave.
         self.preferences.flush();
@@ -254,6 +314,14 @@ impl Editor {
 
     pub(super) fn logical_size(&self) -> egui::Vec2 {
         egui::vec2(self.size[0] as f32, self.size[1] as f32) / self.ctx.pixels_per_point()
+    }
+
+    pub(super) fn panel_preferences(&self) -> crate::app_host::XrPanelPreferences {
+        self.app.xr_panel_preferences()
+    }
+
+    pub(super) fn take_recenter_request(&mut self) -> bool {
+        std::mem::take(&mut self.recenter_requested)
     }
 
     pub(super) fn cancel_input(

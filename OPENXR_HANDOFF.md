@@ -54,7 +54,7 @@ the runtime's BlankEyeBuffer; the clean-validation gate has not passed. Editor
 hosting is now implemented as a render-only preview using the shared editor UI
 and GPU viewport callbacks. An independent hardware Vulkan snapshot of the
 bundled Example was inspected on the RTX 4090. Full-editor headset submission
-is now verified as a render-only preview after the user reconnected the headset.
+is now verified after the user reconnected the headset.
 The same SPIR-V layout errors also
 reproduce without an XR session and match wgpu/Naga issue #7696. Controller input
 is now implemented with GPU cursor rendering, clicks, scrolling, capture across
@@ -63,7 +63,10 @@ confirmed live cursor and primary clicks using the runtime's Oculus Touch
 profile, plus wheel input affecting the main viewport. The run stopped cleanly
 after 12,191 frames. A drag test was not completed: the user found the text too
 small and could not bring the fixed-distance panel closer. Persistent panel
-distance/readability controls are the next priority. Keyboard/text entry, desktop
+distance, width, UI scale and recenter controls are now implemented; the user
+confirmed they are readable and work. Ten focused checks cover XR behavior and
+preference defaults/immediate-save/restoration. Restart restoration is being
+verified. Keyboard/text entry, desktop
 mirroring, native window services and persistent XR controls remain.
 
 ## Validation already completed on macOS

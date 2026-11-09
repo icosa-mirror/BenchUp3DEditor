@@ -401,6 +401,7 @@ pub struct BenchUpApp {
     settings_open: bool,
     material_removal: Option<benchup_core::MaterialId>,
     general_settings: settings::GeneralSettings,
+    xr_panel: crate::app_host::XrPanelPreferences,
     about: bool,
     release_notes: crate::release_notes::ReleaseNotes,
     shortcut_filter: String,
@@ -489,6 +490,15 @@ impl BenchUpApp {
         };
         app
     }
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn xr_panel_preferences(&self) -> crate::app_host::XrPanelPreferences { self.xr_panel }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn update_xr_panel_preferences(&mut self, ctx: &egui::Context, storage: &mut dyn eframe::Storage, preferences: crate::app_host::XrPanelPreferences) {
+        self.xr_panel = preferences.sanitized();
+        self.persist_inspector_changes(ctx, Some(storage), false);
+    }
+
     fn with_document(mut doc: Document, error: Option<String>, gpu_ready: bool) -> Self {
         let selected = Self::restore_document_selection(&mut doc);
         let geometry_snapping = doc.snap_to_geometry;
@@ -590,6 +600,7 @@ impl BenchUpApp {
             settings_open: false,
             material_removal: None,
             general_settings: Default::default(),
+            xr_panel: Default::default(),
             about: false,
             release_notes: crate::release_notes::ReleaseNotes::default(),
             shortcut_filter: String::new(),

@@ -33,6 +33,7 @@ pub(super) struct InspectorPreferences {
     account_open: bool,
     account_menu_open: bool,
     general: settings::GeneralSettings,
+    xr_panel: crate::app_host::XrPanelPreferences,
     visible: bool,
     width: f32,
     docking: Option<docking::DockLayout>,
@@ -72,6 +73,7 @@ impl Default for InspectorPreferences {
             account_open: false,
             account_menu_open: false,
             general: Default::default(),
+            xr_panel: Default::default(),
             visible: true,
             width: 300.,
             docking: None,
@@ -163,6 +165,27 @@ mod guide_preference_tests {
         restored.replace_project(Document::default(), None, &ctx);
         assert!(restored.walk.person.is_none());
         assert_eq!(restored.general_settings.walk, app.general_settings.walk);
+    }
+
+    #[test]
+    fn xr_panel_preferences_save_without_model_edits_and_restore_with_legacy_defaults() {
+        let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.xr_panel, crate::app_host::XrPanelPreferences::default());
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut storage = Storage::default();
+        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5 };
+        app.persist_inspector_changes(&ctx, Some(&mut storage), false);
+        assert!(storage.flushed);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+        let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+        restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+        assert_eq!(restored.xr_panel, app.xr_panel);
+        let invalid = crate::app_host::XrPanelPreferences { distance_metres: f32::NAN, width_metres: -2.0, ui_scale: 99.0 }.sanitized();
+        assert_eq!(invalid.distance_metres, 1.0);
+        assert_eq!(invalid.width_metres, 0.6);
+        assert_eq!(invalid.ui_scale, 1.6);
     }
 
     #[test]
@@ -602,6 +625,7 @@ impl BenchUpApp {
         self.account.menu_open = preferences.account_menu_open;
         self.general_settings = preferences.general.clone();
         self.general_settings.normalize();
+        self.xr_panel = preferences.xr_panel.sanitized();
         preferences.tools.restore(self);
         self.project.recent = preferences.recent_projects.clone();
         self.project.recent.truncate(10);
@@ -702,6 +726,7 @@ impl BenchUpApp {
             account_open: self.account.open,
             account_menu_open: self.account.menu_open,
             general: self.general_settings.clone(),
+            xr_panel: self.xr_panel,
             visible: self.inspector,
             width: self.inspector_width,
             // Capture the effective layout even before the inspector first renders.

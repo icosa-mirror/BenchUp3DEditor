@@ -119,9 +119,9 @@ Validation still reported 14 runtime-created objects at device destruction
 `openxr_editor` uses the existing BenchUp UI, document, history and retained GPU
 viewport callbacks on the same Vulkan device and directly into the acquired quad
 image. The eframe entry point calls the same UI function through a small host
-service adapter. This is currently **render-only**: controller input, a desktop
-mirror, keyboard/mouse input and native window-command handling are not supplied.
-It does not satisfy phase 1's editing/saving acceptance gate.
+service adapter. Controller input and panel controls are described below. A
+desktop mirror, physical keyboard/mouse input and native window-command handling
+are not supplied. This does not satisfy phase 1's editing/saving acceptance gate.
 
 ```powershell
 ./scripts/openxr_probe.ps1 -Probe Editor -ValidationDirectory .local/openxr/validation-layers
@@ -240,7 +240,35 @@ drag test could not be completed because the user was unfamiliar with the app an
 found the text too small at the fixed panel distance. The run stopped cleanly
 after 12,191 editor frames; evidence is `.local/openxr/controller-live.log`.
 Scrollbar dragging and focus/tracking-loss behavior remain unverified on hardware.
-Panel distance and readability controls are the next usability requirement. No
-user-facing XR settings were added; handedness/panel controls and their shared
-preference fields remain future work. Physical keyboard/mouse input, text entry,
-desktop mirroring and native window services are also pending.
+Panel distance and readability controls became the next usability requirement.
+No user-facing XR settings were added in that initial controller milestone.
+Physical keyboard/mouse input, text entry, desktop mirroring and native window
+services are also pending.
+
+## Persistent panel distance and readability
+
+The editor now starts at 1.0 m with 130% text, and an always-visible, large
+`XR panel` bar supplies Closer/Farther, Text -/+, Panel -/+ and Recenter controls.
+The user confirmed that the controls are readable and work, and that Recenter
+places the panel correctly. The chosen settings were written immediately during
+the live run (0.8 m distance, 1.1 m width and 130% text at the observed point).
+The live run stopped cleanly after 12,710 editor frames.
+
+Distance, width and UI scale are serialized in `InspectorPreferences.xr_panel`
+and use shared capture/restore plus `persist_inspector_changes`. The fields exist
+in desktop/web builds without OpenXR too, so those hosts retain the preferences.
+Older data uses defaults; restored values are sanitized. No document geometry or
+history is changed by these options. The toolbar has a stable anchored layout.
+
+Placement uses a transient, gravity-aligned anchor from the current VIEW pose at
+startup/recenter. Only tracking-relative distance/size/scale are saved, never an
+absolute headset pose. The controller mapper uses the same current panel pose,
+dimensions and logical egui scale as the compositor/cursor.
+
+Nine focused XR tests and the preference regression passed, including old-data
+defaults, immediate saves without a model edit, restoration and invalid values.
+The executable, default desktop check and default WASM check passed. A hardware
+Vulkan PNG of the larger toolbar was inspected; a five-second XR startup check
+submitted 331 frames and stopped cleanly. Live settings restoration after restart
+is being verified. Evidence uses `.local/openxr/readability-*.log` and
+`.local/openxr/editor-readability.png`. Known Vulkan/Naga diagnostics remain.
