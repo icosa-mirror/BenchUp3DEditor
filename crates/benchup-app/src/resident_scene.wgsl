@@ -26,6 +26,8 @@ struct Camera {
 }
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var interaction_states: texture_2d<u32>;
+@group(0) @binding(2) var grain_axes:texture_2d<f32>;
+@group(0) @binding(3) var grain_indices:texture_2d<u32>;
 fn slot_state(slot: u32) -> u32 {
     return textureLoad(interaction_states,vec2<i32>(i32(slot%512u),i32(slot/512u)),0).x;
 }
@@ -49,6 +51,8 @@ struct Output {
     @location(3) @interpolate(flat) faces: vec4<u32>,
     @location(4) shadow: vec3<f32>,
     @location(5) world: vec3<f32>,
+    @location(6) grain_uv:vec2<f32>,
+    @location(7) @interpolate(flat) grain:vec2<f32>,
 }
 fn clipped(point: vec3<f32>) -> bool { return any(point > camera.section_limits.xyz + vec3<f32>(0.000001)); }
 fn fogged(color: vec4<f32>, point: vec3<f32>) -> vec4<f32> {
@@ -65,7 +69,8 @@ fn target_color(color: vec4<f32>) -> vec4<f32> {
 }
 @vertex
 fn face_vertex(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>,
-    @location(2) anchor: vec3<f32>, @location(3) color: vec4<f32>, @location(4) face_id: u32, @location(5) interaction: vec2<u32>) -> Output {
+    @location(2) anchor: vec3<f32>, @location(3) color: vec4<f32>, @location(4) face_id: u32, @location(5) interaction: vec2<u32>,
+    @location(6) grain_origin:vec3<f32>,@location(7) plane_u:vec3<f32>) -> Output {
     var n = normal;
     var toward_eye = camera.eye.xyz - anchor;
     if camera.flags.y != 0.0 {
@@ -97,6 +102,18 @@ fn face_vertex(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>,
     output.center = vec3<f32>(0.0);
     output.faces = vec4<u32>(face_id,0u,0u,0u);
     output.world = position;
+    let grain_index=textureLoad(grain_indices,vec2<i32>(i32(interaction.x%512u),i32(interaction.x/512u)),0).x;
+    let grain=textureLoad(grain_axes,vec2<i32>(i32(grain_index%512u),i32(grain_index/512u)),0);
+    let tangent=grain.xyz-normal*dot(normal,grain.xyz);
+    let end_grain=dot(tangent,tangent)<0.00000001;
+    var along=plane_u;
+    if !end_grain {
+        let u=dot(tangent,plane_u);let v=dot(tangent,cross(normal,plane_u));
+        let orientation=select(v,u,abs(u)>=abs(v));along=normalize(tangent)*sign(orientation);
+    }
+    let across=cross(normal,along);
+    output.grain_uv=vec2<f32>(dot(position-grain_origin,along),dot(position-grain_origin,across))/0.1;
+    output.grain=vec2<f32>(grain.w,select(0.0,1.0,end_grain));
     return output;
 }
 @vertex
@@ -149,7 +166,60 @@ fn face_color(input: Output) -> @location(0) vec4<f32> {
     let amount = shadow_coverage(input);
     let dark = floor(input.color.rgb * (1.0-camera.shadow_params.x) * 255.0 + vec3<f32>(0.5))/255.0;
     let rgb = mix(input.color.rgb,dark,amount);
-    return target_color(fogged(vec4<f32>(rgb,input.color.a),input.world));
+    let grain=grain_coverage(input.grain_uv,input.grain);
+    let ink=select(vec3<f32>(67.0,27.0,143.0),vec3<f32>(231.0,197.0,255.0),dot(input.color.rgb,vec3<f32>(0.333333))<=0.52)/255.0;
+    return target_color(fogged(vec4<f32>(mix(rgb,ink,grain),max(input.color.a,grain)),input.world));
+}
+
+// The same wrapping 64-bit hash as renderer::grain_variation, represented by
+// two u32 words so this also translates to WebGL's integer shader operations.
+fn grain_mul_high(a:u32,b:u32)->u32 {
+    let lo=a&65535u;let hi=a>>16u;let blo=b&65535u;let bhi=b>>16u;
+    let w0=lo*blo;let t=hi*blo+(w0>>16u);let w1=(t&65535u)+lo*bhi;
+    return hi*bhi+(t>>16u)+(w1>>16u);
+}
+fn grain_mul(a:vec2<u32>,b:vec2<u32>)->vec2<u32> {
+    return vec2<u32>(a.x*b.x,grain_mul_high(a.x,b.x)+a.x*b.y+a.y*b.x);
+}
+fn grain_signed(value:i32)->vec2<u32> {return vec2<u32>(bitcast<u32>(value),select(0u,0xffffffffu,value<0));}
+fn grain_variation(column:i32,row:i32)->f32 {
+    let key=grain_mul(grain_signed(column),vec2<u32>(0x7f4a7c15u,0x9e3779b9u))^grain_mul(grain_signed(row),vec2<u32>(0x1ce4e5b9u,0xbf58476du));
+    let shift=vec2<u32>((key.x>>30u)|(key.y<<2u),key.y>>30u);
+    let mixed=grain_mul(key^shift,vec2<u32>(0x133111ebu,0x94d049bbu));
+    let result=mixed^vec2<u32>((mixed.x>>31u)|(mixed.y<<1u),mixed.y>>31u);
+    return f32(result.y>>16u)/32767.5-1.0;
+}
+fn grain_coverage(uv:vec2<f32>,grain:vec2<f32>)->f32 {
+    let dx=dpdx(uv);let dy=dpdy(uv);let determinant=dx.x*dy.y-dy.x*dx.y;
+    let footprint=max(length(dx),length(dy));
+    if grain.x<=0.0 || abs(determinant)<0.0000000000001 {return 0.0;}
+    let fade=smoothstep(1.0,3.0,1.0/max(footprint,0.000001));
+    if fade<=0.0 {return 0.0;}
+    let across=select(0.66,1.0,grain.y>0.0);
+    let center_row=i32(round(uv.y/across));var coverage=0.0;
+    for(var offset=-1;offset<=1;offset++) {
+        let row=center_row+offset;
+        var pitch=1.0;var xoffset=0.0;var y=f32(row);
+        if grain.y==0.0 {
+            pitch=1.35;y=f32(row)*0.66;
+            if row!=0 {pitch+=0.09*grain_variation(row,11);xoffset=0.54*grain_variation(row,29);y+=0.13*grain_variation(row,47);}
+        }
+        let column=i32(round((uv.x-xoffset)/pitch));var jitter=0.0;var half_length=0.0;
+        if grain.y==0.0 {
+            if row!=0 || column!=0 {jitter=0.06*grain_variation(column,row);}
+            half_length=0.40+0.06*grain_variation(column+31,row);
+        }
+        let delta=uv-vec2<f32>(f32(column)*pitch+xoffset+jitter,y);
+        let pixels=vec2<f32>(dy.y*delta.x-dy.x*delta.y,-dx.y*delta.x+dx.x*delta.y)/determinant;
+        var distance=length(pixels);var radius=grain.x*0.65;
+        if grain.y==0.0 {
+            let axis=vec2<f32>(dy.y,-dx.y)/determinant;let axis_length=length(axis);let direction=axis/max(axis_length,0.000001);
+            let projection=clamp(dot(pixels,direction),-half_length*axis_length,half_length*axis_length);
+            distance=length(pixels-direction*projection);radius=grain.x*0.5;
+        }
+        coverage=max(coverage,1.0-smoothstep(radius-0.5,radius+0.5,distance));
+    }
+    return coverage*fade;
 }
 // Offset depth only across the actual incident face, never its extension past
 // a silhouette. Using homogeneous planes also works at near-plane crossings.

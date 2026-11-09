@@ -7,6 +7,8 @@ use wgpu::util::DeviceExt as _;
 use crate::theme::{FacePalette, Palette};
 #[path = "resident_appearance.rs"]
 mod appearance;
+#[path = "resident_grain.rs"]
+mod grain;
 #[path = "resident_bounds.rs"]
 mod bounds;
 #[path = "resident_shadows.rs"]
@@ -29,6 +31,8 @@ struct FaceVertex {
     color: [u8; 4],
     face_id: u32,
     interaction: [u32; 2],
+    grain_origin:[f32;3],
+    grain_u:[f32;3],
 }
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -88,6 +92,7 @@ pub(super) struct Cache {
     geometry: Option<Arc<Geometry>>,
     builds: usize,
     appearance: appearance::Cache,
+    grain:grain::Cache,
     source: Option<Model>,
     removed: std::collections::BTreeSet<u64>,
     bounds_index: bounds::Index,
@@ -141,6 +146,7 @@ struct Draw {
     markers: bool,
     translucent: bool,
     appearance: Arc<Vec<u32>>,
+    grain:grain::Data,
     references: Vec<Vertex>,
     reference_indices: Vec<u32>,
     gpu: OnceLock<DrawBuffers>,
@@ -164,6 +170,7 @@ fn geometry_key(key: &SceneKey) -> SceneKey {
     let mut key = SceneKey {
         joinery_members: key.joinery_members,
         joint_preview: key.joint_preview.clone(),
+        grain_preview:Default::default(),
         model_revision: key.model_revision,
         edit_context: None, camera: Camera::default(), size: DVec2::ZERO,
         pixels_per_point: 1., display: key.display.clone(), dark: key.dark,
@@ -179,6 +186,7 @@ fn geometry_key(key: &SceneKey) -> SceneKey {
     key.display.sun_angle = 0.;
     key.display.sun_elevation = 0.;
     key.display.shadow_antialiasing = false;
+    key.display.grain_direction = false;
     key.display.section_cuts = false;
     key.display.section_fill = false;
     key.display.section_planes = false;
@@ -576,6 +584,7 @@ impl SceneCache {
             key,
             &self.resident.removed,
         );
+        let grain=self.resident.grain.update(model,self.resident.hierarchy.as_ref().unwrap(),key);
         if self.resident.state_capacity != appearance.len() {
             self.resident.states = Arc::new(OnceLock::new());
             self.resident.state_capacity = appearance.len();
@@ -596,6 +605,7 @@ impl SceneCache {
             markers: key.display.endpoints || key.selected.iter().any(|id| model.edges.contains_key(id)),
             translucent: key.display.x_ray || key.display.hidden_geometry || key.display.hidden_objects,
             appearance,
+            grain,
             geometry: Arc::clone(&geometry),
             overlay: self.resident.overlay.clone(),
             states: Arc::clone(&self.resident.states),
@@ -754,6 +764,8 @@ impl Geometry {
             });
             let color = if entity.entity_hidden { material.gamma_multiply(0.18) } else { material };
             let anchor = model.vertices[&face.vertices[0]].position;
+            let grain_origin=crate::renderer::grain_anchor(cached).unwrap_or(anchor);
+            let grain_u=cached.plane.map_or(DVec3::ZERO,|plane|plane.u).as_vec3().to_array();
             for triangle in &cached.triangles {
                 for &p in triangle {
                     vertices.push(FaceVertex {
@@ -763,6 +775,7 @@ impl Geometry {
                         color: color.to_array(),
                         face_id,
                         interaction: hierarchy.pair(face.id),
+                        grain_origin:point(grain_origin),grain_u,
                     });
                 }
             }
@@ -911,6 +924,8 @@ pub(super) fn install(
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {binding:2,visibility:wgpu::ShaderStages::VERTEX,ty:wgpu::BindingType::Texture {sample_type:wgpu::TextureSampleType::Float {filterable:false},view_dimension:wgpu::TextureViewDimension::D2,multisampled:false},count:None},
+            wgpu::BindGroupLayoutEntry {binding:3,visibility:wgpu::ShaderStages::VERTEX,ty:wgpu::BindingType::Texture {sample_type:wgpu::TextureSampleType::Uint,view_dimension:wgpu::TextureViewDimension::D2,multisampled:false},count:None},
         ],
     });
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -949,7 +964,7 @@ pub(super) fn install(
         let attributes = if edge {
             wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x3,3=>Float32x3,4=>Float32x3,5=>Float32x3,6=>Float32x3,7=>Float32x3,8=>Float32x3,9=>Float32x3,10=>Unorm8x4,11=>Float32,12=>Uint32x4,13=>Uint32x2].to_vec()
         } else {
-            wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x3,3=>Unorm8x4,4=>Uint32,5=>Uint32x2]
+            wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x3,3=>Unorm8x4,4=>Uint32,5=>Uint32x2,6=>Float32x3,7=>Float32x3]
                 .to_vec()
         };
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -1079,6 +1094,7 @@ impl egui_wgpu::CallbackTrait for Draw {
             .states
             .get_or_init(|| appearance::StateTexture::new(device, self.appearance.len()));
         states.update(queue, &self.appearance);
+        let (grain_axes,grain_indices)=self.grain.prepare(device,queue);
         let size = [
             (self.uniform.viewport[0] * self.uniform.viewport[2])
                 .round()
@@ -1157,6 +1173,8 @@ impl egui_wgpu::CallbackTrait for Draw {
                                 binding: 1,
                                 resource: wgpu::BindingResource::TextureView(&states.view),
                             },
+                            wgpu::BindGroupEntry {binding:2,resource:wgpu::BindingResource::TextureView(grain_axes)},
+                            wgpu::BindGroupEntry {binding:3,resource:wgpu::BindingResource::TextureView(grain_indices)},
                         ],
                     });
                     uniform.display_flags[2] = 1;
@@ -1166,7 +1184,9 @@ impl egui_wgpu::CallbackTrait for Draw {
                     let translucent_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("Resident translucent camera"), layout: &pipelines.layout,
                         entries: &[wgpu::BindGroupEntry { binding: 0, resource: translucent_uniform.as_entire_binding() },
-                            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&states.view) }],
+                            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&states.view) },
+                            wgpu::BindGroupEntry {binding:2,resource:wgpu::BindingResource::TextureView(grain_axes)},
+                            wgpu::BindGroupEntry {binding:3,resource:wgpu::BindingResource::TextureView(grain_indices)}],
                     });
                     LayerBuffers {
                         _uniform: buffer,
@@ -1454,6 +1474,7 @@ mod tests {
         SceneKey {
             joinery_members: None,
             joint_preview: None,
+            grain_preview:Default::default(),
             model_revision: 1,
             edit_context: None,
             camera: Camera::default(),

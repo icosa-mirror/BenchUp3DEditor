@@ -194,6 +194,7 @@ impl ModelSnapshot {
 pub struct SceneKey {
     pub joinery_members: Option<[u64; 2]>,
     pub joint_preview: Option<([u64; 2], benchup_core::joinery::JointSettings)>,
+    pub grain_preview:std::collections::BTreeMap<u64,DVec3>,
     pub model_revision: u64,
     pub edit_context: Option<u64>,
     pub camera: Camera,
@@ -1141,19 +1142,7 @@ impl Mesh {
         let across = plane.normal.cross(along);
         // Anchor the pattern inside the face even when the outline's mean
         // falls in a hole or outside a concave boundary.
-        let anchor = if face.contains_point(face.center) {
-            face.center
-        } else {
-            let Some(triangle) = face.triangles.iter().max_by(|[a, b, c], [d, e, f]| {
-                (*b - *a)
-                    .cross(*c - *a)
-                    .length_squared()
-                    .total_cmp(&(*e - *d).cross(*f - *d).length_squared())
-            }) else {
-                return;
-            };
-            triangle.iter().sum::<DVec3>() / 3.
-        };
+        let Some(anchor)=grain_anchor(face) else {return;};
         let project = |point: DVec3| {
             let delta = point - anchor;
             DVec2::new(delta.dot(along), delta.dot(across))
@@ -2858,6 +2847,14 @@ fn annotation_stroke_footprint(a: DVec2, b: DVec2, radius: f64) -> Vec<DVec2> {
 
 /// A bounded pattern in face coordinates. Variation depends only on the row
 /// and column so clipping and orbiting always reveal the same marks.
+pub(crate) fn grain_anchor(face:&CachedFace)->Option<DVec3> {
+    if face.contains_point(face.center) {return Some(face.center);}
+    let triangle=face.triangles.iter().max_by(|[a,b,c],[d,e,f]| {
+        (*b-*a).cross(*c-*a).length_squared().total_cmp(&(*e-*d).cross(*f-*d).length_squared())
+    })?;
+    Some(triangle.iter().sum::<DVec3>()/3.0)
+}
+
 fn grain_layout(min: DVec2, max: DVec2, end_grain: bool) -> Vec<(DVec2, f64)> {
     let across = if end_grain { 1. } else { 0.66 };
     let row_jitter = if end_grain { 0. } else { 0.13 };

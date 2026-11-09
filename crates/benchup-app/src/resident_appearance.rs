@@ -140,6 +140,7 @@ impl Hierarchy {
     pub fn slot(&self, id: u64) -> u32 {
         self.slots.get(&id).copied().unwrap_or(0)
     }
+    pub fn parent(&self,id:u64)->Option<u64> {self.parents.get(&id).copied()}
     pub fn pair(&self, id: u64) -> [u32; 2] {
         [
             self.parents.get(&id).map_or(0, |id| self.slot(*id)),

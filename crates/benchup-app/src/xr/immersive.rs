@@ -20,6 +20,7 @@ pub(crate) struct Source {
     pub erasing: BTreeSet<u64>,
     pub joinery_members: Option<[u64; 2]>,
     pub editing_text: Option<u64>,
+    pub grain_preview: std::collections::BTreeMap<u64, DVec3>,
 }
 
 struct Placement {
@@ -254,6 +255,7 @@ impl Scene {
                 let key = renderer::SceneKey {
                     joinery_members: source.joinery_members,
                     joint_preview: None,
+                    grain_preview: source.grain_preview.clone(),
                     model_revision: source.revision,
                     edit_context: source.model.edit_context,
                     camera,

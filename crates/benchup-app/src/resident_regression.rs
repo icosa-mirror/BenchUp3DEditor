@@ -7,6 +7,7 @@ impl SceneCache {
         let key = SceneKey {
             joinery_members: None,
             joint_preview: None,
+            grain_preview:Default::default(),
             model_revision: 1,
             edit_context: doc.model.edit_context,
             camera: doc.camera.clone(),
@@ -116,6 +117,7 @@ impl SceneCache {
             let key = SceneKey {
                 joinery_members: None,
                 joint_preview: None,
+                grain_preview:Default::default(),
                 model_revision: step + 1,
                 edit_context: doc.model.edit_context,
                 camera: doc.camera.clone(),

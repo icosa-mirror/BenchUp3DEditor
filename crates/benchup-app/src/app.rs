@@ -150,9 +150,9 @@ impl CompassAxis {
             (Axis::X, false) => "X",
             (Axis::Y, false) => "Y",
             (Axis::Z, false) => "Z",
-            (Axis::X, true) => "−X",
-            (Axis::Y, true) => "−Y",
-            (Axis::Z, true) => "−Z",
+            (Axis::X, true) => "âˆ’X",
+            (Axis::Y, true) => "âˆ’Y",
+            (Axis::Z, true) => "âˆ’Z",
         }
     }
 
@@ -509,6 +509,7 @@ impl BenchUpApp {
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),
             editing_text:self.text_editor.as_ref().and_then(|editor|editor.id),
+            grain_preview:self.grain_preview_axes(),
         }
     }
 
@@ -2478,7 +2479,7 @@ impl BenchUpApp {
                         c.is_ascii_alphanumeric()
                             || matches!(
                                 c,
-                                '.' | '-' | '+' | '*' | '/' | '(' | ')' | ',' | '\'' | '"' | ' ' | '°'
+                                '.' | '-' | '+' | '*' | '/' | '(' | ')' | ',' | '\'' | '"' | ' ' | 'Â°'
                             )
                     }) && self.length_input.len() + text.len() <= precision::MAX_INPUT_LEN
                     {
@@ -3038,7 +3039,7 @@ impl BenchUpApp {
                         if self.tool.is_measuring() && !self.measurement_precision_available() {
                             ui.text_label(
                                 RichText::new(
-                                    self.measurement_value().unwrap_or_else(|| "—".into()),
+                                    self.measurement_value().unwrap_or_else(|| "â€”".into()),
                                 )
                                 .monospace()
                                 .strong(),
@@ -3567,7 +3568,7 @@ impl BenchUpApp {
                     ui.text_weak("Measurements unavailable.");
                 }
                 None => {
-                    ui.text_weak("Calculating measurements…");
+                    ui.text_weak("Calculating measurementsâ€¦");
                 }
             }
         } else {
@@ -5096,6 +5097,7 @@ impl BenchUpApp {
         .then(|| renderer::SceneKey {
             joinery_members: self.joinery_edit_members(),
             joint_preview,
+            grain_preview:self.grain_preview_axes(),
             model_revision,
             edit_context: model.edit_context,
             camera: camera.clone(),
@@ -5961,7 +5963,7 @@ impl BenchUpApp {
                     destination = Some(None);
                 }
                 for id in &path {
-                    ui.text_label(RichText::new("›").color(colors.muted));
+                    ui.text_label(RichText::new("â€º").color(colors.muted));
                     if ui.small_button(&self.doc.model.objects[id].name).clicked() {
                         destination = Some(Some(*id));
                     }

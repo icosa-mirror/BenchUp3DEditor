@@ -91,8 +91,13 @@ not yet wired. Current transient overlays reflect operations performed through t
 editor panel. Rotation graphics now share world-space arc/reference geometry with
 desktop. Modeling confirmation/value/error messages and transient text annotations
 also share their original producers. Incomplete measurement snap markers and hints
-use the retained billboard path. Remaining visual work includes grain patterns,
-paste previews and final hint/status/handle coverage. The duplicated 2D viewport
+use the retained billboard path. Grain now uses GPU dash/end-grain patterns with
+the existing physical spacing, deterministic jitter and face-interior anchors.
+Compact per-object axis textures support transformed instances and live previews;
+preview motion does not rebuild face meshes or CPU mark lists. The desktop path
+shares the same anchor producer. An isolated assigned-grain eye snapshot renders
+the patterns on the RTX 4090. Remaining visual work includes paste previews and
+final hint/status/handle coverage. The duplicated 2D viewport
 remains for comparison and existing tool interaction while these gaps are closed.
 
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.
