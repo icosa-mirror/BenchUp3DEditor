@@ -101,6 +101,22 @@ impl BenchUpApp {
             }
         }
         self.update_text_pointer(pos);
+        let ray = self
+            .doc
+            .camera
+            .ray(dv(pos - self.viewport.min), dv(self.viewport.size()));
+        let target = self
+            .pick_at(dv(pos - self.viewport.min), dv(self.viewport.size()), false)
+            .or_else(|| {
+                self.doc
+                    .model
+                    .nearest_context_face(ray)
+                    .and_then(|(id, _, _)| self.doc.model.entity_in_context(id))
+            });
+        self.text_click_at_snap(target, ctx);
+    }
+
+    pub(super) fn text_click_at_snap(&mut self, target: Option<u64>, ctx: &egui::Context) {
         if let Some(m) = self.measurement.take() {
             self.text_editor = Some(TextEditor {
                 id: None,
@@ -110,18 +126,6 @@ impl BenchUpApp {
             });
             Self::request_name_input_focus(ctx, egui::Id::unique("attached_text_input"));
         } else if let Some(snap) = self.snap {
-            let ray = self
-                .doc
-                .camera
-                .ray(dv(pos - self.viewport.min), dv(self.viewport.size()));
-            let target = self
-                .pick_at(dv(pos - self.viewport.min), dv(self.viewport.size()), false)
-                .or_else(|| {
-                    self.doc
-                        .model
-                        .nearest_context_face(ray)
-                        .and_then(|(id, _, _)| self.doc.model.entity_in_context(id))
-                });
             let text = target
                 .and_then(|id| {
                     if let Some(object) = self.doc.model.objects.get(&id) {

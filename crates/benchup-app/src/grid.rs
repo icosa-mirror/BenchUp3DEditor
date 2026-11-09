@@ -402,13 +402,16 @@ pub(super) fn snap_with_geometry(
 
 impl BenchUpApp {
     pub(super) fn apply_grid_snap(&mut self) {
+        self.apply_grid_snap_in_plane(None);
+    }
+    pub(super) fn apply_grid_snap_in_plane(&mut self, plane_override: Option<DVec3>) {
         if self.snap_to_grid {
             let model = if self.tool == Tool::GrainDirection && self.grain_uses_evaluated_geometry() {
                 self.joinery_geometry.result.as_ref().map_or(&self.doc.model, |result| &result.model)
             } else {
                 &self.doc.model
             };
-            let plane = self
+            let plane = plane_override.or_else(|| self
                 .drawing
                 .as_ref()
                 .map(|drawing| drawing.normal)
@@ -417,7 +420,7 @@ impl BenchUpApp {
                         .then(|| self.plane_lock().map(Axis::vector))
                         .flatten()
                 })
-                .or_else(|| self.measurement_plane().map(|(_, normal)| normal));
+                .or_else(|| self.measurement_plane().map(|(_, normal)| normal)));
             self.snap = self.snap.map(|target| {
                 let start = self
                     .trace_start()

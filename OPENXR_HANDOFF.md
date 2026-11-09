@@ -83,9 +83,17 @@ Generated evaluated faces that lack an original document face cannot be painted
 directly; those hits report the existing paint instructions. Continuous erase
 sweeps and standalone-edge targeting remain future work.
 
+Attached Text accepts an anchor on a hit face followed by a label position in
+model space. Placement uses a controller-facing plane captured at the first
+click, with geometry/axis/grid snapping, the shared transient leader preview and
+the existing text dialog/commit/undo path. Enter or accept the contents on the
+editor panel; no XR virtual keyboard is implemented. Editing an existing label
+by directly ray-picking its billboard remains future work. The shared grid helper
+accepts an explicit working-plane normal for XR while keeping desktop defaults.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-freehand, text, transforms, solid tools and section handles. Those tools
+freehand, transforms, solid tools and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

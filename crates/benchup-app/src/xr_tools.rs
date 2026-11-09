@@ -35,6 +35,7 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::TapeMeasure => "Trigger: first point, then second point. Cancel clears.",
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
+        Tool::Text => "Trigger: attach, then label position. Edit text on the panel.",
         Tool::Select => "Trigger selects. Cancel clears selection.",
         Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
         Tool::Erase => "Trigger erases the highlighted entity. Undo restores it.",
@@ -140,7 +141,11 @@ impl BenchUpApp {
                 }
             });
             ui.horizontal(|ui| {
-                for (label, tool) in [("Paint", Tool::Paint), ("Erase", Tool::Erase)] {
+                for (label, tool) in [
+                    ("Paint", Tool::Paint),
+                    ("Erase", Tool::Erase),
+                    ("Text", Tool::Text),
+                ] {
                     if ui
                         .add_sized(
                             [100., 42.],
@@ -267,6 +272,7 @@ impl BenchUpApp {
                 | Tool::TapeMeasure
                 | Tool::Protractor
                 | Tool::Dimensions
+                | Tool::Text
         ) {
             self.snap = None;
             if clicked {
@@ -296,15 +302,49 @@ impl BenchUpApp {
         {
             drawing.set_normal(drawing.surface_normal);
         }
-        let normal = self
-            .measurement_plane()
-            .map(|p| p.1)
+        let normal = (self.tool == Tool::Text)
+            .then(|| {
+                self.measurement
+                    .as_ref()
+                    .and_then(|m| m.normal.try_normalize())
+            })
+            .flatten()
+            .or_else(|| self.measurement_plane().map(|p| p.1))
             .or_else(|| self.drawing.as_ref().map(|drawing| drawing.normal))
             .or(state.line_normal)
             .unwrap_or(DVec3::Z);
         self.snap = self.xr_ray_snap(pointer, start, normal);
         self.xr_shape_plane(pointer.ray);
-        self.apply_grid_snap();
+        if self.tool == Tool::Text && start.is_none() {
+            // A new leader must attach to geometry, even with snapping disabled.
+            self.snap = pointer.hit.map(|hit| {
+                self.snap
+                    .filter(|snap| {
+                        snap.kind != Inference::Plane
+                            && (snap.point - hit.point).dot(hit.normal).abs() < 1e-6
+                    })
+                    .unwrap_or(Snap {
+                        point: hit.point,
+                        kind: Inference::OnFace,
+                    })
+            });
+        }
+        let plane = self
+            .drawing
+            .as_ref()
+            .map(|drawing| drawing.normal)
+            .or_else(|| {
+                (self.tool != Tool::Dimensions)
+                    .then(|| self.plane_lock().map(Axis::vector))
+                    .flatten()
+            })
+            .unwrap_or(normal);
+        self.apply_grid_snap_in_plane(Some(plane));
+        if self.tool == Tool::Text
+            && let (Some(m), Some(snap)) = (&mut self.measurement, self.snap)
+        {
+            m.offset = snap.point - m.points[0];
+        }
         let valid_offset = self.xr_measurement_offset(pointer.ray);
         if !clicked || !valid_offset {
             return;
@@ -325,6 +365,18 @@ impl BenchUpApp {
                         .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
                 });
                 self.begin_drawing_at_snap(surface.map(|hit| hit.normal));
+            }
+        } else if self.tool == Tool::Text {
+            if self.snap.is_none() {
+                self.say(
+                    ctx,
+                    "Point at geometry to attach text, or at the label plane to place it.",
+                );
+                return;
+            }
+            self.text_click_at_snap(pointer.hit.map(|hit| hit.entity), ctx);
+            if let Some(m) = &mut self.measurement {
+                m.normal = pointer.ray.direction;
             }
         } else if self.measurement_precision_available() && !self.length_input.trim().is_empty() {
             self.commit_measurement_value(ctx);
