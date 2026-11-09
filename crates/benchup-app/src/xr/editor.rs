@@ -225,6 +225,9 @@ impl Editor {
         let output = self.ctx.run_ui(raw, |ui| {
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
+            if preferences.immersive_scene {
+                self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source());
+            }
             egui::Area::new(egui::Id::unique("benchup.xr.panel_controls"))
                 .order(egui::Order::Foreground)
                 .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -28.0))

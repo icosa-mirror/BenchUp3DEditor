@@ -346,6 +346,11 @@ not an instruction to begin a broad validation pass now.
 
 ## Stereo rendering decision: retain two passes for now
 
+The user will next test in the headset once the immersive viewport has visual
+equivalence to the existing 2D viewport. Do not request incremental hardware
+checks before that point. Continue functionality work with validation deferred;
+do not describe untested overlays as visually confirmed.
+
 The user agreed to defer multiview/single-pass instancing while functionality is
 being built. Both eyes already share retained scene geometry and authoritative
 tool/document state. Separate eye rendering is an intentional first step, not a

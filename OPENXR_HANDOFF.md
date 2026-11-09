@@ -20,6 +20,24 @@ The initial plan/panel milestone is commit `e21b8c9`.
 
 ## Implemented
 
+### Current work: immersive visual parity
+
+The next user headset check is gated on visual equivalence to the desktop model
+viewport. Do not request incremental headset tests. Validation suites, backend
+benchmarking and Vulkan validation remain deferred while functionality advances.
+
+World text now uses retained glyph buffers and the editor's shared font atlas:
+saved text entities and leaders, group names, saved dimension values and extension
+lines. Units, evaluated model coordinates, visibility settings and selection colors
+come from the existing model/editor state. Both eyes share one head-facing layout;
+projection and readable angular sizing run on the GPU. Glyphs are staged before
+the panel atlas upload, and reshaped only when content/settings/font scale change.
+
+This is not a claim of visual equivalence: exact owner-aware label occlusion,
+dimension end ticks, inference glyphs, tool previews, sections, specialized display
+modes and joinery/fastener feedback still need completion. No new headset visual
+confirmation has been requested for these overlays.
+
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.
 - Native `crates/benchup-app/src/xr.rs`: physical panel dimensions and validated
   controller-ray-to-logical-UI mapping, with four regression tests.

@@ -31,6 +31,8 @@ pub(super) struct Scene {
     picking: crate::picking::PickingCache,
     input: Option<super::input::SceneInput>,
     lines: super::world_lines::Lines,
+    text: super::world_text::Text,
+    head: DMat4,
 }
 
 impl Scene {
@@ -46,10 +48,13 @@ impl Scene {
             picking: Default::default(),
             input: None,
             lines: super::world_lines::Lines::new(device, format),
+            text: super::world_text::Text::new(device, format),
+            head: DMat4::IDENTITY,
         }
     }
 
     pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: bool) {
+        self.head = pose_matrix(anchor);
         self.faces
             .update_for_revision(&source.model, source.revision);
         self.entities
@@ -76,6 +81,10 @@ impl Scene {
 
     pub fn set_input(&mut self, input: Option<super::input::SceneInput>) {
         self.input = input;
+    }
+
+    pub fn stage_labels(&mut self, ctx: &egui::Context, source: &Source) {
+        self.text.stage(ctx, source, self.input.and_then(|input| input.hit).map(|hit| hit.entity));
     }
 
     pub fn pick_ray(&self, ray: benchup_core::Ray, scale: f32) -> Option<super::input::SceneHit> {
@@ -215,6 +224,7 @@ impl Scene {
                 u64::from(source.display.grid),
                 u64::from(source.display.axes),
                 source.display.grid_max_length.to_bits(),
+                self.text.revision,
             ];
             self.lines.references(device, reference_key, || {
                 let mut lines = Vec::new();
@@ -257,10 +267,14 @@ impl Scene {
                         lines.push(Line::new(-origin, axis * half - origin, color, 2.0));
                     }
                 }
+                for &(a, b, color) in &self.text.lines {
+                    lines.push(Line::new(a - origin, b - origin, color, 1.5));
+                }
                 lines
             });
             let transform = placement.model_to_tracking(preferences.scene_scale as f64);
             let tracking_view = projection(eye.fov, 0.03, 200.0) * pose_matrix(eye.pose).inverse();
+            self.text.prepare(device, queue, origin, tracking_view, transform, self.head);
             let mut pointer = Vec::new();
             if let Some(input) = self.input {
                 if let Some(hit) = input.hit {
@@ -327,6 +341,7 @@ impl Scene {
             let mut pass = pass.forget_lifetime();
             renderer.render(&mut pass, &jobs, &screen);
             self.lines.paint(&mut pass, size);
+            self.text.paint(device, renderer, &mut pass);
         }
         let submission = queue.submit(commands.into_iter().chain([encoder.finish()]));
         submission
