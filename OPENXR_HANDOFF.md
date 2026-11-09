@@ -72,6 +72,12 @@ mirroring, native window services and persistent XR controls remain.
 
 ## Immersive 3D continuation
 
+Stereo decision: retain the current two-eye-pass renderer while implementing
+functionality. The user agreed to defer multiview/single-pass instancing. Keep
+shared geometry and view-neutral overlay data; future work is frame submission
+batching, later timing-based prioritization, then layered resources/view-indexed
+shaders and a two-pass fallback. See the decision section in OPENXR_PLAN.md.
+
 The user has clarified the target: the immersive view must replace the 2D model
 viewport, including spatial hints, overlays and text labels, rather than remain a
 secondary inspection view. `OPENXR_PLAN.md` now inventories the existing paths

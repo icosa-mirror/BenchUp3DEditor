@@ -343,3 +343,34 @@ projection or duplicate meshes per eye. Persist any new display/label/tool optio
 through the established shared settings. Validation remains deferred per the
 user's current instruction; these items define the functionality still to build,
 not an instruction to begin a broad validation pass now.
+
+## Stereo rendering decision: retain two passes for now
+
+The user agreed to defer multiview/single-pass instancing while functionality is
+being built. Both eyes already share retained scene geometry and authoritative
+tool/document state. Separate eye rendering is an intentional first step, not a
+plan to rebuild scene geometry per eye. Keep the overlay/view interfaces neutral
+so the rendering backend can later process multiple views together.
+
+Multiview can reduce CPU draw-submission overhead, but it does not remove the
+need to produce both eye images. Do not assume a twofold frame-rate gain. wgpu
+30 exposes MULTIVIEW and shader view indices; adoption here also requires layered
+eye/depth targets, view-indexed camera data, and compatible visibility, line and
+text passes. Sources: [Khronos multiview guide](https://docs.vulkan.org/tutorial/latest/OpenXR_Vulkan_Spatial_Computing/08_Slang_Spatial_Shaders/04_incorporating_into_the_engine.html),
+[wgpu MULTIVIEW](https://docs.rs/wgpu/30.0.1/wgpu/struct.Features.html#associatedconstant.MULTIVIEW).
+
+Future performance work, after the current functionality priority:
+
+1. Batch panel/eye submissions and wait once per XR frame. The prototype currently
+   waits after each imported image; retain image ownership/layout guarantees and
+   keep all referenced views/resources alive through completion.
+2. Once validation/profiling is resumed, use representative scenes and frame
+   timings to distinguish CPU submission, vertex/visibility work and fragment
+   cost. Decide multiview priority from those results, without a benchmark detour
+   during the present functionality pass.
+3. Add multiview capability negotiation, layered swapchain/depth/visibility
+   resources and view-indexed shader uniforms. Migrate geometry, overlays and
+   text together, retaining the two-pass path as a backend fallback.
+
+Current priorities remain world-ray interaction, shared GPU overlays, readable
+world text/dimensions and tool parity, then replacing the duplicate 2D model view.
