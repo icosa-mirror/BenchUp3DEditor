@@ -67,6 +67,9 @@ Windows clipboard backend is enabled. Desktop mouse/focus events do not replace
 the headset pointer/focus; lost keyboard focus releases keys and inactive XR
 frames discard queued input. Direct world cancellation also runs when rendering
 is skipped, preventing resumed frames from committing an interrupted grab/stroke.
+The panel's Close button and File > Quit forward root-viewport Close commands to
+the same native/session shutdown path as desktop Close. Other native viewport
+commands and desktop mirroring remain pending.
 
 1. Run the complete existing editor as an interactive 2D panel in a headset.
 2. Separate the editor UI from the model viewport: retain readable floating UI

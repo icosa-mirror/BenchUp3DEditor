@@ -333,6 +333,10 @@ impl Editor {
             return Err(error.into());
         }
         if let Some(native) = &self.native_output {
+            if output.viewport_output.get(&egui::ViewportId::ROOT)
+                .is_some_and(|viewport| viewport.commands.iter().any(|command| matches!(command,egui::ViewportCommand::Close))) {
+                native.request_close();
+            }
             native.platform_output(std::mem::take(&mut output.platform_output));
         }
         Ok(output)

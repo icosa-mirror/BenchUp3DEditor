@@ -55,6 +55,12 @@ Cancellation now reaches unfinished world tools even on skipped render frames
 with no panel events. This prevents a pending stroke or grab from being committed
 as an apparent release when XR tracking/focus returns.
 
+The panel editor's Close button and File > Quit now forward the root viewport's
+Close command to the native thread and share desktop Close's shutdown path.
+Repeated close requests do not reset the shutdown deadline. The native build
+passes; live session teardown is still untested. In-panel minimize/maximize
+commands and desktop mirroring remain future host work.
+
 ### Direct controller-ray drawing and measurements
 
 Scene clicks now honor the active tool instead of switching to Select. Line,

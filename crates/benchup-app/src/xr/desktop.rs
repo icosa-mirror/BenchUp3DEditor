@@ -21,6 +21,7 @@ enum Event {
     Finished(Result<(), String>),
     Ready(egui::Context),
     PlatformOutput(egui::PlatformOutput),
+    CloseRequested,
 }
 
 pub(super) struct KeyboardInput {
@@ -36,6 +37,9 @@ impl NativeOutput {
     }
     pub fn platform_output(&self, output: egui::PlatformOutput) {
         let _ = self.0.send_event(Event::PlatformOutput(output));
+    }
+    pub fn request_close(&self) {
+        let _ = self.0.send_event(Event::CloseRequested);
     }
 }
 
@@ -57,6 +61,21 @@ struct Desktop {
     keys: Vec<egui::Key>,
     keyboard_tx: Sender<KeyboardInput>,
     keyboard_rx: Option<Receiver<KeyboardInput>>,
+}
+
+impl Desktop {
+    fn request_close(&mut self, event_loop: &ActiveEventLoop) {
+        if self.closing.is_some() {
+            return;
+        }
+        println!("[BenchUpXR] Close requested; ending the editor session.");
+        self.close.store(true, Ordering::Relaxed);
+        self.closing = Some(Instant::now());
+        self.window = None;
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            Instant::now() + Duration::from_millis(50),
+        ));
+    }
 }
 
 impl ApplicationHandler<Event> for Desktop {
@@ -168,20 +187,13 @@ impl ApplicationHandler<Event> for Desktop {
             }
         }
         if let WindowEvent::CloseRequested = event {
-            println!("[BenchUpXR] Desktop Close requested.");
-            self.close.store(true, Ordering::Relaxed);
-            self.closing = Some(Instant::now());
-            // Remove the window/taskbar entry immediately while XR releases its
-            // swapchains and device on its own thread.
-            self.window = None;
-            event_loop.set_control_flow(ControlFlow::WaitUntil(
-                Instant::now() + Duration::from_millis(50),
-            ));
+            self.request_close(event_loop);
         }
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         match event {
+            Event::CloseRequested => self.request_close(event_loop),
             Event::Finished(result) => {
                 self.finished = true;
                 self.result = Some(result);
