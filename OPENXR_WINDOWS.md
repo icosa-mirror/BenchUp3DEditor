@@ -184,3 +184,24 @@ requested without changing the active runtime. Full-editor XR session submission
 still requires a connected headset; the successful desktop PNG cannot substitute
 for that result. Logs are `.local/openxr/editor-desktop-snapshot.log`,
 `editor-snapshot-resume.log` and `preflight-resume.log`.
+
+### Active-headset editor verification
+
+After reconnection, preflight passed again with SteamVR/OpenXR 2.18.4 and the
+Vive headset identity. The `openxr_editor` example selected the RTX 4090, created
+the 1440 × 900 three-image sRGB swapchain and submitted the complete editor quad.
+The session reached VISIBLE and FOCUSED. The user confirmed that the editor was
+visible, readable, upright and stable in the world during head movement.
+
+The first active-headset run submitted 4,094 quad frames and stopped cleanly at
+the timed exit. This frame count is not a performance benchmark: focus/visibility
+changed during the run, and GPU timing and missed compositor frames were not
+measured. The known runtime shader/image/copy/teardown diagnostics and Naga
+SPIR-V errors remain; the clean-validation gate is still open. Evidence is in
+`.local/openxr/editor-headset-ready.log`. Controller editing, native input/window
+services, desktop mirroring and phase 1 end-to-end acceptance are still pending.
+
+A second session started successfully on the same active runtime, reached
+VISIBLE, submitted 4,258 editor quad frames and stopped cleanly. Its log is
+`.local/openxr/editor-headset-restart.log`. Both processes exited successfully;
+no SteamVR restart or system runtime change was needed between them.

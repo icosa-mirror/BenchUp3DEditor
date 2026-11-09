@@ -44,14 +44,18 @@ commands, machine evidence, validation setup, and current limits.
 `openxr_panel` now implements the runtime-selected Vulkan/wgpu bridge, borrowed
 swapchain images, an orientation-pattern quad, frame pacing, and session shutdown.
 Successive unattended runs submitted quad frames on the RTX 4090 and stopped
-cleanly. VISIBLE/FOCUSED state and human-observed panel appearance remain untested.
+cleanly. A later active-headset editor run reached VISIBLE/FOCUSED and submitted
+4,094 editor quad frames before a clean stop. The user confirmed that the editor
+was visible, readable, upright, and stable in the world during head movement.
+A second session reached VISIBLE, submitted 4,258 editor frames and stopped
+cleanly without restarting SteamVR.
 Khronos validation still reports runtime-side shader/image/copy errors, including
 the runtime's BlankEyeBuffer; the clean-validation gate has not passed. Editor
 hosting is now implemented as a render-only preview using the shared editor UI
 and GPU viewport callbacks. An independent hardware Vulkan snapshot of the
-bundled Example was inspected on the RTX 4090. Full-editor headset submission is
-not yet verified: following the drive interruption, SteamVR reports no connected
-headset and OpenXR instance creation fails. The same SPIR-V layout errors also
+bundled Example was inspected on the RTX 4090. Full-editor headset submission
+is now verified as a render-only preview after the user reconnected the headset.
+The same SPIR-V layout errors also
 reproduce without an XR session and match wgpu/Naga issue #7696. Input integration,
 desktop mirroring, native window services and persistent XR controls remain.
 

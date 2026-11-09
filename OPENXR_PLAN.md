@@ -236,8 +236,12 @@ key/value format and immediate capture/restore persistence. The desktop and web
 entry points still use eframe through this same UI seam.
 
 An independent RTX 4090 Vulkan snapshot rendered the bundled Example editor and
-was visually inspected. This does not establish editor submission in a headset:
-SteamVR currently reports no connected headset and OpenXR instance creation
-fails. The snapshot also reproduces the known wgpu/Naga #7696 SPIR-V validation
+was visually inspected. After the user reconnected the headset, an editor quad
+run reached VISIBLE/FOCUSED and submitted 4,094 frames before stopping cleanly.
+The user confirmed the editor was visible, readable, upright, and stable during
+head movement. This establishes render-only headset submission.
+A second session reached VISIBLE, submitted 4,258 frames and stopped cleanly
+without restarting SteamVR. The independent
+snapshot also reproduces the known wgpu/Naga #7696 SPIR-V validation
 errors without an XR session. Desktop mirroring, input, native window-command
 services, live headset validation and phase 1 acceptance remain outstanding.
