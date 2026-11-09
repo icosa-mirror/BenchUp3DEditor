@@ -1,11 +1,30 @@
 //! OpenXR actions and panel pointer capture. No document or tool state is copied.
 use super::EditorPanel;
+use benchup_core::Ray;
 use eframe::egui::{self, Event, Modifiers, PointerButton, Pos2};
 use glam::{DQuat, DVec3};
 use openxr as xr;
 
+#[derive(Clone, Copy)]
+pub(super) struct SceneHit {
+    pub entity: u64,
+    pub point: DVec3,
+    pub tracking_point: DVec3,
+    pub distance: f64,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct SceneInput {
+    pub ray: Ray,
+    pub hit: Option<SceneHit>,
+    pub select: bool,
+    pub clear: bool,
+    pub pressed: bool,
+}
+
 #[derive(Clone, Copy, Default)]
 struct Hand {
+    ray: Option<Ray>,
     position: Option<Pos2>,
     hit_distance: Option<f64>,
     buttons: [bool; 2],
@@ -18,6 +37,7 @@ pub(super) struct FrameInput {
     pub cursor: Option<Pos2>,
     pub pressed: bool,
     pub focused: bool,
+    pub scene: Option<SceneInput>,
 }
 
 #[derive(Default)]
@@ -174,6 +194,10 @@ pub(super) struct Controllers {
     set: xr::ActionSet,
     pointer: Pointer,
     previous_flags: [xr::SpaceLocationFlags; 2],
+    scene_owner: Option<usize>,
+    scene_buttons: [[bool; 2]; 2],
+    scene_armed: [bool; 2],
+    scene_captured: bool,
 }
 
 impl Controllers {
@@ -262,6 +286,10 @@ impl Controllers {
             set,
             pointer: Pointer::default(),
             previous_flags: [xr::SpaceLocationFlags::EMPTY; 2],
+            scene_owner: None,
+            scene_buttons: [[false; 2]; 2],
+            scene_armed: [false; 2],
+            scene_captured: false,
         })
     }
 
@@ -274,9 +302,11 @@ impl Controllers {
         panel_pose: xr::Posef,
         focused: bool,
         seconds: f32,
+        scene_enabled: bool,
+        mut scene_hit: impl FnMut(Ray) -> Option<SceneHit>,
     ) -> xr::Result<FrameInput> {
         if !focused {
-            return Ok(self.pointer.update([Hand::default(); 2], false, seconds));
+            return Ok(self.cancel());
         }
         session.sync_actions(&[(&self.set).into()])?;
         let panel_rotation = rotation(panel_pose.orientation);
@@ -310,9 +340,7 @@ impl Controllers {
             let origin = panel_rotation.conjugate()
                 * (position(location.pose.position) - position(panel_pose.position));
             let direction = panel_rotation.conjugate() * (aim_rotation * -DVec3::Z);
-            let Some(projected) = panel.project_ray(origin, direction) else {
-                continue;
-            };
+            let projected = panel.project_ray(origin, direction);
             let select = self.select.state(session, path)?;
             if !select.is_active {
                 continue;
@@ -321,10 +349,16 @@ impl Controllers {
             let scroll = self.scroll.state(session, path)?;
             let touch = self.scroll_touch.state(session, path)?;
             *hand = Hand {
-                position: Some(egui::pos2(
-                    projected.position_points.x as f32,
-                    projected.position_points.y as f32,
-                )),
+                ray: Some(Ray {
+                    origin: position(location.pose.position),
+                    direction: aim_rotation * -DVec3::Z,
+                }),
+                position: projected.map(|projected| {
+                    egui::pos2(
+                        projected.position_points.x as f32,
+                        projected.position_points.y as f32,
+                    )
+                }),
                 hit_distance: panel
                     .hit_test(origin, direction)
                     .map(|hit| hit.distance_metres),
@@ -339,10 +373,93 @@ impl Controllers {
                 },
             };
         }
-        Ok(self.pointer.update(hands, true, seconds))
+        let panel_captured = self.pointer.down.iter().any(|down| *down);
+        let panel_press = (0..2).any(|index| {
+            hands[index].hit_distance.is_some()
+                && (0..2).any(|button| {
+                    hands[index].buttons[button] && !self.pointer.previous[index][button]
+                })
+        });
+        for (index, hand) in hands.iter().enumerate() {
+            if hand.ray.is_none() {
+                self.scene_armed[index] = false;
+            } else if !hand.buttons.iter().any(|down| *down) {
+                self.scene_armed[index] = true;
+            }
+        }
+        let mut scene = None;
+        if scene_enabled && !panel_captured && (!panel_press || self.scene_captured) {
+            let hits = hands.map(|hand| hand.ray.and_then(&mut scene_hit));
+            let eligible = |index: usize| {
+                hands[index].ray.is_some()
+                    && (hands[index].hit_distance.is_none()
+                        || (self.scene_captured && self.scene_owner == Some(index)))
+            };
+            let pressed = (0..2).find(|&index| {
+                eligible(index)
+                    && self.scene_armed[index]
+                    && (0..2).any(|button| {
+                        hands[index].buttons[button] && !self.scene_buttons[index][button]
+                    })
+            });
+            let owner = if self.scene_captured {
+                self.scene_owner.filter(|&index| hands[index].ray.is_some())
+            } else {
+                pressed
+                    .or_else(|| self.scene_owner.filter(|&index| eligible(index)))
+                    .or_else(|| {
+                        [1, 0]
+                            .into_iter()
+                            .filter(|&index| eligible(index))
+                            .min_by(|&a, &b| {
+                                hits[a]
+                                    .map_or(f64::INFINITY, |hit| hit.distance)
+                                    .total_cmp(&hits[b].map_or(f64::INFINITY, |hit| hit.distance))
+                            })
+                    })
+            };
+            if let Some(index) = owner {
+                let select = self.scene_armed[index]
+                    && hands[index].buttons[0]
+                    && !self.scene_buttons[index][0];
+                let clear = self.scene_armed[index]
+                    && hands[index].buttons[1]
+                    && !self.scene_buttons[index][1];
+                self.scene_captured = hands[index].buttons.iter().any(|down| *down)
+                    && (self.scene_captured || select || clear);
+                self.scene_owner = Some(index);
+                scene = Some(SceneInput {
+                    ray: hands[index].ray.unwrap(),
+                    hit: hits[index],
+                    select,
+                    clear,
+                    pressed: self.scene_captured,
+                });
+            } else {
+                self.scene_owner = None;
+                self.scene_captured = false;
+            }
+        } else {
+            self.scene_owner = None;
+            self.scene_captured = false;
+        }
+        self.scene_buttons = hands.map(|hand| hand.buttons);
+        let scene_click = scene.is_some_and(|scene| scene.select || scene.clear);
+        let mut output = if self.scene_captured || scene_click {
+            self.pointer.update([Hand::default(); 2], false, seconds)
+        } else {
+            self.pointer.update(hands, true, seconds)
+        };
+        output.focused = true;
+        output.scene = scene;
+        Ok(output)
     }
 
     pub fn cancel(&mut self) -> FrameInput {
+        self.scene_owner = None;
+        self.scene_captured = false;
+        self.scene_armed = [false; 2];
+        self.scene_buttons = [[false; 2]; 2];
         self.pointer.update([Hand::default(); 2], false, 0.0)
     }
 

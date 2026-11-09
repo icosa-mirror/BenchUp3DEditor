@@ -5,7 +5,7 @@ pub(super) fn spacing(camera: &Camera) -> f64 {
     10.0_f64.powf((camera.distance / 15.).log10().floor())
 }
 
-pub(super) fn configured_spacing(camera: &Camera, display: &benchup_core::DisplaySettings) -> f64 {
+pub(crate) fn configured_spacing(camera: &Camera, display: &benchup_core::DisplaySettings) -> f64 {
     if display.grid_auto_size {
         spacing(camera)
     } else {

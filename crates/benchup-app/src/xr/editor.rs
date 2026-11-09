@@ -151,7 +151,7 @@ impl Editor {
             input: Default::default(),
             cursor: super::cursor::Cursor::new(device, format),
             recenter_requested: false,
-            scene: super::immersive::Scene::new(),
+            scene: super::immersive::Scene::new(device, format),
             fit_scene_requested: true,
         })
     }
@@ -334,11 +334,25 @@ impl Editor {
     }
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
+        self.scene.set_input(input.scene);
+        if let Some(scene) = input.scene {
+            if scene.select || scene.clear {
+                self.app.xr_select_entity(
+                    if scene.clear {
+                        None
+                    } else {
+                        scene.hit.map(|hit| hit.entity)
+                    },
+                    &self.ctx,
+                );
+            }
+        }
         // Retain releases/cancellation accumulated while XR skipped rendering.
         self.input.events.append(&mut input.events);
         self.input.cursor = input.cursor;
         self.input.pressed = input.pressed;
         self.input.focused = input.focused;
+        self.input.scene = input.scene;
     }
 
     pub(super) fn logical_size(&self) -> egui::Vec2 {
@@ -347,6 +361,16 @@ impl Editor {
 
     pub(super) fn panel_preferences(&self) -> crate::app_host::XrPanelPreferences {
         self.app.xr_panel_preferences()
+    }
+
+    pub(super) fn scene_interaction_enabled(&self) -> bool {
+        self.app.xr_panel_preferences().immersive_scene
+            && self.app.xr_scene_interaction_enabled(&self.ctx)
+    }
+
+    pub(super) fn pick_scene_ray(&self, ray: benchup_core::Ray) -> Option<super::input::SceneHit> {
+        self.scene
+            .pick_ray(ray, self.app.xr_panel_preferences().scene_scale)
     }
 
     pub(super) fn take_recenter_request(&mut self) -> bool {

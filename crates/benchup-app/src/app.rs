@@ -58,7 +58,7 @@ mod section_gizmo;
 #[path = "finish_settings.rs"]
 mod finish_settings;
 #[path = "grid.rs"]
-mod grid;
+pub(crate) mod grid;
 #[path = "grain_direction.rs"]
 mod grain_direction;
 #[path = "measurement_tools.rs"]
@@ -500,6 +500,19 @@ impl BenchUpApp {
             model: self.render_model.shared(), revision: self.render_model.revision(),
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected: self.selected.clone(),
         }
+    }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn xr_scene_interaction_enabled(&self, ctx: &egui::Context) -> bool {
+        !self.project.blocked() && ctx.memory(|memory| memory.top_modal_layer().is_none())
+    }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn xr_select_entity(&mut self, entity: Option<u64>, ctx: &egui::Context) {
+        if !self.xr_scene_interaction_enabled(ctx) { return; }
+        self.set_tool(Tool::Select);
+        self.selected = entity.filter(|id| self.doc.model.contains_entity(id)).into_iter().collect();
+        ctx.request_repaint();
     }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]

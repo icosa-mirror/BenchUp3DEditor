@@ -762,7 +762,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
             .ok_or("Invalid editor panel dimensions")?;
             let now = Instant::now();
             if frame.should_render {
-                editor.set_input(controllers.sample(
+                let input = controllers.sample(
                     &session,
                     &space,
                     frame.predicted_display_time,
@@ -770,7 +770,10 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
                     panel_pose,
                     focused,
                     now.duration_since(last_input).as_secs_f32(),
-                )?);
+                    editor.scene_interaction_enabled(),
+                    |ray| editor.pick_scene_ray(ray),
+                )?;
+                editor.set_input(input);
             } else {
                 editor.cancel_input(controllers.cancel(), &graphics.device, &graphics.queue)?;
             }

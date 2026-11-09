@@ -374,3 +374,25 @@ Future performance work, after the current functionality priority:
 
 Current priorities remain world-ray interaction, shared GPU overlays, readable
 world text/dimensions and tool parity, then replacing the duplicate 2D model view.
+
+### World interaction and overlay foundation
+
+Controller rays now query the existing spatial picking hierarchy in model space.
+Scene hits resolve to the existing editing-context entity; trigger selection
+updates the same application selection and inspector, with transient hover in
+the stereo renderer. Panel capture/presses take priority, scene capture cannot
+also click the UI, and modal dialogs block scene interaction. Current world
+interaction is selection; other tools remain on the panel.
+
+Retained instanced GPU lines now draw model axes, a bounded world-grid reference,
+and controller hit rays/markers. The grid uses the existing configured spacing;
+reference buffers update on configuration/placement changes, and pointer data is
+a small delta. Projection, near-plane clipping and line width happen on the GPU
+for each eye. The first grid reference is bounded rather than a complete infinite
+grid implementation. World labels/dimensions, tool previews and manipulation
+handles remain to migrate.
+
+The native executable built and a ten-second startup submitted stereo frames
+and stopped cleanly after 86 editor frames. Live selection/overlay behavior is
+not yet confirmed. Test suites, graphics validation and benchmarks remain
+deferred per the user's instruction.

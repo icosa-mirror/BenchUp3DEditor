@@ -72,6 +72,13 @@ mirroring, native window services and persistent XR controls remain.
 
 ## Immersive 3D continuation
 
+World input/overlay foundation: controller rays now reuse model-space picking;
+selection is shared with the inspector/document selection, and stereo hover,
+GPU axes/grid references and hit rays/markers are implemented. Panel capture and
+modal dialogs take precedence. The native build and ten-second startup passed
+(86 frames, clean stop); live interaction/overlay confirmation is deferred.
+Next functionality is world labels/dimensions, then further previews/handles.
+
 Stereo decision: retain the current two-eye-pass renderer while implementing
 functionality. The user agreed to defer multiview/single-pass instancing. Keep
 shared geometry and view-neutral overlay data; future work is frame submission
