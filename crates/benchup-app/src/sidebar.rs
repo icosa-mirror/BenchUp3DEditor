@@ -171,10 +171,11 @@ mod guide_preference_tests {
     fn xr_panel_preferences_save_without_model_edits_and_restore_with_legacy_defaults() {
         let old: InspectorPreferences = serde_json::from_str("{}").unwrap();
         assert_eq!(old.xr_panel, crate::app_host::XrPanelPreferences::default());
+        assert!(old.xr_panel.keep_upright);
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
-        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, ..Default::default() };
+        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, keep_upright:false, ..Default::default() };
         app.persist_inspector_changes(&ctx, Some(&mut storage), false);
         assert!(storage.flushed);
         assert!(!app.project.modified);

@@ -276,6 +276,8 @@ impl Editor {
                                     &mut preferences.immersive_scene,
                                     egui::RichText::new("3D view (look right)").size(18.0),
                                 );
+                                ui.checkbox(&mut preferences.keep_upright,egui::RichText::new("Keep upright").size(18.0))
+                                    .on_hover_text("Keep the scene upright while grabbing. Horizontal turning, vertical movement and scaling remain available.");
                                 let mut button = |label: &str| {
                                     ui.add_sized(
                                         [84.0, 42.0],
@@ -337,7 +339,7 @@ impl Editor {
     }
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
-        self.scene.navigate(input.navigation);
+        self.scene.navigate(input.navigation,self.app.xr_panel_preferences());
         self.scene.set_input(input.scene);
         if let Some(scene) = input.scene {
             if scene.select || scene.clear {

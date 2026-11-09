@@ -32,6 +32,14 @@ apply a uniform similarity transform to the XR scene root. Rendering, annotation
 environment and scene-ray picking use that same transform. The editor quad stays
 in place, and document/model coordinates and undo history are unchanged.
 
+The user confirmed two-grip navigation worked, then requested an upright lock.
+Keep upright now defaults on, limiting grab rotation to yaw around tracking Y;
+vertical translation and full hand-distance scaling remain available. The saved
+XR checkbox can restore free rotation. Older preference data defaults to upright,
+and checkbox changes persist immediately without model edits. Enabling upright
+on a tilted scene levels it around the scene center, preserving that point.
+Yaw freezes when hand separation becomes nearly vertical and rebases on recovery.
+
 Release either grip to leave the scene in place. Any held grip reserves pointing
 input, cancels captured UI/scene clicks and disarms held triggers until released.
 Focus/tracking loss or nearly coincident hands freezes navigation and requires
@@ -41,8 +49,12 @@ Scale is bounded, and Fit 3D resets the transient grab transform and saved 3D zo
 The HUD describes the current grab/release state. Tracking-space navigation is
 session-local; physical room poses are not written into saved document/settings.
 
-The executable builds and the offscreen eye-render startup passes. Actual grip
-bindings/motion need the next controller check; no headset result is claimed yet.
+The executable builds and the offscreen eye-render startup passes. The original
+live grip run records grab/release and scale transitions, matching the user's
+confirmation. Three isolated checks against the actual navigation module pass:
+tilt rejection with vertical movement, yaw/scaling with a fixed grab point, and
+leveling without a pivot jump. The new upright behavior awaits a headset check;
+broad backend/persistence suites remain deferred.
 
 ### Visual parity implementation
 

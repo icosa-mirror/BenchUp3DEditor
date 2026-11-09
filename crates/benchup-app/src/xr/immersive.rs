@@ -165,9 +165,14 @@ impl Scene {
         self.input = input;
     }
 
-    pub fn navigate(&mut self, input: super::navigation::Input) {
+    pub fn navigate(&mut self, input: super::navigation::Input, preferences: XrPanelPreferences) {
         let previous = self.navigation.grabbing();
-        self.navigation.update(input);
+        let pivot = self.placement.as_ref().map_or(DVec3::ZERO, |p| {
+            p.model_to_tracking(preferences.scene_scale as f64)
+                .transform_point3(p.center)
+        });
+        self.navigation
+            .update(input, preferences.keep_upright, pivot);
         if previous != self.navigation.grabbing() {
             println!(
                 "[BenchUpXR] Scene grab {} (relative scale {:.3})",

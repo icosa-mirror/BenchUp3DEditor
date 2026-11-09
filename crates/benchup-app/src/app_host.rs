@@ -11,6 +11,7 @@ pub(crate) struct XrPanelPreferences {
     pub ui_scale: f32,
     pub immersive_scene: bool,
     pub scene_scale: f32,
+    pub keep_upright:bool,
 }
 
 impl Default for XrPanelPreferences {
@@ -21,6 +22,7 @@ impl Default for XrPanelPreferences {
             ui_scale: 1.3,
             immersive_scene: true,
             scene_scale: 1.0,
+            keep_upright:true,
         }
     }
 }
@@ -41,6 +43,7 @@ impl XrPanelPreferences {
             ui_scale: clamp(self.ui_scale, defaults.ui_scale, 1.0, 1.6),
             immersive_scene: self.immersive_scene,
             scene_scale: clamp(self.scene_scale, defaults.scene_scale, 0.05, 20.0),
+            keep_upright:self.keep_upright,
         }
     }
 }
