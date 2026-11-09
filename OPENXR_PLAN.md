@@ -14,6 +14,10 @@ freehand/text, modeling transforms, solid tools and section-handle manipulation.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
 large XR buttons and polygon side controls persist through existing preferences.
+Paint and Erase now share desktop document/history operations for controller
+trigger clicks. Paint colour and face/group targets use saved shared preferences;
+immersive hover uses the shared tool-specific target. Continuous erase sweeps and
+painting evaluated-only generated faces are not yet implemented.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

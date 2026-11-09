@@ -36,6 +36,8 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
         Tool::Select => "Trigger selects. Cancel clears selection.",
+        Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
+        Tool::Erase => "Trigger erases the highlighted entity. Undo restores it.",
         _ => "This tool uses the editor panel.",
     }
 }
@@ -137,6 +139,47 @@ impl BenchUpApp {
                     }
                 }
             });
+            ui.horizontal(|ui| {
+                for (label, tool) in [("Paint", Tool::Paint), ("Erase", Tool::Erase)] {
+                    if ui
+                        .add_sized(
+                            [100., 42.],
+                            egui::Button::new(egui::RichText::new(label).size(18.))
+                                .selected(self.tool == tool),
+                        )
+                        .clicked()
+                    {
+                        self.set_tool(tool);
+                        self.persist_inspector_changes(&ctx, Some(storage), false);
+                    }
+                }
+                ui.label(egui::RichText::new("Colour").size(18.));
+                let changed = ui
+                    .scope(|ui| {
+                        ui.spacing_mut().interact_size = egui::vec2(48., 42.);
+                        ui.color_edit_button_srgb(&mut self.paint_color).changed()
+                    })
+                    .inner;
+                if changed {
+                    self.set_tool(Tool::Paint);
+                    self.persist_inspector_changes(&ctx, Some(storage), false);
+                }
+                for (label, target) in [("Face", PaintTarget::Face), ("Group", PaintTarget::Group)]
+                {
+                    if ui
+                        .add_sized(
+                            [100., 42.],
+                            egui::Button::new(egui::RichText::new(label).size(18.))
+                                .selected(self.paint_target == target),
+                        )
+                        .clicked()
+                    {
+                        self.paint_target = target;
+                        self.set_tool(Tool::Paint);
+                        self.persist_inspector_changes(&ctx, Some(storage), false);
+                    }
+                }
+            });
             ui.label(egui::RichText::new(hint(self.tool)).size(16.));
         });
     }
@@ -182,6 +225,27 @@ impl BenchUpApp {
             return;
         }
         let clicked = activate && pointer.activate;
+        if self.tool == Tool::Paint {
+            self.snap = None;
+            if self.paint_target == PaintTarget::Face {
+                self.hover = pointer
+                    .hit
+                    .map(|hit| hit.face)
+                    .filter(|id| self.doc.model.faces.contains_key(id));
+            }
+            if clicked {
+                self.paint_model_face(pointer.hit.map(|hit| hit.face), ctx);
+            }
+            return;
+        }
+        if self.tool == Tool::Erase {
+            self.snap = None;
+            self.hover = self.hover.filter(|id| !self.doc.model.is_locked(*id));
+            if clicked && let Some(id) = self.hover {
+                self.erase_entities(&BTreeSet::from([id]), tr!("app.erase_geometry"), ctx);
+            }
+            return;
+        }
         if self.tool == Tool::Select {
             if clicked {
                 self.selected = pointer

@@ -73,9 +73,19 @@ Surface planes, explicit shape-plane locks and target-driven plane alignment
 use the existing geometry routines. Large shape buttons and polygon Sides -/+
 controls use the existing immediately persisted tool preferences.
 
+Paint and Erase also accept trigger clicks on the immersive model. Paint reuses
+the desktop face/group operation; the large XR controls expose its existing saved
+colour and target preferences. Erase uses the same scoped/lock-aware removal and
+history operation as desktop selection/sweep erasing, with one target per click.
+The shared source now supplies hover to GPU rendering and annotations, preserving
+face-only paint hover instead of replacing it with the controller's whole group.
+Generated evaluated faces that lack an original document face cannot be painted
+directly; those hits report the existing paint instructions. Continuous erase
+sweeps and standalone-edge targeting remain future work.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-freehand, text, transforms, solid tools, paint and section handles. Those tools
+freehand, text, transforms, solid tools and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

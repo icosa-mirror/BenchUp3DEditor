@@ -901,9 +901,12 @@ impl BenchUpApp {
         }
     }
     fn erase_selected(&mut self, ctx: &egui::Context) {
+        self.erase_entities(&self.selected.clone(), tr!("app.erase_selection"), ctx);
+    }
+    fn erase_entities(&mut self, ids: &BTreeSet<u64>, label: &str, ctx: &egui::Context) {
         let before = self.doc.model.clone();
-        self.doc.model.erase(&self.selected);
-        self.finish_edit(tr!("app.erase_selection"), before, ctx);
+        self.doc.model.erase(ids);
+        self.finish_edit(label, before, ctx);
     }
     fn copy_selection(&mut self, ctx: &egui::Context) {
         if self.selected.is_empty() {
@@ -1545,34 +1548,38 @@ impl BenchUpApp {
         Some((id, snap))
     }
 
+    fn paint_model_face(&mut self, face: Option<u64>, ctx: &egui::Context) {
+        let Some(face) = face.filter(|id| self.doc.model.faces.contains_key(id)) else {
+            self.say(ctx, self.paint_instructions());
+            return;
+        };
+        let before = self.doc.model.clone();
+        let (result, label) = match self.paint_target {
+            PaintTarget::Face => (
+                self.doc.model.paint_face(face, self.paint_color),
+                tr!("app.paint_face"),
+            ),
+            PaintTarget::Group => {
+                let target = self.doc.model.entity_in_context(face).unwrap();
+                (
+                    self.doc.model.paint_object(target, self.paint_color),
+                    tr!("app.paint_group"),
+                )
+            }
+        };
+        match result {
+            Ok(()) => self.finish_edit(label, before, ctx),
+            Err(message) => self.say(ctx, message),
+        }
+    }
     fn begin_modeling(&mut self, pos: Pos2, ctx: &egui::Context) {
         self.last_move_copy = None;
         let size = dv(self.viewport.size());
         let pixel = dv(pos - self.viewport.min);
         let ray = self.doc.camera.ray(pixel, size);
         if self.tool == Tool::Paint {
-            if let Some((face, _, _)) = self.doc.model.nearest_context_face(ray) {
-                let before = self.doc.model.clone();
-                let (result, label) = match self.paint_target {
-                    PaintTarget::Face => (
-                        self.doc.model.paint_face(face, self.paint_color),
-                        tr!("app.paint_face"),
-                    ),
-                    PaintTarget::Group => {
-                        let target = self.doc.model.entity_in_context(face).unwrap();
-                        (
-                            self.doc.model.paint_object(target, self.paint_color),
-                            tr!("app.paint_group"),
-                        )
-                    }
-                };
-                match result {
-                    Ok(()) => self.finish_edit(label, before, ctx),
-                    Err(message) => self.say(ctx, message),
-                }
-            } else {
-                self.say(ctx, self.paint_instructions());
-            }
+            let face = self.doc.model.nearest_context_face(ray).map(|(id, _, _)| id);
+            self.paint_model_face(face, ctx);
             return;
         }
         let mut face_id = None;
@@ -4778,9 +4785,7 @@ impl BenchUpApp {
                             }
                             GestureKind::Erase { mut ids } => {
                                 ids.extend(self.sweep_erase(gesture.last, pos));
-                                let before = self.doc.model.clone();
-                                self.doc.model.erase(&ids);
-                                self.finish_edit(tr!("app.erase_geometry"), before, ctx);
+                                self.erase_entities(&ids, tr!("app.erase_geometry"), ctx);
                             }
                             GestureKind::Modeling
                                 if self.viewport.contains(pos)

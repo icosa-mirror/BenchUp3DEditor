@@ -258,10 +258,7 @@ impl Scene {
         self.text.stage(
             ctx,
             source,
-            self.input
-                .and_then(|input| input.hit)
-                .map(|hit| hit.entity)
-                .or(source.hover),
+            source.hover,
             None,
         );
         if let Some(paste) = &source.paste {
@@ -287,10 +284,7 @@ impl Scene {
             self.text.stage(
                 ctx,
                 source,
-                self.input
-                    .and_then(|input| input.hit)
-                    .map(|hit| hit.entity)
-                    .or(source.hover),
+                source.hover,
                 None,
             );
         } else {
@@ -428,11 +422,7 @@ impl Scene {
                     dark: self.dark,
                     tool: source.tool,
                     selected: source.selected.clone(),
-                    hover: self
-                        .input
-                        .and_then(|input| input.hit)
-                        .map(|hit| hit.entity)
-                        .or(source.hover),
+                    hover: source.hover,
                     outliner_hover: source.outliner_hover.clone(),
                     erasing: source.erasing.clone(),
                 };
