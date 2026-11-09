@@ -230,7 +230,7 @@ on-guide inference. Dense clusters beyond these local limits may omit a target;
 there is no full-scene pairwise intersection scan. Seven isolated checks pass.
 
 Remaining: off-face nearby geometry; desktop reference-acquisition parity; controller paths for
-direct annotation picking and flip-plane hover feedback. Legacy desktop-only navigation modes
+direct annotation picking. Legacy desktop-only navigation modes
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;
@@ -530,3 +530,15 @@ The existing preference regression coverage already exercises both guide-mode
 values and restoration; no new preference schema or defaults were introduced.
 The guide-workflow native OpenXR editor build passes. Headset confirmation of
 these controls and previews remains pending; broad validation stays deferred.
+
+
+Flip-plane controller hover now uses the same quads generated for the GPU
+overlay. Ray picking tests only those three retained quads, highlights the
+nearest displayed plane, and puts the pointer marker on it before the trigger
+is pressed. Trigger flipping uses that same hit. Moving onto the panel,
+losing focus/tracking or starting navigation clears the world hover. The
+former click-only helper no longer walks the selected geometry again. One
+additional focused quad test covers forward, parallel, behind, outside and
+degenerate cases; all eight isolated world-picking checks pass.
+The native editor build passes with the final paste-placement capture guard.
+Headset confirmation remains pending; broader validation is still deferred.

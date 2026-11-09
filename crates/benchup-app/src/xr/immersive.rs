@@ -312,6 +312,19 @@ impl Scene {
             origin: inverse.transform_point3(ray.origin),
             direction: inverse.transform_vector3(ray.direction).normalize(),
         };
+        if source.tool == benchup_core::Tool::Flip && !source.modeling && source.paste.is_none()
+            && let Some((&entity, (axis, point, _))) = source.selected.first().zip(
+                source.overlays.flip_planes.iter().filter_map(|&(axis,quad)| {
+                    let (point,depth) = super::world_picking::quad_point(model_ray,quad)?;
+                    Some((axis,point,depth))
+                }).min_by(|a,b|a.2.total_cmp(&b.2)))
+        {
+            return Some(super::input::SceneHit {
+                entity, face:None, edge:None, guide:None, guide_points:[None;8],
+                flip:Some(axis), point,
+                distance:transform.transform_point3(point).distance(ray.origin),
+            });
+        }
         let face_hit = self.picking.nearest(&self.faces, &self.entities, model_ray, false);
         let face_tool = matches!(source.tool,benchup_core::Tool::Paint | benchup_core::Tool::PushPull | benchup_core::Tool::Offset);
         let selection_tool = (matches!(source.tool,benchup_core::Tool::Select | benchup_core::Tool::Move | benchup_core::Tool::Rotate | benchup_core::Tool::Scale | benchup_core::Tool::Erase) || source.tool.is_solid()) && source.paste.is_none();
@@ -372,6 +385,7 @@ impl Scene {
             edge,
             guide,
             guide_points,
+            flip: None,
             point,
             distance: tracking_point.distance(ray.origin),
         })
@@ -403,7 +417,8 @@ impl Scene {
                     entity:hit.entity,face:hit.face,edge:hit.edge,point:hit.point,
                     guide:hit.guide.map(|id|placement.guide_frame().segment(&source.model.guides[&id])),
                     guide_points:hit.guide_points,
-                    normal:hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal),
+                    flip:hit.flip,
+                    normal:hit.flip.map(|axis|axis.vector()).unwrap_or_else(||hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal)),
                     center:snapping.then(||hit.face.and_then(|face|self.faces.snap_center(&source.model,face)).filter(|&point|self.point_visible(ray.origin,point))).flatten(),
                     edge_targets:snapping.then_some(hit.edge).flatten().map_or([None;3],|id| {
                         let (a,b) = source.model.points(&source.model.edges[&id]);

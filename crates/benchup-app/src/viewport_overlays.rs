@@ -30,6 +30,7 @@ pub(crate) struct Overlays {
     pub billboards: Vec<Billboard>,
     pub overlay_segments: Vec<Segment>,
     pub arrows: Vec<(DVec3, DVec3, Color32)>,
+    pub flip_planes: Vec<(Axis, [DVec3; 4])>,
 }
 
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
@@ -435,7 +436,8 @@ impl BenchUpApp {
             return result;
         }
         if self.tool == Tool::Flip {
-            for (axis, quad) in self.flip_planes() {
+            result.flip_planes = self.flip_planes();
+            for (axis, quad) in result.flip_planes.iter().copied() {
                 let color = self.axis_color(axis);
                 let fill = Color32::from_rgba_unmultiplied(
                     color.r(),

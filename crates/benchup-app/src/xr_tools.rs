@@ -10,6 +10,7 @@ pub(crate) struct Hit {
     pub edge: Option<u64>,
     pub guide: Option<(DVec3, DVec3)>,
     pub guide_points: [Option<DVec3>; 8],
+    pub flip: Option<Axis>,
     pub edge_targets: [Option<DVec3>; 3],
     pub point: DVec3,
     pub normal: DVec3,
@@ -355,6 +356,7 @@ impl BenchUpApp {
                 state.stroke = false;
             }
             if state.active {
+                self.flip_hover = None;
                 self.snap = None;
                 self.hover = None;
                 self.drawing_guide = None;
@@ -365,6 +367,7 @@ impl BenchUpApp {
             return;
         };
         state.active = true;
+        self.flip_hover = None;
         if state.tool != Some(self.tool) {
             if state.section.take().is_some() && self.world_section_info().is_some() {
                 self.cancel_section_drag(ctx);
@@ -415,10 +418,15 @@ impl BenchUpApp {
         }
         if self.tool.is_solid() {
             self.snap = None;
+            let flip = (self.tool == Tool::Flip).then_some(pointer.hit).flatten()
+                .and_then(|hit|hit.flip.map(|axis|(axis,hit.point)));
+            if let Some((axis,point)) = flip {
+                self.flip_hover = Some(axis);
+                self.snap = Some(Snap { point, kind: Inference::Plane });
+                state.pointer_target = Some(point);
+            }
             if clicked {
-                if self.tool == Tool::Flip
-                    && let Some((axis, point)) = self.xr_flip_plane(pointer.ray)
-                {
+                if let Some((axis, point)) = flip {
                     self.apply_flip(axis, ctx);
                     self.snap = Some(Snap {
                         point,
@@ -730,31 +738,6 @@ impl BenchUpApp {
             });
         }
         true
-    }
-
-    fn xr_flip_plane(&self, ray: Ray) -> Option<(Axis, DVec3)> {
-        // Only query the three shared flip quads on a click; no per-frame scan
-        // of selected geometry or separate plane geometry is introduced.
-        self.flip_planes()
-            .into_iter()
-            .filter_map(|(axis, quad)| {
-                let u = quad[1] - quad[0];
-                let v = quad[3] - quad[0];
-                let normal = u.cross(v).try_normalize()?;
-                let point = plane_point(ray, quad[0], normal)?;
-                let delta = point - quad[0];
-                let (a, b) = (
-                    delta.dot(u) / u.length_squared(),
-                    delta.dot(v) / v.length_squared(),
-                );
-                ((0. ..=1.).contains(&a) && (0. ..=1.).contains(&b)).then_some((
-                    axis,
-                    point,
-                    (point - ray.origin).dot(ray.direction),
-                ))
-            })
-            .min_by(|a, b| a.2.total_cmp(&b.2))
-            .map(|(axis, point, _)| (axis, point))
     }
 
     fn xr_model_grab(

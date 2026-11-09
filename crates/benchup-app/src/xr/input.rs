@@ -12,6 +12,7 @@ pub(super) struct SceneHit {
     pub edge: Option<u64>,
     pub guide: Option<u64>,
     pub guide_points: [Option<DVec3>; 8],
+    pub flip: Option<benchup_core::Axis>,
     pub point: DVec3,
     pub distance: f64,
 }

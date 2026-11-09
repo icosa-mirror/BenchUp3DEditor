@@ -352,6 +352,28 @@ impl Index {
     }
 }
 
+/// Hit the displayed rectangle, including its finite boundary.
+pub(super) fn quad_point(ray: Ray, quad: [DVec3; 4]) -> Option<(DVec3, f64)> {
+    let u = quad[1] - quad[0];
+    let v = quad[3] - quad[0];
+    let normal = u.cross(v).try_normalize()?;
+    let denominator = ray.direction.dot(normal);
+    if denominator.abs() < 1e-8 {
+        return None;
+    }
+    let depth = (quad[0] - ray.origin).dot(normal) / denominator;
+    if !depth.is_finite() || depth <= 0. {
+        return None;
+    }
+    let point = ray.origin + ray.direction * depth;
+    let delta = point - quad[0];
+    let (a, b) = (
+        delta.dot(u) / u.length_squared(),
+        delta.dot(v) / v.length_squared(),
+    );
+    ((0. ..=1.).contains(&a) && (0. ..=1.).contains(&b)).then_some((point, depth))
+}
+
 fn intersection(a: Edge, b: Edge) -> Option<DVec3> {
     let ad = (a.b - a.a).try_normalize()?;
     let bd = (b.b - b.a).try_normalize()?;
@@ -406,6 +428,48 @@ fn closest(ray: Ray, a: DVec3, b: DVec3) -> Option<(DVec3, f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn displayed_flip_quads_reject_parallel_behind_and_outside_rays() {
+        let quad = [
+            DVec3::new(-1., -1., 2.),
+            DVec3::new(1., -1., 2.),
+            DVec3::new(1., 1., 2.),
+            DVec3::new(-1., 1., 2.),
+        ];
+        assert_eq!(quad_point(ray(), quad), Some((DVec3::new(0., 0., 2.), 2.)));
+        assert!(
+            quad_point(
+                Ray {
+                    direction: DVec3::X,
+                    ..ray()
+                },
+                quad
+            )
+            .is_none()
+        );
+        assert!(
+            quad_point(
+                Ray {
+                    direction: -DVec3::Z,
+                    ..ray()
+                },
+                quad
+            )
+            .is_none()
+        );
+        assert!(
+            quad_point(
+                Ray {
+                    origin: DVec3::new(2., 0., 0.),
+                    ..ray()
+                },
+                quad
+            )
+            .is_none()
+        );
+        assert!(quad_point(ray(), [DVec3::ZERO; 4]).is_none());
+    }
+
     #[test]
     fn guide_crossings_and_points_are_precise_local_targets() {
         let crossing = DVec3::new(0.006, 0., 2.);
