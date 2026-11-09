@@ -2,7 +2,7 @@ use super::*;
 use benchup_core::DisplaySettings;
 
 /// Resolve scene appearance once for interactive and offscreen viewports.
-pub(super) fn effective_display(display: &DisplaySettings, model: &Model, dark: bool) -> DisplaySettings {
+pub(crate) fn effective_display(display: &DisplaySettings, model: &Model, dark: bool) -> DisplaySettings {
     let mut effective = crate::environment::for_theme(display, dark);
     // Keep the user's overlay preference, but do not route an unassigned
     // imported scene through the precision renderer for an empty overlay.
@@ -116,15 +116,20 @@ struct SectionKey {
 }
 
 #[derive(Default)]
-pub(super) struct SectionCache {
+pub(crate) struct SectionCache {
     key: Option<SectionKey>,
-    segments: Vec<(DVec3, DVec3)>,
-    triangles: Vec<[DVec3; 3]>,
+    pub(crate) segments: Vec<(DVec3, DVec3)>,
+    pub(crate) triangles: Vec<[DVec3; 3]>,
+    pub(crate) generation: u64,
     #[cfg(test)]
     builds: usize,
 }
 
 impl SectionCache {
+    pub(crate) fn geometry(&mut self, cache: &renderer::FaceCache, entities: &renderer::EntityCache, display: &DisplaySettings) -> (&[(DVec3, DVec3)], &[[DVec3; 3]]) {
+        self.update(cache, entities, display);
+        (&self.segments, &self.triangles)
+    }
     fn update(
         &mut self,
         cache: &renderer::FaceCache,
@@ -186,6 +191,7 @@ impl SectionCache {
             }
         }
         self.key = Some(key);
+        self.generation = self.generation.wrapping_add(1);
         #[cfg(test)]
         {
             self.builds += 1;
@@ -215,6 +221,15 @@ pub(super) fn paint_sections(
             mesh.world_triangle(camera, triangle, faces.section);
         }
     }
+    for corners in section_planes(model, d) {
+        for i in 0..4 {
+            mesh.overlay_line(corners[i], corners[(i + 1) % 4], 1.5, ACCENT, true);
+        }
+    }
+}
+
+pub(crate) fn section_planes(model: &Model, d: &DisplaySettings) -> Vec<[DVec3; 4]> {
+    let mut planes = Vec::new();
     if d.section_planes {
         let (lo, hi) = model
             .bounds()
@@ -242,11 +257,10 @@ pub(super) fn paint_sections(
                 point[v] = if i >= 2 { hi[v] + pad } else { lo[v] - pad };
                 point
             });
-            for i in 0..4 {
-                mesh.overlay_line(corners[i], corners[(i + 1) % 4], 1.5, ACCENT, true);
-            }
+            planes.push(corners);
         }
     }
+    planes
 }
 
 #[cfg(test)]

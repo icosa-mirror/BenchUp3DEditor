@@ -402,12 +402,21 @@ pub fn snapshot_editor(path: &std::path::Path) -> Result<()> {
     )?;
     let system = instance.system(xr::FormFactor::HEAD_MOUNTED_DISPLAY)?;
     let graphics = Graphics::new(&instance, system)?;
-    snapshot_editor_on_device(&graphics.device, &graphics.queue, path)
+    snapshot_editor_on_device(&graphics.device, &graphics.queue, path, false)
 }
 
 /// Independent renderer check when no headset/runtime is available. This does
 /// not establish runtime adapter selection or XR interoperability.
 pub async fn snapshot_editor_without_runtime(path: &std::path::Path) -> Result<()> {
+    snapshot_without_runtime(path,false).await
+}
+
+/// Exercise the actual eye render path on the hardware GPU without a headset.
+pub async fn snapshot_immersive_without_runtime(path:&std::path::Path)->Result<()> {
+    snapshot_without_runtime(path,true).await
+}
+
+async fn snapshot_without_runtime(path: &std::path::Path, immersive:bool) -> Result<()> {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::VULKAN;
     let instance = wgpu::Instance::new(descriptor);
@@ -426,13 +435,14 @@ pub async fn snapshot_editor_without_runtime(path: &std::path::Path) -> Result<(
         info.name, info.backend
     );
     let (device, queue) = adapter.request_device(&Default::default()).await?;
-    snapshot_editor_on_device(&device, &queue, path)
+    snapshot_editor_on_device(&device, &queue, path, immersive)
 }
 
 fn snapshot_editor_on_device(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     path: &std::path::Path,
+    immersive:bool,
 ) -> Result<()> {
     let size = wgpu::Extent3d {
         width: 1440,
@@ -456,6 +466,7 @@ fn snapshot_editor_on_device(
     for _ in 0..2 {
         editor.paint(device, queue, &view)?;
     }
+    if immersive {editor.paint_immersive_snapshot(device,queue,&view,[size.width,size.height])?;}
     let stride = (size.width * 4).div_ceil(256) * 256;
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("BenchUpXR diagnostic PNG readback"),
@@ -500,7 +511,7 @@ fn snapshot_editor_on_device(
     drop(pixels);
     buffer.unmap();
     println!(
-        "[BenchUpXR] Shared editor GPU snapshot saved: {}",
+        "[BenchUpXR] GPU snapshot saved: {}",
         path.display()
     );
     Ok(())

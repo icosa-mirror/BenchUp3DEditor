@@ -46,7 +46,7 @@ mod context_menu;
 #[path = "currency.rs"]
 mod currency;
 #[path = "display_scene.rs"]
-mod display_scene;
+pub(crate) mod display_scene;
 #[path = "construction_guides.rs"]
 mod construction_guides;
 #[path = "drawing_inference.rs"]

@@ -115,7 +115,7 @@ impl FacePalette {
         Self::new(ui.visuals().dark_mode)
     }
 
-    fn new(dark: bool) -> Self {
+    pub(crate) fn new(dark: bool) -> Self {
         if dark {
             Self {
                 front: Color32::from_rgb(112, 128, 116),

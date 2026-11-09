@@ -317,7 +317,7 @@ impl BenchUpApp {
         }
         ui.add_space(14.);
     }
-    fn flip_planes(&self) -> Vec<(Axis, [DVec3; 4])> {
+    pub(super) fn flip_planes(&self) -> Vec<(Axis, [DVec3; 4])> {
         let Some(center) = self.doc.model.selection_center(&self.selected) else {
             return vec![];
         };

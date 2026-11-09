@@ -16,9 +16,12 @@ fn main() -> std::process::ExitCode {
         [flag, path] if flag == "--desktop-snapshot" => pollster::block_on(
             benchup_app::xr::panel::snapshot_editor_without_runtime(std::path::Path::new(path)),
         ),
+        [flag,path] if flag=="--immersive-snapshot"=>pollster::block_on(
+            benchup_app::xr::panel::snapshot_immersive_without_runtime(std::path::Path::new(path)),
+        ),
         _ => {
             eprintln!(
-                "Usage: openxr_editor [--seconds 1..3600 | --snapshot output.png | --desktop-snapshot output.png]"
+                "Usage: openxr_editor [--seconds 1..3600 | --snapshot output.png | --desktop-snapshot output.png | --immersive-snapshot output.png]"
             );
             return std::process::ExitCode::FAILURE;
         }

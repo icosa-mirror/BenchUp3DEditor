@@ -12,6 +12,7 @@ struct Vertex {
     offset: [f32; 2],
     uv: [f32; 2],
     color: [f32; 4],
+    owners: [u32; 2],
 }
 
 #[derive(PartialEq)]
@@ -34,7 +35,8 @@ pub(super) struct Text {
     key: Option<Key>,
     markers: renderer::GroupMarkerCache,
     entities: renderer::EntityCache,
-    meshes: Vec<(DVec3, egui::epaint::Mesh)>,
+    meshes: Vec<(DVec3, egui::epaint::Mesh, Vec<u64>)>,
+    owner_slots: wgpu::Buffer,
     vertices: Option<wgpu::Buffer>,
     indices: Option<wgpu::Buffer>,
     count: u32,
@@ -55,11 +57,11 @@ impl Text {
             label: Some("BenchUpXR world text"), layout: None,
             vertex: wgpu::VertexState { module: &shader, entry_point: Some("vertex"),
                 buffers: &[Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Vertex>() as _, step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x2,2=>Float32x2,3=>Float32x4] })], compilation_options: Default::default() },
+                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x2,2=>Float32x2,3=>Float32x4,4=>Uint32x2] })], compilation_options: Default::default() },
             fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fragment"),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
             primitive: Default::default(), depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::Always),
                 stencil: Default::default(), bias: wgpu::DepthBiasState { constant: -1, ..Default::default() } }),
             multisample: Default::default(), multiview_mask: None, cache: None,
         });
@@ -90,6 +92,11 @@ impl Text {
             markers: Default::default(),
             entities: Default::default(),
             meshes: Vec::new(),
+            owner_slots: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("BenchUpXR label owners"),
+                contents: bytemuck::cast_slice(&[0u32]),
+                usage: wgpu::BufferUsages::STORAGE,
+            }),
             vertices: None,
             indices: None,
             count: 0,
@@ -132,6 +139,7 @@ impl Text {
             }
         };
         let mut labels = Vec::new();
+        let mut owners = std::collections::BTreeMap::<usize, Vec<u64>>::new();
         for label in &source.overlays.labels {
             labels.push((
                 label.point,
@@ -151,6 +159,7 @@ impl Text {
                         && !object.name.trim().is_empty()
                         && self.entities.get(object.id).displayed(&source.display)
                 }) {
+                    owners.insert(labels.len(), marker.owners.iter().copied().collect());
                     labels.push((
                         marker.point,
                         object.name.clone(),
@@ -204,7 +213,8 @@ impl Text {
         // earlier labels with UVs normalized against an obsolete atlas size.
         let shapes: Vec<_> = labels
             .into_iter()
-            .map(|(anchor, text, font, ink, wrap)| {
+            .enumerate()
+            .map(|(index, (anchor, text, font, ink, wrap))| {
                 let galley = ctx.fonts_mut(|fonts| fonts.layout(text, font, ink, wrap));
                 let bounds = egui::Rect::from_center_size(
                     egui::Pos2::ZERO,
@@ -216,11 +226,12 @@ impl Text {
                         egui::Shape::rect_filled(bounds, 4, colors.paper),
                         egui::Shape::galley(bounds.min + egui::vec2(6.0, 4.0), galley, ink),
                     ],
+                    owners.remove(&index).unwrap_or_default(),
                 )
             })
             .collect();
         self.meshes.clear();
-        for (anchor, shapes) in shapes {
+        for (anchor, shapes, owners) in shapes {
             let jobs = ctx.tessellate(
                 shapes
                     .into_iter()
@@ -230,7 +241,7 @@ impl Text {
             );
             for job in jobs {
                 if let egui::epaint::Primitive::Mesh(mesh) = job.primitive {
-                    self.meshes.push((anchor, mesh));
+                    self.meshes.push((anchor, mesh, owners.clone()));
                 }
             }
         }
@@ -250,21 +261,43 @@ impl Text {
         projection: DMat4,
         model: DMat4,
         head: DMat4,
+        slot: impl Fn(u64) -> u32,
     ) {
         if self.dirty || self.origin != Some(origin) {
             let mut vertices = Vec::new();
             let mut indices = Vec::new();
-            for (anchor, mesh) in &self.meshes {
+            let mut owner_slots = Vec::new();
+            for (anchor, mesh, owners) in &self.meshes {
+                let begin = owner_slots.len() as u32;
+                let mut slots: Vec<_> = owners
+                    .iter()
+                    .copied()
+                    .map(&slot)
+                    .filter(|slot| *slot != 0)
+                    .collect();
+                slots.sort_unstable();
+                slots.dedup();
+                owner_slots.extend(slots);
+                let range = [begin, owner_slots.len() as u32];
                 let base = vertices.len() as u32;
                 vertices.extend(mesh.vertices.iter().map(|v| Vertex {
                     anchor: (*anchor - origin).as_vec3().to_array(),
                     offset: [v.pos.x, v.pos.y],
                     uv: [v.uv.x, v.uv.y],
                     color: v.color.to_normalized_gamma_f32(),
+                    owners: range,
                 }));
                 indices.extend(mesh.indices.iter().map(|i| base + i));
             }
             self.count = indices.len() as u32;
+            if owner_slots.is_empty() {
+                owner_slots.push(0);
+            }
+            self.owner_slots = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("BenchUpXR retained label ownership"),
+                contents: bytemuck::cast_slice(&owner_slots),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
             if self.count > 0 {
                 self.vertices = Some(device.create_buffer_init(
                     &wgpu::util::BufferInitDescriptor {
@@ -302,10 +335,14 @@ impl Text {
         device: &wgpu::Device,
         renderer: &egui_wgpu::Renderer,
         pass: &mut wgpu::RenderPass<'_>,
+        visibility: Option<&wgpu::TextureView>,
     ) {
         if self.count == 0 {
             return;
         }
+        let Some(visibility) = visibility else {
+            return;
+        };
         let Some(texture) = renderer
             .texture(&egui::TextureId::Managed(0))
             .and_then(|t| t.texture.as_ref())
@@ -330,6 +367,21 @@ impl Text {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.binding, &[]);
         pass.set_bind_group(1, &atlas, &[]);
+        let ownership = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("BenchUpXR annotation visibility"),
+            layout: &self.pipeline.get_bind_group_layout(2),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.owner_slots.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(visibility),
+                },
+            ],
+        });
+        pass.set_bind_group(2, &ownership, &[]);
         pass.set_vertex_buffer(0, self.vertices.as_ref().unwrap().slice(..));
         pass.set_index_buffer(
             self.indices.as_ref().unwrap().slice(..),

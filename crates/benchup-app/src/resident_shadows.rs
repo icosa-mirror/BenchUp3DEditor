@@ -8,6 +8,9 @@ struct Key {
     revision: u64,
     angle: f64,
     elevation: f64,
+    limits: [Option<f64>; 3],
+    hidden_objects: bool,
+    hidden_geometry: bool,
 }
 pub(super) struct Map {
     key: Key,
@@ -33,6 +36,9 @@ impl Map {
             revision: scene.model_revision,
             angle: scene.display.sun_angle,
             elevation: scene.display.sun_elevation,
+            limits: scene.display.section_limits(),
+            hidden_objects: scene.display.hidden_objects,
+            hidden_geometry: scene.display.hidden_geometry,
         };
         if cache.as_ref().is_none_or(|map| map.key != key) {
             // Reuse the atlas allocation while editing or dragging the sun.

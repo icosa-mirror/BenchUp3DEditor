@@ -22,6 +22,29 @@ The initial plan/panel milestone is commit `e21b8c9`.
 
 ### Current work: immersive visual parity
 
+The user explicitly asked to continue until a useful parity test is ready, rather
+than stop after each milestone. Keep committing implementation milestones and
+continue independently; do not end the work merely to report a completed commit.
+
+The immersive renderer now uses the shared effective display settings instead of
+forcing an opaque materials-only view. The retained GPU path supports face styles,
+X-Ray, hidden geometry/objects, profile/depth/endpoint/extension cues, fog and the
+existing cached shadow atlas. Shared section-cache cap triangles and contours are
+rendered in both eyes; cap visibility participates in edge and annotation masking.
+Sky, ground, horizon and sun are GPU-rendered from saved environment settings.
+
+Group text uses GPU face/depth visibility and retained sorted owner-slot lists:
+own-group faces do not hide their names, while intervening groups clip the glyphs
+and background. Other annotations retain surface-depth occlusion. This replaces
+the initial naive depth-only text path. Theme selection is explicitly synchronized
+with the shared editor context, including its first frame.
+
+`openxr_editor --immersive-snapshot output.png` exercises the actual eye renderer
+using a synthetic eye derived from the saved document camera, on the hardware GPU
+without an OpenXR session. This is for narrow functional iteration; it is not a
+substitute for the final headset visual comparison. Broad validation and profiling
+remain deferred.
+
 The next user headset check is gated on visual equivalence to the desktop model
 viewport. Do not request incremental headset tests. Validation suites, backend
 benchmarking and Vulkan validation remain deferred while functionality advances.

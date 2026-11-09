@@ -35,6 +35,9 @@ pub(super) struct Scene {
     text: super::world_text::Text,
     head: DMat4,
     dark: bool,
+    sections: crate::app::display_scene::SectionCache,
+    surfaces: super::world_surfaces::Surfaces,
+    backdrop: super::backdrop::Backdrop,
 }
 
 impl Scene {
@@ -53,6 +56,9 @@ impl Scene {
             text: super::world_text::Text::new(device, format),
             head: DMat4::IDENTITY,
             dark: false,
+            sections: Default::default(),
+            surfaces: super::world_surfaces::Surfaces::new(device, format),
+            backdrop: super::backdrop::Backdrop::new(device, format),
         }
     }
 
@@ -62,7 +68,11 @@ impl Scene {
             .update_for_revision(&source.model, source.revision);
         self.entities
             .update_for_revision(&source.model, source.revision);
-        self.picking.set_display(&opaque_display(&source.display));
+        let display =
+            crate::app::display_scene::effective_display(&source.display, &source.model, self.dark);
+        self.picking.set_display(&display);
+        self.sections
+            .geometry(&self.faces, &self.entities, &display);
         self.picking.update(&self.faces);
         if self.placement.is_none() || fit {
             if let Some((min, max)) = source.model.bounds() {
@@ -86,12 +96,51 @@ impl Scene {
         self.input = input;
     }
 
+    pub fn diagnostic_eye(&mut self, scale: f32, size: [u32; 2]) -> Option<xr::View> {
+        let source = self.source.as_ref()?;
+        let transform = self.placement.as_ref()?.model_to_tracking(scale as f64);
+        let camera = &source.camera;
+        let position = transform.transform_point3(camera.eye()).as_vec3();
+        let right = transform.transform_vector3(camera.right()).normalize();
+        let up = transform.transform_vector3(camera.up()).normalize();
+        let back = transform
+            .transform_vector3(camera.eye() - camera.target)
+            .normalize();
+        let rotation = DQuat::from_mat3(&glam::DMat3::from_cols(right, up, back)).as_quat();
+        let half_y = camera.fov as f32 * 0.5;
+        let half_x = (half_y.tan() * size[0] as f32 / size[1] as f32).atan();
+        let eye = xr::View {
+            pose: xr::Posef {
+                position: xr::Vector3f {
+                    x: position.x,
+                    y: position.y,
+                    z: position.z,
+                },
+                orientation: xr::Quaternionf {
+                    x: rotation.x,
+                    y: rotation.y,
+                    z: rotation.z,
+                    w: rotation.w,
+                },
+            },
+            fov: xr::Fovf {
+                angle_left: -half_x,
+                angle_right: half_x,
+                angle_up: half_y,
+                angle_down: -half_y,
+            },
+        };
+        self.head = pose_matrix(eye.pose);
+        Some(eye)
+    }
+
     pub fn stage_labels(&mut self, ctx: &egui::Context, source: &Source) {
         let dark = ctx.global_style().visuals.dark_mode;
-        if self.dark != dark {
+        if self.dark != dark || self.ctx.global_style().visuals.dark_mode != dark {
             self.dark = dark;
             self.ctx.set_visuals(ctx.global_style().visuals.clone());
         }
+        self.ctx.set_theme(if dark {egui::Theme::Dark} else {egui::Theme::Light});
         self.text.stage(
             ctx,
             source,
@@ -182,9 +231,11 @@ impl Scene {
                     eye: model_from_eye.transform_point3(DVec3::ZERO),
                     toward_eye: model_from_eye.transform_vector3(DVec3::Z).normalize(),
                 };
-                let display = opaque_display(&source.display);
-                // The first immersive path is opaque world geometry. UI annotations,
-                // section previews and other special display modes remain on the panel.
+                let display = crate::app::display_scene::effective_display(
+                    &source.display,
+                    &source.model,
+                    self.dark,
+                );
                 let mut camera = source.camera.clone();
                 camera.projection = benchup_core::Projection::Perspective;
                 let key = renderer::SceneKey {
@@ -257,6 +308,7 @@ impl Scene {
                 u64::from(source.display.axes),
                 source.display.grid_max_length.to_bits(),
                 self.text.revision,
+                self.sections.generation,
             ];
             self.lines.references(device, reference_key, || {
                 let mut lines = Vec::new();
@@ -363,12 +415,81 @@ impl Scene {
                 for &(a, b, color) in &self.text.ticks {
                     lines.push(Line::tick(a - origin, b - origin, color));
                 }
+                for &(a, b) in &self.sections.segments {
+                    lines.push(Line::new(
+                        a - origin,
+                        b - origin,
+                        crate::theme::ACCENT.to_normalized_gamma_f32(),
+                        3.0,
+                    ));
+                }
+                for quad in
+                    crate::app::display_scene::section_planes(&source.model, &source.display)
+                {
+                    for i in 0..4 {
+                        lines.push(Line::dashed(
+                            quad[i] - origin,
+                            quad[(i + 1) % 4] - origin,
+                            crate::theme::ACCENT.to_normalized_gamma_f32(),
+                            1.5,
+                        ));
+                    }
+                }
                 lines
             });
             let transform = placement.model_to_tracking(preferences.scene_scale as f64);
             let tracking_view = projection(eye.fov, 0.03, 200.0) * pose_matrix(eye.pose).inverse();
-            self.text
-                .prepare(device, queue, origin, tracking_view, transform, self.head);
+            let display = crate::app::display_scene::effective_display(
+                &source.display,
+                &source.model,
+                self.dark,
+            );
+            let model_eye = transform
+                .inverse()
+                .transform_point3(pose_matrix(eye.pose).transform_point3(DVec3::ZERO));
+            self.backdrop.prepare(
+                queue,
+                tracking_view * transform * DMat4::from_translation(origin),
+                model_eye - origin,
+                &display,
+                self.dark,
+                source.display.shadows,
+            );
+            let surface_key = super::world_surfaces::Key {
+                revision: source.revision,
+                sections: self.sections.generation,
+                display,
+                dark: self.dark,
+                origin,
+                previews: source.overlays.surfaces.clone(),
+            };
+            self.surfaces.prepare(
+                device,
+                queue,
+                surface_key,
+                tracking_view * transform * DMat4::from_translation(origin),
+                || {
+                    let color = crate::theme::FacePalette::new(self.dark).section;
+                    self.sections
+                        .triangles
+                        .iter()
+                        .map(|points| super::world_surfaces::Triangle {
+                            points: *points,
+                            color,
+                        })
+                        .chain(source.overlays.surfaces.iter().cloned())
+                        .collect()
+                },
+            );
+            self.text.prepare(
+                device,
+                queue,
+                origin,
+                tracking_view,
+                transform,
+                self.head,
+                |id| self.cache.resident_face_slot(id),
+            );
             let mut pointer = Vec::new();
             if let Some(input) = self.input {
                 if let Some(hit) = input.hit {
@@ -405,6 +526,11 @@ impl Scene {
         output.textures_delta.clear();
         let mut encoder = device.create_command_encoder(&Default::default());
         let commands = renderer.update_buffers(device, queue, &mut encoder, &jobs, &screen);
+        let visibility = self.cache.resident_visibility_targets();
+        if let Some((faces, depth)) = &visibility {
+            self.surfaces
+                .paint_visibility(&mut encoder, size, faces, depth);
+        }
         {
             let pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("BenchUpXR stereoscopic scene"),
@@ -433,38 +559,20 @@ impl Scene {
                 ..Default::default()
             });
             let mut pass = pass.forget_lifetime();
+            self.backdrop.paint(&mut pass, size);
             renderer.render(&mut pass, &jobs, &screen);
+            self.surfaces.paint(&mut pass, size);
             self.lines.paint(&mut pass, size);
-            self.text.paint(device, renderer, &mut pass);
+            self.text.paint(
+                device,
+                renderer,
+                &mut pass,
+                visibility.as_ref().map(|v| &v.0),
+            );
         }
         let submission = queue.submit(commands.into_iter().chain([encoder.finish()]));
         submission
     }
-}
-
-fn opaque_display(source: &DisplaySettings) -> DisplaySettings {
-    let mut display = source.clone();
-    if !matches!(
-        display.face_style,
-        benchup_core::FaceStyle::Materials | benchup_core::FaceStyle::Shaded
-    ) {
-        display.face_style = benchup_core::FaceStyle::Materials;
-    }
-    display.x_ray = false;
-    display.fog = false;
-    display.depth_cue = false;
-    display.profiles = false;
-    display.back_edges = false;
-    display.endpoints = false;
-    display.extensions = false;
-    display.grain_direction = false;
-    display.hidden_geometry = false;
-    display.hidden_objects = false;
-    display.section_planes = false;
-    display.section_cuts = false;
-    display.section_fill = false;
-    display.shadows = false;
-    display
 }
 
 impl Placement {

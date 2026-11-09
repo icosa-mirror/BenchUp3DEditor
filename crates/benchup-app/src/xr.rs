@@ -29,6 +29,12 @@ mod world_lines;
 #[cfg(feature = "openxr")]
 mod world_text;
 
+#[cfg(feature = "openxr")]
+mod world_surfaces;
+
+#[cfg(feature = "openxr")]
+mod backdrop;
+
 /// A flat editor surface. Logical size is in egui points, not texture pixels.
 #[derive(Clone, Copy, Debug)]
 pub struct EditorPanel {

@@ -2,6 +2,7 @@
 //! geometry needs no CPU clipping. The precision/annotation renderer remains
 //! available for every other display mode and transient editing preview.
 use super::*;
+use wgpu::util::DeviceExt as _;
 
 use crate::theme::{FacePalette, Palette};
 #[path = "resident_appearance.rs"]
@@ -75,6 +76,11 @@ struct Uniform {
     edge_muted: [f32; 4],
     edge_normal: [f32; 4],
     marker_fill: [f32; 4],
+    section_limits: [f32; 4],
+    display_flags: [u32; 4],
+    display_params: [f32; 4],
+    back_color: [f32; 4],
+    background_color: [f32; 4],
 }
 #[derive(Default)]
 pub(super) struct Cache {
@@ -116,6 +122,8 @@ struct Visibility {
 struct LayerBuffers {
     _uniform: wgpu::Buffer,
     bind: wgpu::BindGroup,
+    _translucent_uniform: wgpu::Buffer,
+    translucent_bind: wgpu::BindGroup,
 }
 struct DrawBuffers {
     layers: Vec<LayerBuffers>,
@@ -131,6 +139,7 @@ struct Draw {
     uniform: Uniform,
     shadows: Option<Arc<shadows::Map>>,
     markers: bool,
+    translucent: bool,
     appearance: Arc<Vec<u32>>,
     references: Vec<Vertex>,
     reference_indices: Vec<u32>,
@@ -138,12 +147,14 @@ struct Draw {
 }
 struct Pipelines {
     face: wgpu::RenderPipeline,
+    translucent_face: wgpu::RenderPipeline,
     marker: wgpu::RenderPipeline,
     shadow: wgpu::RenderPipeline,
     unshadowed: wgpu::TextureView,
     visibility: wgpu::RenderPipeline,
     edge_depth: wgpu::RenderPipeline,
     edge: wgpu::RenderPipeline,
+    overlay_edge: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     visibility_layout: wgpu::BindGroupLayout,
     srgb: bool,
@@ -168,6 +179,15 @@ fn geometry_key(key: &SceneKey) -> SceneKey {
     key.display.sun_angle = 0.;
     key.display.sun_elevation = 0.;
     key.display.shadow_antialiasing = false;
+    key.display.section_cuts = false;
+    key.display.section_fill = false;
+    key.display.section_planes = false;
+    key.display.section_axes = [false; 3];
+    key.display.section_offsets = [0.0; 2];
+    key.display.section_height = 0.0;
+    key.display.fog = false;
+    key.display.fog_start = 0.0;
+    key.display.fog_end = 0.0;
     key
 }
 
@@ -428,6 +448,16 @@ pub(crate) fn supported(key: &SceneKey, model: &Model, faces: &FaceCache) -> boo
 }
 
 impl SceneCache {
+    pub(crate) fn resident_face_slot(&self, id: u64) -> u32 {
+        self.resident.hierarchy.as_ref().map_or(0, |h| h.slot(id))
+    }
+
+    pub(crate) fn resident_visibility_targets(&self) -> Option<(wgpu::TextureView,wgpu::TextureView)> {
+        let gpu=self.resident.geometry.as_ref()?.gpu.get()?;
+        let visibility=gpu.visibility.lock().unwrap();
+        let visibility=visibility.as_ref()?;
+        Some((visibility.faces.clone(),visibility.depth.clone()))
+    }
     pub(crate) fn resident_context_bounds(
         &mut self,
         context: u64,
@@ -563,7 +593,8 @@ impl SceneCache {
         }
         let callback = Draw {
             shadows: shadows.clone(),
-            markers: key.selected.iter().any(|id| model.edges.contains_key(id)),
+            markers: key.display.endpoints || key.selected.iter().any(|id| model.edges.contains_key(id)),
+            translucent: key.display.x_ray || key.display.hidden_geometry || key.display.hidden_objects,
             appearance,
             geometry: Arc::clone(&geometry),
             overlay: self.resident.overlay.clone(),
@@ -613,6 +644,24 @@ impl SceneCache {
                 edge_muted: rgba(palette.muted.gamma_multiply(0.55)),
                 edge_normal: rgba(palette.ink),
                 marker_fill: rgba(palette.paper),
+                section_limits: {
+                    let limits = key.display.section_limits();
+                    std::array::from_fn(|i| if i < 3 { limits[i].map_or(f32::MAX, |v| (v - geometry.origin[i]) as f32) } else { 0.0 })
+                },
+                display_flags: [
+                    match key.display.face_style {
+                        benchup_core::FaceStyle::Materials => 0, benchup_core::FaceStyle::Shaded => 1,
+                        benchup_core::FaceStyle::Monochrome => 2, benchup_core::FaceStyle::HiddenLine => 3,
+                        benchup_core::FaceStyle::Wireframe => 4,
+                    },
+                    u32::from(key.display.x_ray) | (u32::from(key.display.back_edges) << 1)
+                        | (u32::from(key.display.profiles) << 2) | (u32::from(key.display.depth_cue) << 3)
+                        | (u32::from(key.display.endpoints) << 4) | (u32::from(key.display.extensions) << 5)
+                        | (u32::from(key.display.fog) << 6), 0, 0,
+                ],
+                display_params: [key.display.profile_width as f32, key.display.fog_start as f32, key.display.fog_end as f32, key.camera.distance as f32],
+                back_color: rgba(face_palette.back),
+                background_color: [key.display.background[0] as f32 / 255.0, key.display.background[1] as f32 / 255.0, key.display.background[2] as f32 / 255.0, 1.0],
                 flags: [
                     0.,
                     if render_view.is_none() && key.camera.projection == benchup_core::Projection::Parallel {
@@ -703,7 +752,7 @@ impl Geometry {
             let material = material.map_or(face_palette.front, |rgb| {
                 Color32::from_rgb(rgb[0], rgb[1], rgb[2])
             });
-            let color = material;
+            let color = if entity.entity_hidden { material.gamma_multiply(0.18) } else { material };
             let anchor = model.vertices[&face.vertices[0]].position;
             for triangle in &cached.triangles {
                 for &p in triangle {
@@ -896,7 +945,7 @@ pub(super) fn install(
         bind_group_layouts: &[Some(&layout), Some(&visibility_layout)],
         immediate_size: 0,
     });
-    let create = |edge: bool, depth: bool, visibility: bool| {
+    let create = |edge: bool, depth: bool, visibility: bool, overlay: bool| {
         let attributes = if edge {
             wgpu::vertex_attr_array![0=>Float32x3,1=>Float32x3,2=>Float32x3,3=>Float32x3,4=>Float32x3,5=>Float32x3,6=>Float32x3,7=>Float32x3,8=>Float32x3,9=>Float32x3,10=>Unorm8x4,11=>Float32,12=>Uint32x4,13=>Uint32x2].to_vec()
         } else {
@@ -957,8 +1006,8 @@ pub(super) fn install(
             primitive: Default::default(),
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(!edge || depth),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                depth_write_enabled: Some((!edge || depth) && !overlay),
+                depth_compare: Some(if edge && overlay { wgpu::CompareFunction::Always } else { wgpu::CompareFunction::LessEqual }),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -968,13 +1017,15 @@ pub(super) fn install(
         })
     };
     renderer.callback_resources.insert(Pipelines {
-        face: create(false, false, false),
-        marker: markers::pipeline(device, &shader, &pipeline_layout, format),
+        face: create(false, false, false, false),
+        translucent_face: create(false, false, false, true),
+        marker: markers::pipeline(device, &shader, &edge_layout, format),
         shadow: shadows::pipeline(device, &shader, &pipeline_layout),
         unshadowed: shadows::target(device, 1).faces,
-        visibility: create(false, false, true),
-        edge_depth: create(true, true, false),
-        edge: create(true, false, false),
+        visibility: create(false, false, true, false),
+        edge_depth: create(true, true, false, false),
+        edge: create(true, false, false, false),
+        overlay_edge: create(true, false, false, true),
         layout,
         visibility_layout,
         srgb: format.is_srgb(),
@@ -1108,9 +1159,20 @@ impl egui_wgpu::CallbackTrait for Draw {
                             },
                         ],
                     });
+                    uniform.display_flags[2] = 1;
+                    let translucent_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Resident translucent camera"), contents: bytemuck::bytes_of(&uniform), usage: wgpu::BufferUsages::UNIFORM,
+                    });
+                    let translucent_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Resident translucent camera"), layout: &pipelines.layout,
+                        entries: &[wgpu::BindGroupEntry { binding: 0, resource: translucent_uniform.as_entire_binding() },
+                            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&states.view) }],
+                    });
                     LayerBuffers {
                         _uniform: buffer,
                         bind,
+                        _translucent_uniform: translucent_uniform,
+                        translucent_bind,
                     }
                 })
                 .collect();
@@ -1229,9 +1291,17 @@ impl egui_wgpu::CallbackTrait for Draw {
             pass.set_vertex_buffer(0, geometry.gpu.get().unwrap().faces.slice(..));
             pass.draw(0..geometry.faces.len() as u32, 0..1);
         }
+        if self.translucent {
+            pass.set_pipeline(&pipelines.translucent_face);
+            for (geometry, layer) in geometries.iter().zip(&draw.layers) {
+                pass.set_bind_group(0, &layer.translucent_bind, &[]);
+                pass.set_vertex_buffer(0, geometry.gpu.get().unwrap().faces.slice(..));
+                pass.draw(0..geometry.faces.len() as u32, 0..1);
+            }
+        }
         for (pipeline, reference_pipeline) in [
             (&pipelines.edge_depth, &references.edge_depth_pipeline),
-            (&pipelines.edge, &references.edge_pipeline),
+            (if self.uniform.display_flags[1] & 3 != 0 || self.uniform.display_flags[0] == 4 { &pipelines.overlay_edge } else { &pipelines.edge }, &references.edge_pipeline),
         ] {
             pass.set_pipeline(pipeline);
             pass.set_bind_group(1, &draw.visibility_bind, &[]);

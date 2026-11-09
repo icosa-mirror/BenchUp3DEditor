@@ -25,6 +25,14 @@ pub(crate) struct Overlays {
     pub markers: Vec<(DVec3, Color32)>,
     pub ticks: Vec<(DVec3, DVec3, Color32)>,
     pub labels: Vec<Label>,
+    pub surfaces: Vec<Triangle>,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Clone, PartialEq)]
+pub(crate) struct Triangle {
+    pub points: [DVec3; 3],
+    pub color: Color32,
 }
 
 impl BenchUpApp {
@@ -61,6 +69,41 @@ impl BenchUpApp {
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(super) fn spatial_tool_overlays(&self, colors: Palette) -> Overlays {
         let mut result = Overlays::default();
+        if self.tool == Tool::Flip {
+            for (axis, quad) in self.flip_planes() {
+                let color = self.axis_color(axis);
+                let fill = Color32::from_rgba_unmultiplied(
+                    color.r(),
+                    color.g(),
+                    color.b(),
+                    if self.flip_hover == Some(axis) {
+                        65
+                    } else {
+                        24
+                    },
+                );
+                for points in [[quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]] {
+                    result.surfaces.push(Triangle {
+                        points,
+                        color: fill,
+                    });
+                }
+                for i in 0..4 {
+                    result.segments.push(Segment {
+                        a: quad[i],
+                        b: quad[(i + 1) % 4],
+                        color,
+                        width: 1.5,
+                        dashed: false,
+                    });
+                }
+                result.labels.push(Label {
+                    point: quad[2],
+                    text: format!("Flip {}", axis.label()),
+                    color,
+                });
+            }
+        }
         if self.history_preview.is_some() {
             return result;
         }
