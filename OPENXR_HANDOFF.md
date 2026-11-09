@@ -72,6 +72,14 @@ mirroring, native window services and persistent XR controls remain.
 
 ## Immersive 3D continuation
 
+The user has clarified the target: the immersive view must replace the 2D model
+viewport, including spatial hints, overlays and text labels, rather than remain a
+secondary inspection view. `OPENXR_PLAN.md` now inventories the existing paths
+and orders the shared world-overlay/input work. Keep tool/document logic shared;
+world text, guides, previews and handles need GPU rendering and controller-ray
+interaction. Inspectors/toolbars/dialogs may remain floating panels. Further
+validation is still deferred; prioritize functionality.
+
 The user asked to prioritize 3D rendering and defer validation. A native
 stereoscopic projection layer is now implemented alongside the editor quad.
 Both eyes use runtime poses/FOVs and share retained GPU world geometry from the

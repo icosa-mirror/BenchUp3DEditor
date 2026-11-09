@@ -288,3 +288,58 @@ STOPPING/IDLE/EXITING and exited successfully after 16,257 editor frames, with
 stereo scene submission active at startup. Human visual confirmation of the 3D
 scene has not yet been recorded. Further test suites, graphics validation and broad backend checks are
 deferred at the user's request while functionality is prioritized.
+
+## Replacement viewport requirement
+
+The user clarified that the immersive view must eventually replace the desktop
+model viewport completely. The current opaque stereo scene is a first rendering
+milestone, not the final product. Spatial hints, overlays and labels must work in
+the immersive view, with their associated interaction. A hidden or duplicated
+desktop viewport must not remain necessary for modeling. Menus, inspectors and
+dialogs may remain floating UI panels; spatial content belongs with the model.
+
+### Overlay inventory from the current source
+
+| # | Existing functionality | Current source | XR requirement |
+|---|---|---|---|
+| 1 | Selection/hover, active edit-context bounds, edge/endpoint cues | `app.rs` scene painting, `renderer.rs`, `resident_scene.rs` | Shared GPU highlights and world-space bounds/markers; controller hover and selection use the authoritative model. The stereo source currently carries selection but forces hover to `None`. |
+| 2 | Axes, ground grid, construction guides, snapping/inference points, axis/plane locks | `app.rs`, `construction_guides.rs`, `drawing_inference.rs` | GPU world lines/planes/markers with the same snap and lock state; preserve visibility and occlusion rules. |
+| 3 | Live drawing and modeling previews, move/scale directions, rotation/protractor graphics, numeric tool hints | `app.rs`, `solid_tools.rs`, `measurement_tools.rs` | Shared model-space preview descriptions, rendered for both eyes; spatial numeric labels and controller-driven handles. |
+| 4 | Persistent dimensions, tape/protractor previews, extension lines, arrowheads and units | `measurement_tools.rs`, model dimensions, scene annotation paths | World-anchored geometry and text using the same dimension definitions, formatting and precision. |
+| 5 | Group names and model text entities | `app.rs` group-label/annotation paths, model texts | Readable world labels/text; preserve ownership, selection, editability and intended occlusion. |
+| 6 | Section planes, cuts, caps and handles | `section_gizmo.rs`, display/scene rendering | Render the actual clipped scene and GPU plane/handle overlays; controller manipulation shares the existing section settings. |
+| 7 | Joinery/fastener overlays, solid-operation feedback and targets | `joinery.rs`, `fasteners.rs`, `solid_tools.rs` | World highlights, target markers and labels tied to the same evaluated geometry and commands. |
+| 8 | Tool status, instructions and numeric entry | `app.rs` tool/status UI and dialogs | Reachable floating UI or a compact tool HUD; explicit XR text entry. These are distinct from world-anchored labels. |
+
+The object-length axis diagram in `entity_gizmo.rs` is inspector UI, not a
+spatial manipulation gizmo; it can stay in the inspector. Classify by function,
+not merely by a filename or painter call.
+
+### Implementation direction and order
+
+1. Introduce shared model-space overlay descriptions (segments, markers,
+   handles, world text and preview meshes), produced from existing document and
+   tool state. Desktop and XR consume these descriptions; do not fork tool logic
+   or reinterpret already-projected desktop pixels as 3D content.
+2. Route controller world rays through existing ray-based model picking and
+   inference, then connect selection/hover, axes/grid and construction guides.
+   Resolve UI-versus-scene capture, drag constraints and focus/tracking loss in
+   this input path. Several existing handles still depend on desktop screen
+   coordinates; they need a world-ray interaction path as well as new rendering.
+3. Add retained GPU world text and dimension primitives. Shape/cache glyphs when
+   content or font changes, then draw GPU glyph instances at world anchors. Use
+   a common billboard basis/layout for both eyes and separate eye projections;
+   do not place/declutter each eye independently. Preserve deliberate depth and
+   occlusion behavior and readable apparent size.
+4. Migrate live drawing/modeling previews, measurement tools, manipulation
+   handles, sections and joinery/fastener feedback onto that shared layer.
+5. Remove the duplicate 2D model view from the XR editor panel after functional
+   parity is available; retain floating toolbars/inspectors/dialogs. Keep desktop
+   and browser viewports supported through the same authoritative tool state.
+
+GPU rendering remains the requirement for geometry, guides, markers, handles and
+text. Reuse retained scene data across eyes; do not add dense per-frame CPU
+projection or duplicate meshes per eye. Persist any new display/label/tool options
+through the established shared settings. Validation remains deferred per the
+user's current instruction; these items define the functionality still to build,
+not an instruction to begin a broad validation pass now.
