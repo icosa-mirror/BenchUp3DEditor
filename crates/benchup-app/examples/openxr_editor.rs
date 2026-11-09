@@ -3,10 +3,10 @@
 fn main() -> std::process::ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     let result = match arguments.as_slice() {
-        [] => benchup_app::xr::panel::run_editor(std::time::Duration::from_secs(60)),
+        [] => benchup_app::xr::panel::run_editor(None),
         [flag, seconds] if flag == "--seconds" => match seconds.parse::<u64>() {
             Ok(seconds) if (1..=3600).contains(&seconds) => {
-                benchup_app::xr::panel::run_editor(std::time::Duration::from_secs(seconds))
+                benchup_app::xr::panel::run_editor(Some(std::time::Duration::from_secs(seconds)))
             }
             _ => Err("--seconds must be an integer from 1 through 3600".into()),
         },

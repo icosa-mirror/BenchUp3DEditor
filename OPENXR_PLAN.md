@@ -14,6 +14,12 @@ shapes/text, modeling transforms, solid tools and section-handle manipulation.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 
+Interactive editor launches now use a normal empty desktop/taskbar window and
+run until the user closes it or the runtime exits. The main-thread window signals
+the separate XR worker to shut down; `--seconds N` is opt-in diagnostics only.
+Desktop mirroring can be added later without tying window responsiveness to the
+headset frame loop.
+
 1. Run the complete existing editor as an interactive 2D panel in a headset.
 2. Separate the editor UI from the model viewport: retain readable floating UI
    panels while rendering the model as head-tracked, stereoscopic VR content.

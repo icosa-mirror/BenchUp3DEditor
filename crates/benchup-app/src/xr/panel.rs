@@ -1,11 +1,12 @@
 //! Borrowed Vulkan images and an OpenXR quad, with a pattern probe or shared
-//! editor host. The editor path adds preferences and controller input; native
-//! window services and desktop mirroring are still pending.
+//! editor host. The editor has a desktop lifetime window; desktop mirroring and
+//! other native window services are still pending.
 
 use ash::vk::{self, Handle};
 use openxr as xr;
 use std::{
     error::Error,
+    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
 use wgpu::hal::{self, vulkan};
@@ -375,13 +376,18 @@ impl Graphics {
 /// Display an orientation panel for `duration`, then request an orderly session stop.
 /// The timeout includes waiting for the headset/session to become ready.
 pub fn run(duration: Duration) -> Result<()> {
-    run_content(duration, false)
+    run_content(Some(duration), false, &AtomicBool::new(false))
 }
 
 /// Shared-editor panel preview with controller input and shared preferences.
-/// Native window services and the desktop mirror are pending.
-pub fn run_editor(duration: Duration) -> Result<()> {
-    run_content(duration, true)
+/// Runs until its desktop window closes or the runtime exits. A duration is an
+/// optional, explicit diagnostic limit, not the normal application lifetime.
+pub fn run_editor(duration: Option<Duration>) -> Result<()> {
+    super::desktop::run(duration)
+}
+
+pub(super) fn run_editor_session(duration: Option<Duration>, close: &AtomicBool) -> Result<()> {
+    run_content(duration, true, close)
 }
 
 /// Diagnose the shared editor renderer on the runtime-selected GPU without a
@@ -517,11 +523,12 @@ fn snapshot_editor_on_device(
     Ok(())
 }
 
-fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
-    println!(
-        "[BenchUpXR] Vulkan/wgpu quad probe; duration {}s",
-        duration.as_secs()
-    );
+fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool) -> Result<()> {
+    if let Some(duration) = duration {
+        println!("[BenchUpXR] Explicit diagnostic limit: {}s", duration.as_secs());
+    } else {
+        println!("[BenchUpXR] Editor running until its desktop window closes or the runtime exits.");
+    }
     // SAFETY: explicit developer entry point loading the installed OpenXR loader.
     let entry = unsafe { xr::Entry::load(&()) }?;
     let available = entry.enumerate_extensions()?;
@@ -667,7 +674,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     let mut last_input = Instant::now();
     let mut anchor = xr::Posef::IDENTITY;
     let mut anchored = false;
-    let mut stopping = false;
+    let mut stopping: Option<Instant> = None;
     let mut submitted = 0u64;
     let mut stereo_submitted = 0u64;
     loop {
@@ -693,7 +700,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
                         xr::SessionState::STOPPING => {
                             session.end()?;
                             running = false;
-                            if stopping {
+                            if stopping.is_some() {
                                 break;
                             }
                         }
@@ -723,18 +730,22 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
                 _ => {}
             }
         }
-        if start.elapsed() >= duration && !stopping {
+        let close_requested = close.load(Ordering::Relaxed);
+        if (close_requested || duration.is_some_and(|duration| start.elapsed() >= duration)) && stopping.is_none() {
             if running {
                 session.request_exit()?;
-                stopping = true;
+                stopping = Some(Instant::now());
+                println!("[BenchUpXR] Requesting session shutdown.");
+            } else if close_requested {
+                break;
             } else {
                 return Err("Headset did not start a renderable session before timeout".into());
             }
         }
-        if stopping && !running {
+        if stopping.is_some() && !running {
             break;
         }
-        if stopping && start.elapsed() > duration + Duration::from_secs(5) {
+        if stopping.is_some_and(|start| start.elapsed() > Duration::from_secs(5)) {
             return Err("Runtime did not stop the session within five seconds".into());
         }
         if !running {
@@ -905,7 +916,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
         }
     }
     println!("[BenchUpXR] Clean stop; {submitted} quad frames submitted.");
-    if submitted == 0 {
+    if submitted == 0 && !close.load(Ordering::Relaxed) {
         return Err("Session ended without rendering a quad".into());
     }
     Ok(())

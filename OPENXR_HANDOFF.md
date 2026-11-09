@@ -22,6 +22,25 @@ The initial plan/panel milestone is commit `e21b8c9`.
 
 ### Current work: immersive visual parity
 
+### Normal desktop lifetime and manual exit
+
+The interactive `openxr_editor` entry point now opens an empty native desktop
+window titled "BenchUp VR — close this window to exit". It appears in the taskbar
+and accepts normal Close/Alt+F4 actions. Its default launch has no deadline;
+`--seconds N` remains an explicit diagnostic option only. Do not use that option
+for normal interactive user previews.
+
+The desktop event loop stays on the main thread while the XR session runs on its
+own thread, so a headset/runtime frame wait cannot freeze desktop Close. Closing
+removes the window and signals orderly session shutdown. Worker completion/errors
+close the desktop loop too. An eight-second shutdown guard handles a stalled
+runtime/driver; this is not a session/test deadline. Desktop mirroring is deferred.
+
+An isolated Windows lifecycle check using the exact desktop module and a simulated
+XR worker confirmed a visible native window, Close delivery, worker notification
+and clean exit code 0. The native OpenXR editor build also passes. Live OpenXR
+teardown remains to be checked in the next interactive launch.
+
 ### Direct controller-ray drawing and measurements
 
 Scene clicks now honor the active tool instead of switching to Select. Line,
