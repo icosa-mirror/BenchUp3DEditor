@@ -33,6 +33,7 @@ pub(super) struct Scene {
     lines: super::world_lines::Lines,
     text: super::world_text::Text,
     head: DMat4,
+    dark: bool,
 }
 
 impl Scene {
@@ -50,6 +51,7 @@ impl Scene {
             lines: super::world_lines::Lines::new(device, format),
             text: super::world_text::Text::new(device, format),
             head: DMat4::IDENTITY,
+            dark: false,
         }
     }
 
@@ -84,7 +86,16 @@ impl Scene {
     }
 
     pub fn stage_labels(&mut self, ctx: &egui::Context, source: &Source) {
-        self.text.stage(ctx, source, self.input.and_then(|input| input.hit).map(|hit| hit.entity));
+        let dark = ctx.global_style().visuals.dark_mode;
+        if self.dark != dark {
+            self.dark = dark;
+            self.ctx.set_visuals(ctx.global_style().visuals.clone());
+        }
+        self.text.stage(
+            ctx,
+            source,
+            self.input.and_then(|input| input.hit).map(|hit| hit.entity),
+        );
     }
 
     pub fn pick_ray(&self, ray: benchup_core::Ray, scale: f32) -> Option<super::input::SceneHit> {
@@ -184,7 +195,7 @@ impl Scene {
                     size: DVec2::new(size[0] as f64, size[1] as f64),
                     pixels_per_point: 1.0,
                     display,
-                    dark: false,
+                    dark: self.dark,
                     tool: benchup_core::Tool::Orbit,
                     selected: source.selected.clone(),
                     hover: self.input.and_then(|input| input.hit).map(|hit| hit.entity),
@@ -259,22 +270,84 @@ impl Scene {
                     }
                 }
                 if source.display.axes {
-                    for (axis, color) in [
-                        (DVec3::X, [0.95, 0.2, 0.15, 1.0]),
-                        (DVec3::Y, [0.2, 0.85, 0.25, 1.0]),
-                        (DVec3::Z, [0.2, 0.45, 1.0, 1.0]),
-                    ] {
+                    for (axis, rgb) in [DVec3::X, DVec3::Y, DVec3::Z]
+                        .into_iter()
+                        .zip(source.display.axis_colors)
+                    {
+                        let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2])
+                            .to_normalized_gamma_f32();
                         lines.push(Line::new(-origin, axis * half - origin, color, 2.0));
+                    }
+                }
+                let colors = crate::theme::Palette::for_painter(&self.ctx.debug_painter());
+                if source.display.guides {
+                    for (id, guide) in source
+                        .model
+                        .guides
+                        .iter()
+                        .filter(|(id, _)| !source.model.is_hidden(**id))
+                    {
+                        let color = if self.entities.selected(&source.model, *id, &source.selected)
+                        {
+                            colors.accent
+                        } else if self.input.and_then(|input| input.hit).is_some_and(|hit| {
+                            source.model.entity_in_context(*id) == Some(hit.entity)
+                        }) {
+                            colors.green
+                        } else {
+                            egui::Color32::from_rgb(0, 174, 214)
+                        }
+                        .to_normalized_gamma_f32();
+                        if let Some(direction) = guide.direction {
+                            let center =
+                                guide.origin + direction * (origin - guide.origin).dot(direction);
+                            lines.push(Line::dashed(
+                                center - direction * half * 10.0 - origin,
+                                center + direction * half * 10.0 - origin,
+                                color,
+                                1.5,
+                            ));
+                        } else {
+                            lines.push(Line::marker(guide.origin - origin, color, 4.0));
+                        }
+                    }
+                }
+                if let Some((lo, hi)) = self.faces.context_bounds(&source.model, &self.entities) {
+                    let padding = ((hi - lo).max_element() * 0.04).max(0.05);
+                    let lo = lo - DVec3::splat(padding);
+                    let hi = hi + DVec3::splat(padding);
+                    let corner = |i: usize| {
+                        DVec3::new(
+                            if i & 1 == 0 { lo.x } else { hi.x },
+                            if i & 2 == 0 { lo.y } else { hi.y },
+                            if i & 4 == 0 { lo.z } else { hi.z },
+                        )
+                    };
+                    for i in 0..8 {
+                        for axis in 0..3 {
+                            if i & (1 << axis) == 0 {
+                                lines.push(Line::dashed(
+                                    corner(i) - origin,
+                                    corner(i | (1 << axis)) - origin,
+                                    colors.muted.to_normalized_gamma_f32(),
+                                    1.0,
+                                ));
+                            }
+                        }
                     }
                 }
                 for &(a, b, color) in &self.text.lines {
                     lines.push(Line::new(a - origin, b - origin, color, 1.5));
                 }
+                for &(a, b, color) in &self.text.ticks {
+                    lines.push(Line::tick(a - origin, b - origin, color));
+                }
                 lines
             });
             let transform = placement.model_to_tracking(preferences.scene_scale as f64);
             let tracking_view = projection(eye.fov, 0.03, 200.0) * pose_matrix(eye.pose).inverse();
-            self.text.prepare(device, queue, origin, tracking_view, transform, self.head);
+            self.text
+                .prepare(device, queue, origin, tracking_view, transform, self.head);
             let mut pointer = Vec::new();
             if let Some(input) = self.input {
                 if let Some(hit) = input.hit {

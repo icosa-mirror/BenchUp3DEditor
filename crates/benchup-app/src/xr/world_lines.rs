@@ -9,6 +9,7 @@ pub(super) struct Line {
     width: f32,
     b: [f32; 3],
     color: [f32; 4],
+    style: [f32; 4],
 }
 
 impl Line {
@@ -18,6 +19,28 @@ impl Line {
             b: b.as_vec3().to_array(),
             color,
             width,
+            style: [0.0; 4],
+        }
+    }
+
+    pub fn dashed(a: glam::DVec3, b: glam::DVec3, color: [f32; 4], width: f32) -> Self {
+        Self {
+            style: [0.0, 10.0, 6.0, 0.0],
+            ..Self::new(a, b, color, width)
+        }
+    }
+
+    pub fn marker(point: glam::DVec3, color: [f32; 4], radius: f32) -> Self {
+        Self {
+            style: [1.0, radius, 0.0, 0.0],
+            ..Self::new(point, point, color, 1.5)
+        }
+    }
+
+    pub fn tick(point: glam::DVec3, toward: glam::DVec3, color: [f32; 4]) -> Self {
+        Self {
+            style: [2.0, 0.0, 0.0, 0.0],
+            ..Self::new(point, toward, color, 1.5)
         }
     }
 }
@@ -43,7 +66,7 @@ impl Lines {
             label: Some("BenchUpXR world overlay lines"), layout: None,
             vertex: wgpu::VertexState { module: &shader, entry_point: Some("vertex"),
                 buffers: &[Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Line>() as _, step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,3=>Float32,1=>Float32x3,2=>Float32x4] })], compilation_options: Default::default() },
+                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,3=>Float32,1=>Float32x3,2=>Float32x4,4=>Float32x4] })], compilation_options: Default::default() },
             fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fragment"),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
             primitive: Default::default(), depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,

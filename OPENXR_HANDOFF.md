@@ -34,9 +34,17 @@ projection and readable angular sizing run on the GPU. Glyphs are staged before
 the panel atlas upload, and reshaped only when content/settings/font scale change.
 
 This is not a claim of visual equivalence: exact owner-aware label occlusion,
-dimension end ticks, inference glyphs, tool previews, sections, specialized display
+inference glyphs, tool previews, sections, specialized display
 modes and joinery/fastener feedback still need completion. No new headset visual
 confirmation has been requested for these overlays.
+
+Construction guide lines and points, active edit-context bounds and dimension end
+ticks now use retained GPU overlay instances. Dash spacing, point-marker sizing
+and projected tick direction are shader operations, shared by both eye draws.
+Axes use the existing saved axis colors; the immersive palette follows the editor
+theme. Guide lines are currently bounded to the fitted scene neighbourhood, and
+guide points use a screen-facing cross. Exact infinite-grid/guide clipping and
+owner-aware annotation occlusion remain parity work.
 
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.
 - Native `crates/benchup-app/src/xr.rs`: physical panel dimensions and validated

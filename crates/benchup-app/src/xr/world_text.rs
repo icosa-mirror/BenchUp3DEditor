@@ -40,6 +40,7 @@ pub(super) struct Text {
     origin: Option<DVec3>,
     dirty: bool,
     pub lines: Vec<(DVec3, DVec3, [f32; 4])>,
+    pub ticks: Vec<(DVec3, DVec3, [f32; 4])>,
     pub revision: u64,
 }
 
@@ -94,6 +95,7 @@ impl Text {
             origin: None,
             dirty: false,
             lines: Vec::new(),
+            ticks: Vec::new(),
             revision: 0,
         }
     }
@@ -129,6 +131,7 @@ impl Text {
         };
         let mut labels = Vec::new();
         let mut lines = Vec::new();
+        let mut ticks = Vec::new();
         if source.display.group_names {
             for marker in self.markers.update(model, source.revision).iter() {
                 if let Some(object) = model.objects.get(&marker.id).filter(|object| {
@@ -157,6 +160,9 @@ impl Text {
                 let ink = color(dimension.id);
                 for (a, b) in [(0, 2), (1, 3), (2, 3)] {
                     lines.push((points[a], points[b], ink.to_normalized_gamma_f32()));
+                }
+                for (a, b) in [(2, 3), (3, 2)] {
+                    ticks.push((points[a], points[b], ink.to_normalized_gamma_f32()));
                 }
                 labels.push((
                     (points[2] + points[3]) * 0.5,
@@ -219,6 +225,7 @@ impl Text {
         }
         key.atlas = ctx.fonts(|fonts| fonts.font_image_size());
         self.lines = lines;
+        self.ticks = ticks;
         self.key = Some(key);
         self.dirty = true;
         self.revision = self.revision.wrapping_add(1);
