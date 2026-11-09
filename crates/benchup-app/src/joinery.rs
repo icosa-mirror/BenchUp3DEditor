@@ -10,6 +10,11 @@ mod cards;
 #[path = "joint_highlight.rs"]
 mod highlight;
 
+const JOINT_MARKER_PATHS: [&[(f32,f32)];2]=[
+    &[(-9.,-7.),(-2.5,-7.),(-2.5,-3.5),(2.5,-3.5),(2.5,2.5),(-2.5,2.5),(-2.5,7.),(-9.,7.),(-9.,-7.)],
+    &[(9.,-7.),(-0.5,-7.),(-0.5,-5.5),(4.5,-5.5),(4.5,4.5),(-0.5,4.5),(-0.5,7.),(9.,7.),(9.,-7.)],
+];
+
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub(super) struct Preferences {
@@ -451,6 +456,29 @@ fn warning(ui: &mut egui::Ui, message: impl Into<String>) {
     });
 }
 impl BenchUpApp {
+    #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
+    pub(super) fn append_spatial_joinery(&self,dark:bool,output:&mut super::viewport_overlays::Overlays) {
+        use super::viewport_overlays::{Billboard,Glyph};
+        if self.history_preview.is_some() {return;}
+        if self.doc.display.wood_joinery {
+            let preview=self.active_joint_preview().and_then(|preview|preview.result.as_ref().ok());
+            let (geometry,draft)=preview.map_or((&self.joinery_geometry,None),|(id,geometry)|(geometry,Some(*id)));
+            for (id,region) in &geometry.regions {region.append_spatial(&self.doc.model,&self.doc.display,dark,draft==Some(*id),output);}
+        }
+        for (id,point,owners) in self.joint_marker_anchors() {
+            let error=self.joinery_geometry.result.as_ref().and_then(|evaluation|evaluation.errors.iter().find(|(key,_)|*key==id).map(|(_,message)|message));
+            let mut shapes=vec![Glyph::Rect {min:[-14.0,-14.0],max:[14.0,14.0],fill:if dark {Color32::from_rgb(37,44,39)} else {Color32::from_rgb(250,251,247)},color:Color32::from_gray(140),width:1.0}];
+            if error.is_some() {
+                shapes.push(Glyph::Polygon {points:vec![[0.0,-10.0],[10.0,9.0],[-10.0,9.0]],fill:Color32::from_rgb(255,199,66),color:Color32::from_rgb(94,52,0),width:1.5});
+                shapes.push(Glyph::Text {at:[0.0,2.0],text:"!".into(),size:17.0,color:Color32::from_rgb(65,36,0)});
+            } else {
+                for (index,path) in JOINT_MARKER_PATHS.iter().enumerate() {
+                    shapes.push(Glyph::Path {points:path.iter().map(|&(x,y)|[x,y]).collect(),color:Self::joinery_part_color(index),width:1.8});
+                }
+            }
+            output.billboards.push(Billboard {point,shapes,owners:std::sync::Arc::new(owners),depth:true});
+        }
+    }
     pub(super) fn joinery_edit_members(&self) -> Option<[u64; 2]> {
         if !self.joinery.open || self.history_preview.is_some() { return None; }
         let mut members = self.joinery_dialog.members?;
@@ -462,7 +490,7 @@ impl BenchUpApp {
         else { Color32::from_rgb(245, 155, 45) }
     }
 
-    fn joint_markers(&self, rect: Rect) -> Vec<(u64, Pos2)> {
+    fn joint_marker_anchors(&self) -> Vec<(u64,DVec3,BTreeSet<u64>)> {
         // The display toggle controls joint guides; edit icons stay available.
         if self.joinery.open || self.history_preview.is_some() {
             return Vec::new();
@@ -488,12 +516,18 @@ impl BenchUpApp {
             let model = self.joinery_geometry.result.as_ref()
                 .map_or(&self.doc.model, |evaluation| &evaluation.model);
             let owners = model.expand_entities(&connection.members.into_iter().collect());
+            Some((*id,center,owners))
+        }).collect()
+    }
+
+    fn joint_markers(&self,rect:Rect)->Vec<(u64,Pos2)> {
+        self.joint_marker_anchors().into_iter().filter_map(|(id,center,owners)| {
             if !self.render_picking_cache.marker_visible(
                 &self.render_face_cache, &self.render_entity_cache, &self.doc.camera,
                 dv(rect.size()), center, &owners,
             ) { return None; }
             let point = rect.min + pv(self.doc.camera.project(center, dv(rect.size()))?);
-            rect.contains(point).then_some((*id, point))
+            rect.contains(point).then_some((id, point))
         }).collect()
     }
     pub(super) fn joint_marker_under_pointer(&self, ctx: &egui::Context, rect: Rect) -> bool {
@@ -521,14 +555,9 @@ impl BenchUpApp {
                     "!", FontId::proportional(17.), Color32::from_rgb(65, 36, 0));
             } else {
                 // Separate outlines keep both mating parts visible at icon size.
-                for (index, path) in [
-                    vec![(-9., -7.), (-2.5, -7.), (-2.5, -3.5), (2.5, -3.5),
-                        (2.5, 2.5), (-2.5, 2.5), (-2.5, 7.), (-9., 7.), (-9., -7.)],
-                    vec![(9., -7.), (-0.5, -7.), (-0.5, -5.5), (4.5, -5.5),
-                        (4.5, 4.5), (-0.5, 4.5), (-0.5, 7.), (9., 7.), (9., -7.)],
-                ].into_iter().enumerate() {
+                for (index, path) in JOINT_MARKER_PATHS.iter().enumerate() {
                     ui.painter().add(egui::Shape::line(
-                        path.into_iter().map(|(x, y)| point + egui::vec2(x, y)).collect(),
+                        path.iter().map(|&(x, y)| point + egui::vec2(x, y)).collect(),
                         Stroke::new(1.8, Self::joinery_part_color(index)),
                     ));
                 }

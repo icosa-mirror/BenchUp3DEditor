@@ -79,6 +79,8 @@ fn face_vertex(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>,
     if camera.display_flags.x == 3u { material = camera.background_color; }
     if (state&4u)==0u && (state&8u)==0u {material=camera.face_inactive;}
     else if (state&32u)!=0u {material=vec4<f32>(220.0/255.0,91.0/255.0,76.0/255.0,1.0);}
+    else if (state&128u)!=0u {material=vec4<f32>((material.rgb*3.0+vec3<f32>(45.0,160.0,235.0)/255.0)/4.0,material.a);}
+    else if (state&256u)!=0u {material=vec4<f32>((material.rgb*3.0+vec3<f32>(245.0,155.0,45.0)/255.0)/4.0,material.a);}
     else if (state&1u)!=0u {material=camera.face_selected;}
     else if (state&2u)!=0u {material=camera.face_hovered;}
     let brightness = 0.62 + 0.38 * max(dot(n, camera.light.xyz), 0.0);
@@ -180,6 +182,8 @@ fn edge_vertex(@location(0) world_a: vec3<f32>, @location(1) world_b: vec3<f32>,
     else if (state&4u)==0u && (state&8u)==0u {edge_color=camera.edge_inactive;}
     else if (state&32u)!=0u {edge_color=vec4<f32>(220.0/255.0,91.0/255.0,76.0/255.0,1.0);}
     else if (state&16u)!=0u {edge_color=vec4<f32>(90.0/255.0,133.0/255.0,176.0/255.0,1.0);}
+    else if (state&128u)!=0u {edge_color=vec4<f32>(45.0/255.0,160.0/255.0,235.0/255.0,1.0);}
+    else if (state&256u)!=0u {edge_color=vec4<f32>(245.0/255.0,155.0/255.0,45.0/255.0,1.0);}
     else if (state&1u)!=0u {edge_color=camera.edge_selected;}
     else if (state&2u)!=0u {edge_color=select(camera.edge_hovered,camera.edge_selected,(camera.interaction.w&1u)!=0u && (state&8u)==0u);}
     output.color = target_color(edge_color);

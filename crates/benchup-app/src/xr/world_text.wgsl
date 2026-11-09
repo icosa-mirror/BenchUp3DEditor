@@ -32,7 +32,7 @@ struct Output {
 }
 @fragment fn fragment(in: Output) -> @location(0) vec4<f32> {
     let face=textureLoad(visibility,vec2<i32>(in.position.xy),0).xy;
-    if face.x!=0u && bitcast<f32>(face.y)<in.position.z-0.00000024 {
+    if in.owners.x!=0xffffffffu && face.x!=0u && bitcast<f32>(face.y)<in.position.z-0.00000024 {
         // Sorted slots avoid a per-fragment linear scan of large group contents.
         var lo=in.owners.x; var hi=in.owners.y;
         loop {if lo>=hi {break;} let mid=lo+(hi-lo)/2u;

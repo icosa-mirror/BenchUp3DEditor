@@ -19,13 +19,121 @@ pub(crate) struct Label {
 }
 
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
-#[derive(Default)]
+#[derive(Clone, Default, PartialEq)]
 pub(crate) struct Overlays {
     pub segments: Vec<Segment>,
     pub markers: Vec<(DVec3, Color32)>,
     pub ticks: Vec<(DVec3, DVec3, Color32)>,
     pub labels: Vec<Label>,
     pub surfaces: Vec<Triangle>,
+    pub owned_segments: Vec<OwnedSegment>,
+    pub billboards: Vec<Billboard>,
+    pub overlay_segments: Vec<Segment>,
+    pub arrows: Vec<(DVec3, DVec3, Color32)>,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Clone, PartialEq)]
+pub(crate) struct Billboard {
+    pub point: DVec3,
+    pub shapes: Vec<Glyph>,
+    pub owners: std::sync::Arc<BTreeSet<u64>>,
+    pub depth: bool,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Clone, PartialEq)]
+pub(crate) enum Glyph {
+    Circle {
+        center: [f32; 2],
+        radius: f32,
+        fill: Color32,
+        color: Color32,
+        width: f32,
+    },
+    Rect {
+        min: [f32; 2],
+        max: [f32; 2],
+        fill: Color32,
+        color: Color32,
+        width: f32,
+    },
+    Polygon {
+        points: Vec<[f32; 2]>,
+        fill: Color32,
+        color: Color32,
+        width: f32,
+    },
+    Path {
+        points: Vec<[f32; 2]>,
+        color: Color32,
+        width: f32,
+    },
+    Text {
+        at: [f32; 2],
+        text: String,
+        size: f32,
+        color: Color32,
+    },
+    Hint {
+        at: [f32; 2],
+        text: String,
+        size: f32,
+        color: Color32,
+        background: Color32,
+    },
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+impl Overlays {
+    pub fn circle(
+        &mut self,
+        point: DVec3,
+        radius: f32,
+        color: Color32,
+        paper: Color32,
+        filled: bool,
+    ) {
+        self.billboards.push(Billboard {
+            point,
+            owners: Default::default(),
+            depth: false,
+            shapes: vec![Glyph::Circle {
+                center: [0.0, 0.0],
+                radius,
+                fill: if filled { color } else { paper },
+                color,
+                width: if filled { 0.0 } else { 1.5 },
+            }],
+        });
+    }
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Clone, PartialEq)]
+pub(crate) struct OwnedSegment {
+    pub line: Segment,
+    pub owners: std::sync::Arc<BTreeSet<u64>>,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Default)]
+pub(crate) struct ReferenceCache {
+    key: Option<ReferenceKey>,
+    output: std::sync::Arc<Overlays>,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(PartialEq)]
+struct ReferenceKey {
+    revision: u64,
+    display: benchup_core::DisplaySettings,
+    dark: bool,
+    history: bool,
+    joinery_open: bool,
+    fastener_draft: Option<benchup_core::connections::Connection>,
+    joint_draft: Option<([u64; 2], benchup_core::joinery::JointSettings)>,
+    joint_errors: Vec<(u64, String)>,
 }
 
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
@@ -36,6 +144,37 @@ pub(crate) struct Triangle {
 }
 
 impl BenchUpApp {
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(super) fn xr_reference_overlays(
+        &mut self,
+        ctx: &egui::Context,
+    ) -> std::sync::Arc<Overlays> {
+        let key = ReferenceKey {
+            revision: self.render_model.revision(),
+            display: self.doc.display.clone(),
+            dark: ctx.global_style().visuals.dark_mode,
+            history: self.history_preview.is_some(),
+            joinery_open: self.joinery.open,
+            fastener_draft: self.fastener_preview_connection(),
+            joint_draft: self.joint_highlight_preview_key(),
+            joint_errors: self
+                .joinery_geometry
+                .result
+                .as_ref()
+                .map_or_else(Vec::new, |v| v.errors.clone()),
+        };
+        if self.spatial_references.key.as_ref() != Some(&key) {
+            let mut output = Overlays::default();
+            let model = self.render_model.shared();
+            self.append_spatial_fasteners(&model, key.fastener_draft.as_ref(), &mut output);
+            self.append_spatial_joinery(key.dark, &mut output);
+            self.spatial_references = ReferenceCache {
+                key: Some(key),
+                output: std::sync::Arc::new(output),
+            };
+        }
+        std::sync::Arc::clone(&self.spatial_references.output)
+    }
     pub(super) fn drawing_preview_segments(&self, colors: Palette) -> Vec<Segment> {
         let mut lines = Vec::new();
         if let (Some(start), Some(snap)) = (self.trace_start(), self.line_preview_snap()) {
@@ -138,7 +277,7 @@ impl BenchUpApp {
                 .trace_start()
                 .or_else(|| self.drawing.as_ref().map(|drawing| drawing.origin))
             {
-                result.markers.push((start, colors.ink));
+                result.circle(start, 3.5, colors.ink, colors.paper, false);
             }
             let snap = if self.modeling.is_some() {
                 self.modeling_preview_snap()
@@ -154,7 +293,6 @@ impl BenchUpApp {
                     }
                     _ => self.inference_color(),
                 };
-                result.markers.push((snap.point, color));
                 let text = if let Some(normal) = self.plane_lock() {
                     format!(
                         "{} plane locked",
@@ -169,10 +307,46 @@ impl BenchUpApp {
                 } else {
                     snap.kind.label().to_owned()
                 };
-                result.labels.push(Label {
+                let shape = match snap.kind {
+                    Inference::Midpoint => Glyph::Polygon {
+                        points: vec![[0.0, -5.0], [-5.0, 4.0], [5.0, 4.0]],
+                        fill: colors.paper,
+                        color,
+                        width: 1.5,
+                    },
+                    Inference::Endpoint | Inference::Origin => Glyph::Rect {
+                        min: [-3.5, -3.5],
+                        max: [3.5, 3.5],
+                        fill: colors.paper,
+                        color,
+                        width: 1.5,
+                    },
+                    _ => Glyph::Circle {
+                        center: [0.0, 0.0],
+                        radius: 4.0,
+                        fill: Color32::TRANSPARENT,
+                        color,
+                        width: 1.5,
+                    },
+                };
+                result.billboards.push(Billboard {
                     point: snap.point,
-                    text,
-                    color,
+                    owners: Default::default(),
+                    depth: false,
+                    shapes: vec![
+                        shape,
+                        Glyph::Hint {
+                            at: if self.modeling.is_some() {
+                                [45.0, 18.0]
+                            } else {
+                                [14.0, 16.0]
+                            },
+                            text,
+                            size: 11.0,
+                            color,
+                            background: colors.paper,
+                        },
+                    ],
                 });
                 if let Some(start) = self.line_start {
                     result.labels.push(Label {
@@ -189,9 +363,9 @@ impl BenchUpApp {
         }
         if self.doc.display.dimensions && self.tool.is_measuring() && self.tool != Tool::Text {
             let points = self.measurement_points();
-            result
-                .markers
-                .extend(points.iter().map(|point| (*point, colors.green)));
+            for &point in &points {
+                result.circle(point, 3.0, colors.green, colors.paper, false);
+            }
             if self.tool == Tool::Dimensions {
                 if let Some(dimension) = self.dimension_preview() {
                     let points = dimension.layout(&self.doc.model);
@@ -259,7 +433,7 @@ impl BenchUpApp {
             }
         }
         if let Some(edit) = &self.modeling {
-            result.markers.push((edit.anchor, colors.ink));
+            result.circle(edit.anchor, 3.5, colors.ink, colors.paper, false);
             let end = if matches!(self.tool, Tool::Move | Tool::Scale | Tool::Rotate) {
                 edit.anchor + edit.direction
             } else {

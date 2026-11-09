@@ -25,6 +25,8 @@ struct Key {
     dark: bool,
     atlas: [usize; 2],
     tool_labels: Vec<crate::app::viewport_overlays::Label>,
+    tool_billboards: Vec<crate::app::viewport_overlays::Billboard>,
+    references: usize,
 }
 
 pub(super) struct Text {
@@ -119,6 +121,8 @@ impl Text {
             dark: ctx.global_style().visuals.dark_mode,
             atlas: ctx.fonts(|fonts| fonts.font_image_size()),
             tool_labels: source.overlays.labels.clone(),
+            tool_billboards: source.overlays.billboards.clone(),
+            references: std::sync::Arc::as_ptr(&source.references) as usize,
         };
         if self.key.as_ref() == Some(&key) {
             return;
@@ -140,7 +144,12 @@ impl Text {
         };
         let mut labels = Vec::new();
         let mut owners = std::collections::BTreeMap::<usize, Vec<u64>>::new();
-        for label in &source.overlays.labels {
+        for label in source
+            .overlays
+            .labels
+            .iter()
+            .chain(&source.references.labels)
+        {
             labels.push((
                 label.point,
                 label.text.clone(),
@@ -211,7 +220,7 @@ impl Text {
         }
         // Allocate every glyph before tessellating: atlas growth must not leave
         // earlier labels with UVs normalized against an obsolete atlas size.
-        let shapes: Vec<_> = labels
+        let mut shapes: Vec<_> = labels
             .into_iter()
             .enumerate()
             .map(|(index, (anchor, text, font, ink, wrap))| {
@@ -230,6 +239,122 @@ impl Text {
                 )
             })
             .collect();
+        for billboard in source
+            .overlays
+            .billboards
+            .iter()
+            .chain(&source.references.billboards)
+        {
+            use crate::app::viewport_overlays::Glyph;
+            let mut glyphs = Vec::new();
+            for glyph in &billboard.shapes {
+                glyphs.push(match glyph {
+                    Glyph::Circle {
+                        center,
+                        radius,
+                        fill,
+                        color,
+                        width,
+                    } => egui::Shape::Circle(egui::epaint::CircleShape {
+                        center: egui::pos2(center[0], center[1]),
+                        radius: *radius,
+                        fill: *fill,
+                        stroke: egui::Stroke::new(*width, *color),
+                    }),
+                    Glyph::Rect {
+                        min,
+                        max,
+                        fill,
+                        color,
+                        width,
+                    } => {
+                        let rect = egui::Rect::from_min_max(
+                            egui::pos2(min[0], min[1]),
+                            egui::pos2(max[0], max[1]),
+                        );
+                        egui::Shape::Vec(vec![
+                            egui::Shape::rect_filled(rect, 1, *fill),
+                            egui::Shape::rect_stroke(
+                                rect,
+                                1,
+                                egui::Stroke::new(*width, *color),
+                                egui::StrokeKind::Inside,
+                            ),
+                        ])
+                    }
+                    Glyph::Polygon {
+                        points,
+                        fill,
+                        color,
+                        width,
+                    } => egui::Shape::convex_polygon(
+                        points.iter().map(|p| egui::pos2(p[0], p[1])).collect(),
+                        *fill,
+                        egui::Stroke::new(*width, *color),
+                    ),
+                    Glyph::Path {
+                        points,
+                        color,
+                        width,
+                    } => egui::Shape::line(
+                        points.iter().map(|p| egui::pos2(p[0], p[1])).collect(),
+                        egui::Stroke::new(*width, *color),
+                    ),
+                    Glyph::Text {
+                        at,
+                        text,
+                        size,
+                        color,
+                    } => {
+                        let galley = ctx.fonts_mut(|fonts| {
+                            fonts.layout_no_wrap(
+                                text.clone(),
+                                egui::FontId::proportional(*size),
+                                *color,
+                            )
+                        });
+                        egui::Shape::galley(
+                            egui::pos2(at[0], at[1]) - galley.size() * 0.5,
+                            galley,
+                            *color,
+                        )
+                    }
+                    Glyph::Hint {
+                        at,
+                        text,
+                        size,
+                        color,
+                        background,
+                    } => {
+                        let galley = ctx.fonts_mut(|fonts| {
+                            fonts.layout_no_wrap(
+                                text.clone(),
+                                egui::FontId::proportional(*size),
+                                *color,
+                            )
+                        });
+                        let at = egui::pos2(at[0], at[1]);
+                        let bounds = egui::Rect::from_min_size(
+                            at - egui::vec2(6.0, 4.0),
+                            galley.size() + egui::vec2(12.0, 8.0),
+                        );
+                        egui::Shape::Vec(vec![
+                            egui::Shape::rect_filled(bounds, 4, *background),
+                            egui::Shape::galley(at, galley, *color),
+                        ])
+                    }
+                });
+            }
+            shapes.push((
+                billboard.point,
+                glyphs,
+                if billboard.depth {
+                    billboard.owners.iter().copied().collect()
+                } else {
+                    vec![0]
+                },
+            ));
+        }
         self.meshes.clear();
         for (anchor, shapes, owners) in shapes {
             let jobs = ctx.tessellate(
@@ -278,7 +403,11 @@ impl Text {
                 slots.sort_unstable();
                 slots.dedup();
                 owner_slots.extend(slots);
-                let range = [begin, owner_slots.len() as u32];
+                let range = if owners.as_slice() == [0] {
+                    [u32::MAX, u32::MAX]
+                } else {
+                    [begin, owner_slots.len() as u32]
+                };
                 let base = vertices.len() as u32;
                 vertices.extend(mesh.vertices.iter().map(|v| Vertex {
                     anchor: (*anchor - origin).as_vec3().to_array(),

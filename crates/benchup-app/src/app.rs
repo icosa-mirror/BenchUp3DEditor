@@ -428,6 +428,8 @@ pub struct BenchUpApp {
     // their triangulation, BVH and the shadow cache on every pointer event.
     render_face_cache: renderer::FaceCache,
     group_marker_cache: renderer::GroupMarkerCache,
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    spatial_references: viewport_overlays::ReferenceCache,
     render_entity_cache: renderer::EntityCache,
     render_picking_cache: crate::picking::PickingCache,
     #[cfg(test)]
@@ -502,6 +504,10 @@ impl BenchUpApp {
             model: self.render_model.shared(), revision: self.render_model.revision(),
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected: self.selected.clone(),
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
+            references: self.xr_reference_overlays(ctx),
+            tool:self.tool,hover:self.hover,outliner_hover:self.outliner_hover.clone(),
+            erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
+            joinery_members:self.joinery_edit_members(),
         }
     }
 
@@ -652,6 +658,8 @@ impl BenchUpApp {
             picking_cache: crate::picking::PickingCache::default(),
             render_face_cache: renderer::FaceCache::default(),
             group_marker_cache: Default::default(),
+            #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+            spatial_references: Default::default(),
             render_entity_cache: renderer::EntityCache::default(),
             render_picking_cache: crate::picking::PickingCache::default(),
             #[cfg(test)]

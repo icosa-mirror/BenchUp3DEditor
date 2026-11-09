@@ -56,18 +56,16 @@ come from the existing model/editor state. Both eyes share one head-facing layou
 projection and readable angular sizing run on the GPU. Glyphs are staged before
 the panel atlas upload, and reshaped only when content/settings/font scale change.
 
-This is not a claim of visual equivalence: exact owner-aware label occlusion,
-inference glyphs, tool previews, sections, specialized display
-modes and joinery/fastener feedback still need completion. No new headset visual
+This is not yet a claim of complete visual equivalence. No new headset visual
 confirmation has been requested for these overlays.
 
 Construction guide lines and points, active edit-context bounds and dimension end
 ticks now use retained GPU overlay instances. Dash spacing, point-marker sizing
 and projected tick direction are shader operations, shared by both eye draws.
 Axes use the existing saved axis colors; the immersive palette follows the editor
-theme. Guide lines are currently bounded to the fitted scene neighbourhood, and
-guide points use a screen-facing cross. Exact infinite-grid/guide clipping and
-owner-aware annotation occlusion remain parity work.
+theme. The floor grid now uses an analytic GPU ray/plane lattice, with saved
+finite/infinite extent, spacing, major/minor colors, distance fade and adaptive
+distant spacing. It replaces the initial bounded fitted-scene grid mesh.
 
 Live tool overlays now have model-space descriptors in `viewport_overlays.rs`.
 Desktop and XR share the drawing-preview segment producer. XR also consumes
@@ -78,12 +76,21 @@ implement a separate model-operation pipeline. Tool line/marker buffers are
 retained separately from the grid and saved-reference buffer. World labels are
 reshaped only when the corresponding content changes.
 
+The retained billboard path now also draws vector glyphs, including inference
+endpoint/midpoint shapes and the shared joint edit/warning icon outlines.
+Joinery cut guides preserve owner-aware visibility in the GPU face/depth mask.
+Fastener insertion axes, head/interface markers, arrowheads and invalid-reference
+labels use existing connection evaluation, cached by source/settings changes;
+head motion does not repeat connection evaluation. Painter-style hints retain
+their overlay behavior, while depth-tested model annotations retain occlusion.
+Active tool, eraser preview, outliner hover and joinery member coloring are shared
+with the editor rather than synthesized independently by XR.
+
 Controller scene clicks still select entities; world-ray drawing/manipulation is
 not yet wired. Current transient overlays reflect operations performed through the
-editor panel. Exact inference glyph shapes, rotation handles/arcs, section planes
-and caps, joinery/fastener markers, display-mode parity, label layout/ownership and
-direct tool interaction remain open. The duplicated 2D viewport remains until
-these parity gaps are closed.
+editor panel. Remaining visual work includes grain patterns, rotation graphics,
+paste previews and final hint/status/handle coverage. The duplicated 2D viewport
+remains for comparison and existing tool interaction while these gaps are closed.
 
 - Root `OPENXR_PLAN.md`: architecture, phased deliverables and acceptance gates.
 - Native `crates/benchup-app/src/xr.rs`: physical panel dimensions and validated

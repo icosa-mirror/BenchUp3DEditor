@@ -10,6 +10,7 @@ pub(super) struct Line {
     b: [f32; 3],
     color: [f32; 4],
     style: [f32; 4],
+    owners: [u32; 2],
 }
 
 impl Line {
@@ -20,12 +21,13 @@ impl Line {
             color,
             width,
             style: [0.0; 4],
+            owners: [0, 0],
         }
     }
 
     pub fn dashed(a: glam::DVec3, b: glam::DVec3, color: [f32; 4], width: f32) -> Self {
         Self {
-            style: [0.0, 10.0, 6.0, 0.0],
+            style: [0.0, 10.0, 6.0, 1.0],
             ..Self::new(a, b, color, width)
         }
     }
@@ -43,6 +45,21 @@ impl Line {
             ..Self::new(point, toward, color, 1.5)
         }
     }
+    pub fn owned(mut self, range: [u32; 2]) -> Self {
+        self.owners = range;
+        self.style[3] = 0.0;
+        self
+    }
+    pub fn overlay(mut self) -> Self {
+        self.style[3] = 1.0;
+        self
+    }
+    pub fn arrow(a: glam::DVec3, b: glam::DVec3, color: [f32; 4]) -> Self {
+        Self {
+            style: [3.0, 12.0, 2.0, 1.0],
+            ..Self::new(a, b, color, 2.0)
+        }
+    }
 }
 
 pub(super) struct Lines {
@@ -52,6 +69,9 @@ pub(super) struct Lines {
     reference_key: Vec<u64>,
     tools: wgpu::Buffer,
     tool_instances: Vec<Line>,
+    owner_key: Option<(u64, usize)>,
+    owner_ranges: Vec<[u32; 2]>,
+    owner_slots: wgpu::Buffer,
     pointer: wgpu::Buffer,
     pointer_count: u32,
     uniforms: [wgpu::Buffer; 2],
@@ -68,18 +88,18 @@ impl Lines {
             label: Some("BenchUpXR world overlay lines"), layout: None,
             vertex: wgpu::VertexState { module: &shader, entry_point: Some("vertex"),
                 buffers: &[Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<Line>() as _, step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,3=>Float32,1=>Float32x3,2=>Float32x4,4=>Float32x4] })], compilation_options: Default::default() },
+                    attributes: &wgpu::vertex_attr_array![0=>Float32x3,3=>Float32,1=>Float32x3,2=>Float32x4,4=>Float32x4,5=>Uint32x2] })], compilation_options: Default::default() },
             fragment: Some(wgpu::FragmentState { module: &shader, entry_point: Some("fragment"),
                 targets: &[Some(wgpu::ColorTargetState { format, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL })], compilation_options: Default::default() }),
             primitive: Default::default(), depth_stencil: Some(wgpu::DepthStencilState { format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                depth_write_enabled: Some(false), depth_compare: Some(wgpu::CompareFunction::Always),
                 stencil: Default::default(), bias: wgpu::DepthBiasState { constant: -1, ..Default::default() } }),
             multisample: Default::default(), multiview_mask: None, cache: None,
         });
         let uniform = || {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("BenchUpXR overlay view"),
-                size: 80,
+                size: 96,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -111,6 +131,13 @@ impl Lines {
             reference_key: Vec::new(),
             tools: empty(),
             tool_instances: Vec::new(),
+            owner_key: None,
+            owner_ranges: Vec::new(),
+            owner_slots: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("BenchUpXR line ownership"),
+                contents: bytemuck::cast_slice(&[0u32]),
+                usage: wgpu::BufferUsages::STORAGE,
+            }),
             pointer: empty(),
             pointer_count: 0,
             uniforms,
@@ -145,12 +172,18 @@ impl Lines {
         tracking_matrix: glam::DMat4,
         size: [u32; 2],
         pointer: &[Line],
+        limits: [Option<f64>; 3],
+        origin: glam::DVec3,
     ) {
         for (index, matrix) in [model_matrix, tracking_matrix].into_iter().enumerate() {
-            let mut data = [0.0f32; 20];
+            let mut data = [0.0f32; 24];
             data[..16].copy_from_slice(&matrix.as_mat4().to_cols_array());
             data[16] = size[0] as f32;
             data[17] = size[1] as f32;
+            data[18] = if index == 0 { 1.0 } else { 0.0 };
+            for axis in 0..3 {
+                data[20 + axis] = limits[axis].map_or(f32::MAX, |v| (v - origin[axis]) as f32);
+            }
             queue.write_buffer(&self.uniforms[index], 0, bytemuck::cast_slice(&data));
         }
         self.pointer_count = pointer.len().min(32) as u32;
@@ -177,10 +210,74 @@ impl Lines {
         self.tool_instances = instances;
     }
 
-    pub fn paint(&self, pass: &mut wgpu::RenderPass<'_>, size: [u32; 2]) {
+    pub fn owned_tools(
+        &mut self,
+        device: &wgpu::Device,
+        key: (u64, usize),
+        lines: &[crate::app::viewport_overlays::OwnedSegment],
+        slot: impl Fn(u64) -> u32,
+    ) {
+        if self.owner_key == Some(key) {
+            return;
+        }
+        let mut slots = Vec::new();
+        self.owner_ranges.clear();
+        for line in lines {
+            let begin = slots.len() as u32;
+            let mut owners: Vec<_> = line
+                .owners
+                .iter()
+                .copied()
+                .map(&slot)
+                .filter(|v| *v != 0)
+                .collect();
+            owners.sort_unstable();
+            owners.dedup();
+            slots.extend(owners);
+            self.owner_ranges.push([begin, slots.len() as u32]);
+        }
+        if slots.is_empty() {
+            slots.push(0);
+        }
+        self.owner_slots = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("BenchUpXR retained guide ownership"),
+            contents: bytemuck::cast_slice(&slots),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.owner_key = Some(key);
+    }
+    pub fn owner_range(&self, index: usize) -> [u32; 2] {
+        self.owner_ranges[index]
+    }
+
+    pub fn paint(
+        &self,
+        device: &wgpu::Device,
+        pass: &mut wgpu::RenderPass<'_>,
+        size: [u32; 2],
+        visibility: Option<&wgpu::TextureView>,
+    ) {
+        let Some(visibility) = visibility else {
+            return;
+        };
+        let ownership = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("BenchUpXR guide visibility"),
+            layout: &self.pipeline.get_bind_group_layout(1),
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.owner_slots.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(visibility),
+                },
+            ],
+        });
         pass.set_viewport(0.0, 0.0, size[0] as f32, size[1] as f32, 0.0, 1.0);
         pass.set_scissor_rect(0, 0, size[0], size[1]);
         pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(1, &ownership, &[]);
         for (index, buffer, count) in [
             (0, &self.references, self.reference_count),
             (0, &self.tools, self.tool_instances.len() as u32),

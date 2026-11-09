@@ -13,6 +13,12 @@ pub(crate) struct Source {
     pub display: DisplaySettings,
     pub selected: BTreeSet<u64>,
     pub overlays: crate::app::viewport_overlays::Overlays,
+    pub references: Arc<crate::app::viewport_overlays::Overlays>,
+    pub tool:benchup_core::Tool,
+    pub hover:Option<u64>,
+    pub outliner_hover:BTreeSet<u64>,
+    pub erasing:BTreeSet<u64>,
+    pub joinery_members:Option<[u64;2]>,
 }
 
 struct Placement {
@@ -38,6 +44,7 @@ pub(super) struct Scene {
     sections: crate::app::display_scene::SectionCache,
     surfaces: super::world_surfaces::Surfaces,
     backdrop: super::backdrop::Backdrop,
+    grid: super::floor_grid::Grid,
 }
 
 impl Scene {
@@ -59,6 +66,7 @@ impl Scene {
             sections: Default::default(),
             surfaces: super::world_surfaces::Surfaces::new(device, format),
             backdrop: super::backdrop::Backdrop::new(device, format),
+            grid: super::floor_grid::Grid::new(device, format),
         }
     }
 
@@ -140,7 +148,11 @@ impl Scene {
             self.dark = dark;
             self.ctx.set_visuals(ctx.global_style().visuals.clone());
         }
-        self.ctx.set_theme(if dark {egui::Theme::Dark} else {egui::Theme::Light});
+        self.ctx.set_theme(if dark {
+            egui::Theme::Dark
+        } else {
+            egui::Theme::Light
+        });
         self.text.stage(
             ctx,
             source,
@@ -239,7 +251,7 @@ impl Scene {
                 let mut camera = source.camera.clone();
                 camera.projection = benchup_core::Projection::Perspective;
                 let key = renderer::SceneKey {
-                    joinery_members: None,
+                    joinery_members: source.joinery_members,
                     joint_preview: None,
                     model_revision: source.revision,
                     edit_context: source.model.edit_context,
@@ -248,11 +260,11 @@ impl Scene {
                     pixels_per_point: 1.0,
                     display,
                     dark: self.dark,
-                    tool: benchup_core::Tool::Orbit,
+                    tool: source.tool,
                     selected: source.selected.clone(),
-                    hover: self.input.and_then(|input| input.hit).map(|hit| hit.entity),
-                    outliner_hover: BTreeSet::new(),
-                    erasing: BTreeSet::new(),
+                    hover: self.input.and_then(|input| input.hit).map(|hit| hit.entity).or(source.hover),
+                    outliner_hover: source.outliner_hover.clone(),
+                    erasing: source.erasing.clone(),
                 };
                 self.cache.paint_resident_view(
                     &key,
@@ -279,7 +291,30 @@ impl Scene {
             let half = (1.6 / placement.fit_scale).max(0.1);
             let origin = placement.center;
             let mut tools = Vec::new();
-            for line in &source.overlays.segments {
+            self.lines.owned_tools(
+                device,
+                (source.revision, Arc::as_ptr(&source.references) as usize),
+                &source.references.owned_segments,
+                |id| self.cache.resident_face_slot(id),
+            );
+            for (index, owned) in source.references.owned_segments.iter().enumerate() {
+                let line = &owned.line;
+                let color = line.color.to_normalized_gamma_f32();
+                tools.push(
+                    (if line.dashed {
+                        Line::dashed(line.a - origin, line.b - origin, color, line.width)
+                    } else {
+                        Line::new(line.a - origin, line.b - origin, color, line.width)
+                    })
+                    .owned(self.lines.owner_range(index)),
+                );
+            }
+            for line in source
+                .overlays
+                .segments
+                .iter()
+                .chain(&source.references.segments)
+            {
                 let color = line.color.to_normalized_gamma_f32();
                 tools.push(if line.dashed {
                     Line::dashed(line.a - origin, line.b - origin, color, line.width)
@@ -287,9 +322,16 @@ impl Scene {
                     Line::new(line.a - origin, line.b - origin, color, line.width)
                 });
             }
-            tools.extend(source.overlays.markers.iter().map(|(point, color)| {
-                Line::marker(*point - origin, color.to_normalized_gamma_f32(), 4.0)
-            }));
+            tools.extend(
+                source
+                    .overlays
+                    .markers
+                    .iter()
+                    .chain(&source.references.markers)
+                    .map(|(point, color)| {
+                        Line::marker(*point - origin, color.to_normalized_gamma_f32(), 4.0)
+                    }),
+            );
             tools.extend(source.overlays.ticks.iter().map(|(point, toward, color)| {
                 Line::tick(
                     *point - origin,
@@ -297,6 +339,34 @@ impl Scene {
                     color.to_normalized_gamma_f32(),
                 )
             }));
+            for line in source
+                .overlays
+                .overlay_segments
+                .iter()
+                .chain(&source.references.overlay_segments)
+            {
+                tools.push(
+                    Line::new(
+                        line.a - origin,
+                        line.b - origin,
+                        line.color.to_normalized_gamma_f32(),
+                        line.width,
+                    )
+                    .overlay(),
+                );
+            }
+            for &(a, b, color) in source
+                .overlays
+                .arrows
+                .iter()
+                .chain(&source.references.arrows)
+            {
+                tools.push(Line::arrow(
+                    a - origin,
+                    b - origin,
+                    color.to_normalized_gamma_f32(),
+                ));
+            }
             self.lines.tools(device, tools);
             let reference_key = vec![
                 origin.x.to_bits(),
@@ -312,36 +382,7 @@ impl Scene {
             ];
             self.lines.references(device, reference_key, || {
                 let mut lines = Vec::new();
-                if source.display.grid {
-                    let radius = half.min(source.display.grid_max_length.max(0.2) * 0.5);
-                    let stride = ((radius * 2.0 / spacing) / 64.0).ceil().max(1.0);
-                    let step = spacing * stride;
-                    for axis in 0..2 {
-                        let center = if axis == 0 { origin.x } else { origin.y };
-                        let first = ((center - radius) / step).floor() as i64;
-                        let last = ((center + radius) / step).ceil() as i64;
-                        for index in first..=last.min(first + 66) {
-                            let at = index as f64 * step;
-                            let (a, b) = if axis == 0 {
-                                (
-                                    DVec3::new(at, origin.y - radius, 0.0),
-                                    DVec3::new(at, origin.y + radius, 0.0),
-                                )
-                            } else {
-                                (
-                                    DVec3::new(origin.x - radius, at, 0.0),
-                                    DVec3::new(origin.x + radius, at, 0.0),
-                                )
-                            };
-                            lines.push(Line::new(
-                                a - origin,
-                                b - origin,
-                                [0.48, 0.55, 0.62, if index % 5 == 0 { 0.65 } else { 0.3 }],
-                                1.0,
-                            ));
-                        }
-                    }
-                }
+
                 if source.display.axes {
                     for (axis, rgb) in [DVec3::X, DVec3::Y, DVec3::Z]
                         .into_iter()
@@ -349,7 +390,12 @@ impl Scene {
                     {
                         let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2])
                             .to_normalized_gamma_f32();
-                        lines.push(Line::new(-origin, axis * half - origin, color, 2.0));
+                        lines.push(Line::new(
+                            -axis * half * 10000.0 - origin,
+                            axis * half * 10000.0 - origin,
+                            color,
+                            2.0,
+                        ));
                     }
                 }
                 let colors = crate::theme::Palette::for_painter(&self.ctx.debug_painter());
@@ -447,6 +493,20 @@ impl Scene {
             let model_eye = transform
                 .inverse()
                 .transform_point3(pose_matrix(eye.pose).transform_point3(DVec3::ZERO));
+            let forward = transform
+                .inverse()
+                .transform_vector3(pose_matrix(eye.pose).transform_vector3(DVec3::Z))
+                .normalize();
+            self.grid.prepare(
+                queue,
+                tracking_view * transform * DMat4::from_translation(origin),
+                model_eye,
+                forward,
+                origin,
+                spacing,
+                &display,
+                self.dark,
+            );
             self.backdrop.prepare(
                 queue,
                 tracking_view * transform * DMat4::from_translation(origin),
@@ -519,6 +579,8 @@ impl Scene {
                 tracking_view,
                 size,
                 &pointer,
+                source.display.section_limits(),
+                origin,
             );
         }
         // Eye output contains only a GPU callback. Its private egui context must
@@ -561,8 +623,10 @@ impl Scene {
             let mut pass = pass.forget_lifetime();
             self.backdrop.paint(&mut pass, size);
             renderer.render(&mut pass, &jobs, &screen);
+            self.grid.paint(&mut pass, size);
             self.surfaces.paint(&mut pass, size);
-            self.lines.paint(&mut pass, size);
+            self.lines
+                .paint(device, &mut pass, size, visibility.as_ref().map(|v| &v.0));
             self.text.paint(
                 device,
                 renderer,

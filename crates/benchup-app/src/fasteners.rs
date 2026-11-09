@@ -421,23 +421,7 @@ impl BenchUpApp {
         }
         let view = self.doc.camera.view(dv(rect.size()));
         let screen = |p| view.project(p).map(|p| rect.min + pv(p));
-        let mut draft = None;
-        if AVAILABLE
-            && self.doc.display.fastener_preview
-            && self.fasteners.open
-            && self.history_preview.is_none()
-        {
-            if let Some(mut members) = self.fastener_dialog.members {
-                if self.fasteners.reverse {
-                    members.swap(0, 1);
-                }
-                draft = Some(Connection {
-                    members,
-                    entry_face: self.fastener_dialog.entry_face,
-                    operation: ConnectionOperation::Fasteners(self.fasteners.settings.clone()),
-                });
-            }
-        }
+        let draft=self.fastener_preview_connection();
         for connection in model.connections.values().chain(draft.iter()).filter(|c| matches!(c.operation, ConnectionOperation::Fasteners(_))) {
             let result = connection.evaluate(model);
             for placement in result.placements {
@@ -451,18 +435,62 @@ impl BenchUpApp {
                     } else {
                         Color32::LIGHT_RED
                     };
-                    p.line_segment(
-                        [head, interface],
-                        Stroke::new(3., color.gamma_multiply(0.65)),
-                    );
+                    p.line_segment([head, interface],Stroke::new(3., color.gamma_multiply(0.65)));
                     p.line_segment([interface, tip], Stroke::new(3., color));
                     p.circle_filled(head, 4., color);
                     p.circle_filled(interface, 2., Color32::WHITE);
-                    p.arrow(
-                        tip - (tip - head).normalized() * 12.,
-                        (tip - head).normalized() * 12.,
-                        Stroke::new(2., color),
-                    );
+                    p.arrow(tip - (tip - head).normalized() * 12.,(tip - head).normalized() * 12.,Stroke::new(2., color));
+                }
+            }
+            if !result.errors.is_empty() {
+                for member in connection.members {
+                    let entities=model.expand_entities(&BTreeSet::from([member]));
+                    if let Some(point)=entities.iter().filter_map(|id|model.vertices.get(id)).find_map(|v|screen(v.position)) {
+                        p.text(point,Align2::LEFT_BOTTOM,tr!("fasteners.invalid_fastener_connection"),FontId::proportional(12.),Color32::LIGHT_RED);
+                    }
+                }
+            }
+        }
+    }
+
+    pub(super) fn fastener_preview_connection(&self)->Option<Connection> {
+        if AVAILABLE
+            && self.doc.display.fastener_preview
+            && self.fasteners.open
+            && self.history_preview.is_none()
+        {
+            if let Some(mut members) = self.fastener_dialog.members {
+                if self.fasteners.reverse {
+                    members.swap(0, 1);
+                }
+                return Some(Connection {
+                    members,
+                    entry_face: self.fastener_dialog.entry_face,
+                    operation: ConnectionOperation::Fasteners(self.fasteners.settings.clone()),
+                });
+            }
+        }
+        None
+    }
+
+    #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
+    pub(super) fn append_spatial_fasteners(&self,model:&Model,draft:Option<&Connection>,output:&mut super::viewport_overlays::Overlays) {
+        use super::viewport_overlays::{Segment,Label};
+        if !self.doc.display.fasteners {return;}
+        for connection in model.connections.values().chain(draft).filter(|c| matches!(c.operation, ConnectionOperation::Fasteners(_))) {
+            let result = connection.evaluate(model);
+            for placement in result.placements {
+                {
+                    let color = if placement.warnings.is_empty() && result.errors.is_empty() {
+                        Color32::from_rgb(80, 210, 240)
+                    } else {
+                        Color32::LIGHT_RED
+                    };
+                    output.overlay_segments.push(Segment {a:placement.head,b:placement.interface,color:color.gamma_multiply(0.65),width:3.0,dashed:false});
+                    output.overlay_segments.push(Segment {a:placement.interface,b:placement.tip,color,width:3.0,dashed:false});
+                    output.circle(placement.head,4.0,color,Color32::TRANSPARENT,true);
+                    output.circle(placement.interface,2.0,Color32::WHITE,Color32::TRANSPARENT,true);
+                    output.arrows.push((placement.head,placement.tip,color));
                 }
             }
             if !result.errors.is_empty() {
@@ -472,15 +500,9 @@ impl BenchUpApp {
                     if let Some(point) = entities
                         .iter()
                         .filter_map(|id| model.vertices.get(id))
-                        .find_map(|v| screen(v.position))
+                        .map(|v|v.position).next()
                     {
-                        p.text(
-                            point,
-                            Align2::LEFT_BOTTOM,
-                            tr!("fasteners.invalid_fastener_connection"),
-                            FontId::proportional(12.),
-                            Color32::LIGHT_RED,
-                        );
+                        output.labels.push(Label {point,text:tr!("fasteners.invalid_fastener_connection").into(),color:Color32::LIGHT_RED});
                     }
                 }
             }

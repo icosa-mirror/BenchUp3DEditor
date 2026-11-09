@@ -180,6 +180,17 @@ fn key(a: DVec3, b: DVec3) -> ([i64; 3], [i64; 3]) {
     if a < b { (a, b) } else { (b, a) }
 }
 impl Region {
+    #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
+    pub fn append_spatial(&self,model:&Model,display:&benchup_core::DisplaySettings,dark:bool,preview:bool,output:&mut super::super::viewport_overlays::Overlays) {
+        use super::super::viewport_overlays::{OwnedSegment,Segment};
+        if self.members.iter().any(|id| !model.objects.contains_key(id) || (model.is_hidden(*id)&&!display.hidden_objects)
+            || (display.group_emphasis&&model.edit_context.is_some()&&model.entity_in_context(*id).is_none())) {return;}
+        let rgb=match (preview,dark) {(false,false)=>[0,100,92],(false,true)=>[70,230,207],(true,false)=>[145,87,0],(true,true)=>[255,202,80]};
+        let color=Color32::from_rgb(rgb[0],rgb[1],rgb[2]);
+        for line in &self.lines {
+            output.owned_segments.push(OwnedSegment {line:Segment {a:line.a,b:line.b,color,width:1.8,dashed:true},owners:Arc::clone(&self.own_entities[&line.owner])});
+        }
+    }
     pub(super) fn register_guides(&self, mesh: &mut renderer::Mesh) {
         for line in &self.lines { mesh.register_joint_guide(line.owner, line.a, line.b); }
     }

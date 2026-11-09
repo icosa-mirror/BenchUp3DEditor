@@ -626,7 +626,7 @@ impl SceneCache {
                         .as_ref()
                         .unwrap()
                         .slot(key.hover.unwrap_or(0)),
-                    u32::from(key.edit_context.is_some() && key.display.group_emphasis),
+                    u32::from(key.joinery_members.is_some() || (key.edit_context.is_some() && key.display.group_emphasis)),
                     u32::from(key.display.edges),
                     u32::from(key.tool == benchup_core::Tool::Erase)
                         | (u32::from(!self.resident.removed.is_empty()) << 1),

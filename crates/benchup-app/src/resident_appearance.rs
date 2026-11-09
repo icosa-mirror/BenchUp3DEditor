@@ -24,6 +24,7 @@ struct Key {
     context: Option<u64>,
     erasing: BTreeSet<u64>,
     removed: BTreeSet<u64>,
+    joint_members:Option<[u64;2]>,
 }
 pub(super) struct Hierarchy {
     slots: BTreeMap<u64, u32>,
@@ -156,6 +157,7 @@ impl Hierarchy {
         let hover = key.hover.filter(|id| self.objects.iter().any(|(object, _)| object == id));
         if cache.key.as_ref().is_some_and(|previous|
             previous.hover == hover && previous.context == key.edit_context
+                && previous.joint_members==key.joinery_members
                 && previous.selected == key.selected && previous.outliner == key.outliner_hover
                 && previous.erasing == key.erasing && previous.removed == *removed)
         {
@@ -165,6 +167,7 @@ impl Hierarchy {
             selected: key.selected.clone(), hover,
             outliner: key.outliner_hover.clone(), context: key.edit_context,
             erasing: key.erasing.clone(), removed: removed.clone(),
+            joint_members:key.joinery_members,
         };
         if cache.values.len() != self.base.len() {
             cache.values = Arc::new(self.base.clone());
@@ -184,9 +187,10 @@ impl Hierarchy {
                 }
             }
         }
-        flags[0] = if next.context.is_none() { ACTIVE } else { 0 };
+        flags[0] = if next.context.is_none() && next.joint_members.is_none() { ACTIVE } else { 0 };
         for (id, path) in &self.objects {
-            let active = next.context.is_none() || path.contains(&next.context.unwrap());
+            let active = if let Some(members)=next.joint_members {members.iter().any(|member|path.contains(member))}
+                else {next.context.is_none() || path.contains(&next.context.unwrap())};
             let root = if let Some(scope) = next.context {
                 path.iter()
                     .position(|id| *id == scope)
@@ -198,6 +202,10 @@ impl Hierarchy {
             let mut state = self.base[self.slot(*id) as usize];
             if active {
                 state |= ACTIVE;
+            }
+            if let Some(members)=next.joint_members {
+                if path.contains(&members[0]) {state|=128;}
+                else if path.contains(&members[1]) {state|=256;}
             }
             if path.iter().any(|id| next.selected.contains(id)) {
                 state |= SELECTED;
