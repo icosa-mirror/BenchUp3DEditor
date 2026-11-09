@@ -14,6 +14,12 @@ pub mod panel;
 #[cfg(feature = "openxr")]
 mod editor;
 
+#[cfg(feature = "openxr")]
+mod input;
+
+#[cfg(feature = "openxr")]
+mod cursor;
+
 /// A flat editor surface. Logical size is in egui points, not texture pixels.
 #[derive(Clone, Copy, Debug)]
 pub struct EditorPanel {
@@ -44,6 +50,19 @@ impl EditorPanel {
     /// behind-origin and out-of-bounds intersections. This only maps input;
     /// surface rendering remains on the GPU.
     pub fn hit_test(self, origin: DVec3, direction: DVec3) -> Option<PanelHit> {
+        let hit = self.project_ray(origin, direction)?;
+        if hit.position_points.min_element() < 0.0
+            || hit.position_points.x > self.size_points.x
+            || hit.position_points.y > self.size_points.y
+        {
+            return None;
+        }
+        Some(hit)
+    }
+
+    /// Unbounded plane projection for a drag already captured by the panel.
+    /// Invalid/backside rays still cancel interaction; only edge clipping differs.
+    fn project_ray(self, origin: DVec3, direction: DVec3) -> Option<PanelHit> {
         if !origin.is_finite() || !direction.is_finite() {
             return None;
         }
@@ -57,11 +76,7 @@ impl EditorPanel {
             point.x / self.size_metres.x + 0.5,
             0.5 - point.y / self.size_metres.y,
         );
-        if !distance_metres.is_finite()
-            || !uv.is_finite()
-            || uv.min_element() < 0.0
-            || uv.max_element() > 1.0
-        {
+        if !distance_metres.is_finite() || !uv.is_finite() {
             return None;
         }
         Some(PanelHit {

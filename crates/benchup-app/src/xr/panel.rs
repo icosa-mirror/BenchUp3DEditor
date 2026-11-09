@@ -1,5 +1,6 @@
-//! Phase 1B only: borrowed Vulkan images, wgpu rendering, and an OpenXR quad.
-//! No desktop host, document, preferences, or controller actions are created.
+//! Borrowed Vulkan images and an OpenXR quad, with a pattern probe or shared
+//! editor host. The editor path adds preferences and controller input; native
+//! window services and desktop mirroring are still pending.
 
 use ash::vk::{self, Handle};
 use openxr as xr;
@@ -306,8 +307,8 @@ pub fn run(duration: Duration) -> Result<()> {
     run_content(duration, false)
 }
 
-/// Render-only phase 1C preview using the shared editor and preference storage.
-/// Controller input, native window services and the desktop mirror are pending.
+/// Shared-editor panel preview with controller input and shared preferences.
+/// Native window services and the desktop mirror are pending.
 pub fn run_editor(duration: Duration) -> Result<()> {
     run_content(duration, true)
 }
@@ -541,6 +542,23 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     } else {
         None
     };
+    let panel_pose = xr::Posef {
+        orientation: xr::Quaternionf::IDENTITY,
+        position: xr::Vector3f {
+            x: 0.0,
+            y: 0.0,
+            z: -1.5,
+        },
+    };
+    let panel_size = xr::Extent2Df {
+        width: 1.2,
+        height: 0.75,
+    };
+    let mut controllers = if show_editor {
+        Some(super::input::Controllers::new(&instance, &session)?)
+    } else {
+        None
+    };
     let blend = instance
         .enumerate_environment_blend_modes(system, xr::ViewConfigurationType::PRIMARY_STEREO)?
         .into_iter()
@@ -556,6 +574,8 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
     let start = Instant::now();
     let mut events = xr::EventDataBuffer::new();
     let mut running = false;
+    let mut focused = false;
+    let mut last_input = Instant::now();
     let mut stopping = false;
     let mut submitted = 0u64;
     loop {
@@ -563,6 +583,16 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
             match event {
                 xr::Event::SessionStateChanged(event) => {
                     println!("[BenchUpXR] Session: {:?}", event.state());
+                    focused = event.state() == xr::SessionState::FOCUSED;
+                    if !focused {
+                        if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
+                            editor.cancel_input(
+                                controllers.cancel(),
+                                &graphics.device,
+                                &graphics.queue,
+                            )?;
+                        }
+                    }
                     match event.state() {
                         xr::SessionState::READY => {
                             session.begin(xr::ViewConfigurationType::PRIMARY_STEREO)?;
@@ -592,6 +622,11 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
                         _ => {}
                     }
                 }
+                xr::Event::InteractionProfileChanged(_) => {
+                    if let Some(controllers) = &controllers {
+                        controllers.log_profiles(&session)?;
+                    }
+                }
                 xr::Event::InstanceLossPending(_) => return Err("OpenXR instance lost".into()),
                 _ => {}
             }
@@ -616,6 +651,29 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
         }
         let frame = waiter.wait()?;
         stream.begin()?;
+        if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
+            let logical = editor.logical_size();
+            let panel = super::EditorPanel::new(
+                glam::DVec2::new(panel_size.width as f64, panel_size.height as f64),
+                glam::DVec2::new(logical.x as f64, logical.y as f64),
+            )
+            .ok_or("Invalid editor panel dimensions")?;
+            let now = Instant::now();
+            if frame.should_render {
+                editor.set_input(controllers.sample(
+                    &session,
+                    &space,
+                    frame.predicted_display_time,
+                    panel,
+                    panel_pose,
+                    focused,
+                    now.duration_since(last_input).as_secs_f32(),
+                )?);
+            } else {
+                editor.cancel_input(controllers.cancel(), &graphics.device, &graphics.queue)?;
+            }
+            last_input = now;
+        }
         if !frame.should_render {
             stream.end(frame.predicted_display_time, blend, &[])?;
             continue;
@@ -641,24 +699,14 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
                         },
                     }),
             )
-            .pose(xr::Posef {
-                orientation: xr::Quaternionf::IDENTITY,
-                position: xr::Vector3f {
-                    x: 0.0,
-                    y: 0.0,
-                    z: -1.5,
-                },
-            })
-            .size(xr::Extent2Df {
-                width: 1.2,
-                height: 0.75,
-            });
+            .pose(panel_pose)
+            .size(panel_size);
         stream.end(frame.predicted_display_time, blend, &[&quad])?;
         submitted += 1;
         if submitted == 1 {
             if show_editor {
                 println!(
-                    "[BenchUpXR] First complete editor frame submitted to the quad (render-only preview)."
+                    "[BenchUpXR] First complete editor frame submitted to the quad (controller input enabled)."
                 );
             } else {
                 println!(

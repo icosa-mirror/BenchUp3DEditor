@@ -157,6 +157,18 @@ cover focus loss, tracking loss, reference-space changes, scale extremes and
 immediate preference restoration. Verify existing desktop and browser rendering
 on hardware GPUs as well as the headset.
 
+### Controller-input progress
+
+The editor preview now binds aim, primary/secondary clicks and vertical scrolling
+for KHR simple, HTC Vive, Valve Index and Oculus Touch profiles. A retained GPU
+cursor shows the logical UI hit. Drag capture retains its controller outside the
+panel; focus/tracking loss releases outside controls, cancels a captured gesture
+and suppresses held-trigger presses on re-entry. Eight focused XR tests pass.
+The user confirmed live cursor, primary clicks and wheel input on the main view;
+the three-minute session stopped cleanly after 12,191 frames. Drag verification
+was blocked by small text and the fixed panel distance. Add persistent distance
+and UI-size controls before asking the user to navigate unfamiliar editor UI.
+
 ## Validation and rollout
 
 - Unit tests: panel hit mapping, input capture, coordinate transforms, preference

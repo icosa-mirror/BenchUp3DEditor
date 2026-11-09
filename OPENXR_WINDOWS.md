@@ -205,3 +205,42 @@ A second session started successfully on the same active runtime, reached
 VISIBLE, submitted 4,258 editor quad frames and stopped cleanly. Its log is
 `.local/openxr/editor-headset-restart.log`. Both processes exited successfully;
 no SteamVR restart or system runtime change was needed between them.
+
+## Controller-input preview
+
+The editor preview now creates OpenXR aim, primary/secondary click and scroll
+actions for KHR simple controllers, HTC Vive, Valve Index and Oculus Touch
+profiles. Trigger/select is the primary button; Vive/simple menu and Index/Touch
+B (Touch left menu) provide the secondary button. A touched trackpad/thumbstick
+scrolls vertically. The runtime chooses the active interaction profile; diagnostic
+profile/tracking changes use the `[BenchUpXR]` prefix.
+
+A retained GPU cursor marks the current panel hit and changes color while a
+button is held. Pointer coordinates follow egui's current logical scale. A fresh
+press on the panel claims a controller; captured drags retain that controller
+and continue outside the panel bounds. Tracking/focus loss releases outside all
+widgets and cancels a captured editor operation. A held trigger cannot generate
+a new press merely by re-entering the panel or regaining focus. Cancellation is
+processed even if XR skips rendering, without queuing unbounded hover events.
+
+For a longer manual test:
+
+```powershell
+cargo run -p benchup-app --locked --offline --features openxr --example openxr_editor -- --seconds 180
+```
+
+Eight focused XR tests passed, including drag capture, tracking/focus loss and
+held-trigger suppression. A five-second runtime startup check created the action
+bindings, reached VISIBLE, submitted 264 editor frames and stopped cleanly. In the
+three-minute live test, the user confirmed the cursor and primary clicks work.
+SteamVR selected `/interaction_profiles/oculus/touch_controller` for both hands,
+and both aim spaces reported valid/tracked position and orientation (flags 15).
+The user also confirmed wheel input affects the main viewport. A scrollbar/slider
+drag test could not be completed because the user was unfamiliar with the app and
+found the text too small at the fixed panel distance. The run stopped cleanly
+after 12,191 editor frames; evidence is `.local/openxr/controller-live.log`.
+Scrollbar dragging and focus/tracking-loss behavior remain unverified on hardware.
+Panel distance and readability controls are the next usability requirement. No
+user-facing XR settings were added; handedness/panel controls and their shared
+preference fields remain future work. Physical keyboard/mouse input, text entry,
+desktop mirroring and native window services are also pending.
