@@ -150,9 +150,9 @@ impl CompassAxis {
             (Axis::X, false) => "X",
             (Axis::Y, false) => "Y",
             (Axis::Z, false) => "Z",
-            (Axis::X, true) => "âˆ’X",
-            (Axis::Y, true) => "âˆ’Y",
-            (Axis::Z, true) => "âˆ’Z",
+            (Axis::X, true) => "−X",
+            (Axis::Y, true) => "−Y",
+            (Axis::Z, true) => "−Z",
         }
     }
 
@@ -2479,7 +2479,7 @@ impl BenchUpApp {
                         c.is_ascii_alphanumeric()
                             || matches!(
                                 c,
-                                '.' | '-' | '+' | '*' | '/' | '(' | ')' | ',' | '\'' | '"' | ' ' | 'Â°'
+                                '.' | '-' | '+' | '*' | '/' | '(' | ')' | ',' | '\'' | '"' | ' ' | '°'
                             )
                     }) && self.length_input.len() + text.len() <= precision::MAX_INPUT_LEN
                     {
@@ -3039,7 +3039,7 @@ impl BenchUpApp {
                         if self.tool.is_measuring() && !self.measurement_precision_available() {
                             ui.text_label(
                                 RichText::new(
-                                    self.measurement_value().unwrap_or_else(|| "â€”".into()),
+                                    self.measurement_value().unwrap_or_else(|| "—".into()),
                                 )
                                 .monospace()
                                 .strong(),
@@ -3568,7 +3568,7 @@ impl BenchUpApp {
                     ui.text_weak("Measurements unavailable.");
                 }
                 None => {
-                    ui.text_weak("Calculating measurementsâ€¦");
+                    ui.text_weak("Calculating measurements…");
                 }
             }
         } else {
@@ -5963,7 +5963,7 @@ impl BenchUpApp {
                     destination = Some(None);
                 }
                 for id in &path {
-                    ui.text_label(RichText::new("â€º").color(colors.muted));
+                    ui.text_label(RichText::new("›").color(colors.muted));
                     if ui.small_button(&self.doc.model.objects[id].name).clicked() {
                         destination = Some(Some(*id));
                     }
