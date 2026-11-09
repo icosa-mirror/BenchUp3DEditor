@@ -312,7 +312,7 @@ impl Editor {
             }
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
-            self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx);
+            self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx, &mut self.preferences);
             activate = false;
             if preferences.immersive_scene {
                 self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source(&self.ctx));
@@ -423,7 +423,8 @@ impl Editor {
     }
 
     pub(super) fn begin_immersive_frame(&mut self, anchor: openxr::Posef) {
-        let source = self.app.xr_scene_source(&self.ctx);
+        let mut source = self.app.xr_scene_source(&self.ctx);
+        source.tool_target = self.world_tools.pointer_target().or(source.tool_target);
         self.scene.begin_frame(
             source,
             anchor,
@@ -468,7 +469,7 @@ impl Editor {
         self.set_input(input);
         // Cancellation must reach world tools even when rendering is skipped
         // and no panel pointer events need a UI pass.
-        self.app.xr_world_pointer(None, &mut self.world_tools, false, &self.ctx);
+        self.app.xr_world_pointer(None, &mut self.world_tools, false, &self.ctx, &mut self.preferences);
         if !self.input.events.is_empty() {
             let mut output = self.update_ui()?;
             self.update_textures(device, queue, &mut output);

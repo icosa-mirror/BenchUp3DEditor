@@ -10,7 +10,7 @@ shared GPU previews. A large XR tool bar exposes these tools, cancellation and
 undo/redo with persisted active-tool selection. Initial inference is local to the
 hit face plus drawing planes and axis constraints. Remaining direct interaction
 work includes guide snapping, shared reference acquisition,
-section-handle manipulation.
+direct annotation picking and flip-plane hover feedback.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
 large XR buttons and polygon side controls persist through existing preferences.
@@ -64,6 +64,12 @@ erase and transforms can target loose lines. Face-edit tools keep face-only
 targeting. The hierarchy is prepared lazily by model identity and skips temporary
 modeling previews. Four focused exact-source math checks and the native build
 pass; controller validation and large-scene measurements remain deferred.
+Section handles accept trigger grabs through the shared drag state and offset
+setter. Controller movement is constrained to the section axis and preferences
+save immediately. Tracked release keeps the offset; cancellation, navigation,
+focus/tracking loss or tool changes restore it. The user-requested untimed
+preview has reached a focused OpenXR session with stereo/quad frames and the
+keyboard bridge; interaction validation is now awaiting the user's feedback.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

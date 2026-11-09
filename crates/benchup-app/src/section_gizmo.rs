@@ -22,6 +22,7 @@ impl BoundsCache {
 
 #[derive(Clone)]
 pub(super) struct SectionDrag {
+    world_input: bool,
     axis: usize,
     start: Pos2,
     offset: f64,
@@ -101,6 +102,7 @@ impl SectionDrag {
             camera.eye().distance(anchor)
         };
         Self {
+            world_input: false,
             axis,
             start,
             offset: value,
@@ -152,7 +154,7 @@ impl BenchUpApp {
             })
             .collect()
     }
-    fn move_section_plane(&mut self, ctx: &egui::Context, axis: usize, value: f64) {
+    pub(super) fn move_section_plane(&mut self, ctx: &egui::Context, axis: usize, value: f64) {
         if offset(&self.doc.display, axis) != value {
             set_offset(&mut self.doc.display, axis, value);
             self.changed(ctx);
@@ -162,6 +164,22 @@ impl BenchUpApp {
         if let Some(drag) = self.section_drag.take() {
             self.move_section_plane(ctx, drag.axis, drag.offset);
         }
+    }
+    pub(super) fn world_section_info(&self) -> Option<(usize,f64,DVec3)> {
+        self.section_drag.as_ref().filter(|drag|drag.world_input).map(|drag|(drag.axis,drag.offset,drag.anchor))
+    }
+    pub(super) fn begin_world_section(&mut self, axis: usize, anchor: DVec3) {
+        let mut drag = SectionDrag::new(axis,anchor,Pos2::ZERO,&self.doc.camera,self.viewport,offset(&self.doc.display,axis));
+        drag.world_input = true;
+        self.section_drag = Some(drag);
+    }
+    pub(super) fn finish_world_section(&mut self) {
+        if self.world_section_info().is_some() {self.section_drag = None;}
+    }
+    pub(super) fn section_world_target(&self) -> Option<DVec3> {
+        let (axis,start,mut anchor) = self.world_section_info()?;
+        anchor[axis] += offset(&self.doc.display,axis)-start;
+        Some(anchor)
     }
     fn section_handles(&self) -> Vec<Handle> {
         if !self.doc.display.section_planes
@@ -218,6 +236,7 @@ impl BenchUpApp {
         event: &egui::Event,
         response: &egui::Response,
     ) -> bool {
+        if self.world_section_info().is_some() { return false; }
         if !self.doc.display.section_planes {
             self.section_drag = None;
             return false;

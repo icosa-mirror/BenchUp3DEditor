@@ -195,9 +195,24 @@ Four isolated checks against the exact index source pass (cone bounds,
 sloping/crossing angular minima, clipping/occlusion filtering, and hierarchy
 traversal). The native build passes; live edge picking still awaits the headset.
 
+Section handles now accept controller trigger grabs. They reuse the desktop
+SectionDrag state, shared handle anchors/highlighting and section-offset setter,
+with model-space controller movement constrained to the chosen axis. A Sections
+menu exposes the existing view controls. Each change persists through the shared
+preference path; tracked release keeps the value. Cancel, grip navigation,
+focus/tracking loss or changing tools restores the starting offset. Desktop
+pointer events do not update a world-driven section drag.
+
+The latest built executable is running from the frozen ignored
+`.local/openxr/preview-builds/section-preview/` directory after the user requested
+it. It has no session deadline. Startup logs confirm the native window, keyboard
+bridge, focused OpenXR session, stereo and editor-quad frame submission, and
+controller grip events. New modeling and section behavior await user feedback;
+do not stop or replace this preview without checking its ownership and user intent.
+
 Remaining: world snapping to construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-section handles. Those tools
+direct annotation picking and flip-plane hover feedback. Legacy desktop-only navigation modes
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

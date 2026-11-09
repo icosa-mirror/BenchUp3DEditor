@@ -50,6 +50,19 @@ pub(crate) struct State {
     line_normal: Option<DVec3>,
     stroke: bool,
     grab_depth: Option<f64>,
+    section: Option<SectionGrab>,
+    pointer_target: Option<DVec3>,
+}
+
+struct SectionGrab {
+    depth: f64,
+    start_tip: DVec3,
+}
+
+impl State {
+    pub(crate) fn pointer_target(&self) -> Option<DVec3> {
+        self.pointer_target
+    }
 }
 
 pub(crate) fn hint(tool: Tool) -> &'static str {
@@ -194,12 +207,15 @@ impl BenchUpApp {
                         )
                         .clicked()
                     {
-                        self.xr_cancel_action(action == 0);
+                        self.xr_cancel_action(action == 0, &ctx, storage);
                         if action != 0 {
                             self.undo(&ctx, action == 2);
                         }
                     }
                 }
+                ui.menu_button(egui::RichText::new("Sections").size(18.), |ui| {
+                    self.sections_menu(ui)
+                });
             });
             let mut changed = false;
             match self.tool {
@@ -275,7 +291,17 @@ impl BenchUpApp {
         });
     }
 
-    fn xr_cancel_action(&mut self, clear_selection: bool) {
+    fn xr_cancel_action(
+        &mut self,
+        clear_selection: bool,
+        ctx: &egui::Context,
+        storage: &mut dyn eframe::Storage,
+    ) {
+        if self.world_section_info().is_some() {
+            self.cancel_section_drag(ctx);
+            self.persist_inspector_changes(ctx, Some(storage), false);
+            return;
+        }
         let placing_copy = self.paste_preview.is_some();
         self.stop_drawing();
         self.measurement = None;
@@ -294,8 +320,14 @@ impl BenchUpApp {
         state: &mut State,
         activate: bool,
         ctx: &egui::Context,
+        storage: &mut dyn eframe::Storage,
     ) {
+        state.pointer_target = None;
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
+            if state.section.take().is_some() && self.world_section_info().is_some() {
+                self.cancel_section_drag(ctx);
+                self.persist_inspector_changes(ctx, Some(storage), false);
+            }
             if state.grab_depth.take().is_some() {
                 self.modeling = None;
                 self.length_input.clear();
@@ -316,6 +348,10 @@ impl BenchUpApp {
         };
         state.active = true;
         if state.tool != Some(self.tool) {
+            if state.section.take().is_some() && self.world_section_info().is_some() {
+                self.cancel_section_drag(ctx);
+                self.persist_inspector_changes(ctx, Some(storage), false);
+            }
             state.tool = Some(self.tool);
             state.line_normal = None;
             state.stroke = false;
@@ -328,8 +364,11 @@ impl BenchUpApp {
         self.drawing_guide = None;
         self.drawing_axis_guides.clear();
         self.drawing_projection = None;
+        if self.xr_section_pointer(pointer, state, activate, ctx, storage) {
+            return;
+        }
         if activate && pointer.cancel {
-            self.xr_cancel_action(true);
+            self.xr_cancel_action(true, ctx, storage);
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
@@ -597,6 +636,82 @@ impl BenchUpApp {
             );
         }
         ctx.request_repaint();
+    }
+
+    fn xr_section_pointer(
+        &mut self,
+        pointer: &Pointer,
+        state: &mut State,
+        activate: bool,
+        ctx: &egui::Context,
+        storage: &mut dyn eframe::Storage,
+    ) -> bool {
+        if let Some(grab) = &state.section {
+            let Some((axis, offset, _)) = self.world_section_info() else {
+                state.section = None;
+                return true;
+            };
+            self.snap = None;
+            self.hover = None;
+            self.flip_hover = None;
+            if !self.doc.display.section_planes
+                || !self.doc.display.section_axes[axis]
+                || activate && pointer.cancel
+            {
+                self.cancel_section_drag(ctx);
+                self.persist_inspector_changes(ctx, Some(storage), false);
+                state.section = None;
+                return true;
+            }
+            let tip = pointer.ray.origin + pointer.ray.direction * grab.depth;
+            let value = (offset + (tip - grab.start_tip)[axis]).clamp(-1e8, 1e8);
+            if activate && value.is_finite() {
+                self.move_section_plane(ctx, axis, value);
+                self.persist_inspector_changes(ctx, Some(storage), false);
+            }
+            state.pointer_target = self.section_world_target();
+            if activate && !pointer.primary_down {
+                self.finish_world_section();
+                state.section = None;
+            }
+            return true;
+        }
+        if self.modeling.is_some()
+            || self.gesture.is_some()
+            || state.stroke
+            || state.grab_depth.is_some()
+            || pointer.cancel
+        {
+            return false;
+        }
+        let handle = self
+            .section_handle_anchors()
+            .into_iter()
+            .filter_map(|(axis, point)| {
+                let delta = point - pointer.ray.origin;
+                let depth = delta.dot(pointer.ray.direction);
+                if depth <= 0. {
+                    return None;
+                }
+                let error = (delta - pointer.ray.direction * depth).length() / depth;
+                (error <= 0.02).then_some((axis, point, depth, error))
+            })
+            .min_by(|a, b| a.3.total_cmp(&b.3).then(a.2.total_cmp(&b.2)));
+        let Some((axis, point, depth, _)) = handle else {
+            return false;
+        };
+        self.snap = None;
+        self.hover = None;
+        self.flip_hover = None;
+        state.pointer_target = Some(point);
+        if activate && pointer.activate {
+            self.begin_world_section(axis, point);
+            state.section = Some(SectionGrab {
+                depth,
+                start_tip: pointer.ray.origin + pointer.ray.direction * depth,
+            });
+        }
+        true
     }
 
     fn xr_flip_plane(&self, ray: Ray) -> Option<(Axis, DVec3)> {
