@@ -30,6 +30,8 @@ pub(crate) struct State {
 pub(crate) fn hint(tool: Tool) -> &'static str {
     match tool {
         Tool::Line => "Trigger: start / next endpoint. Cancel ends the chain.",
+        Tool::Rectangle => "Trigger: first corner, then opposite corner. Cancel clears.",
+        Tool::Circle | Tool::Polygon => "Trigger: centre, then radius. Cancel clears.",
         Tool::TapeMeasure => "Trigger: first point, then second point. Cancel clears.",
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
@@ -94,6 +96,47 @@ impl BenchUpApp {
                     }
                 }
             });
+            ui.horizontal(|ui| {
+                for (label, tool) in [
+                    ("Rectangle", Tool::Rectangle),
+                    ("Circle", Tool::Circle),
+                    ("Polygon", Tool::Polygon),
+                ] {
+                    if ui
+                        .add_sized(
+                            [110., 42.],
+                            egui::Button::new(egui::RichText::new(label).size(18.))
+                                .selected(self.tool == tool),
+                        )
+                        .clicked()
+                    {
+                        self.set_tool(tool);
+                        self.persist_inspector_changes(&ctx, Some(storage), false);
+                    }
+                }
+                if self.tool == Tool::Polygon {
+                    ui.label(
+                        egui::RichText::new(format!("{} sides", self.polygon_sides)).size(18.),
+                    );
+                    for (label, increase) in [("Sides -", false), ("Sides +", true)] {
+                        if ui
+                            .add_sized(
+                                [100., 42.],
+                                egui::Button::new(egui::RichText::new(label).size(18.)),
+                            )
+                            .clicked()
+                        {
+                            self.polygon_sides = if increase {
+                                self.polygon_sides + 1
+                            } else {
+                                self.polygon_sides.saturating_sub(1)
+                            }
+                            .clamp(3, 64);
+                            self.persist_inspector_changes(&ctx, Some(storage), false);
+                        }
+                    }
+                }
+            });
             ui.label(egui::RichText::new(hint(self.tool)).size(16.));
         });
     }
@@ -153,11 +196,17 @@ impl BenchUpApp {
         }
         if !matches!(
             self.tool,
-            Tool::Line | Tool::TapeMeasure | Tool::Protractor | Tool::Dimensions
+            Tool::Line
+                | Tool::Rectangle
+                | Tool::Circle
+                | Tool::Polygon
+                | Tool::TapeMeasure
+                | Tool::Protractor
+                | Tool::Dimensions
         ) {
             self.snap = None;
             if clicked {
-                self.say(ctx, "This tool currently uses the editor panel. Choose Line, Tape Measure, Protractor or Dimensions to edit in 3D.");
+                self.say(ctx, "This tool currently uses the editor panel. Choose a drawing or measurement tool from the XR controls to edit in 3D.");
             }
             return;
         }
@@ -167,6 +216,8 @@ impl BenchUpApp {
         }
         let start = if self.tool == Tool::Line {
             self.line_start
+        } else if self.tool.is_drawing() {
+            self.drawing.as_ref().map(|drawing| drawing.origin)
         } else {
             self.measurement
                 .as_ref()
@@ -176,12 +227,19 @@ impl BenchUpApp {
         if self.tool == Tool::Line && start.is_none() {
             state.line_normal = None;
         }
+        if self.lock.is_none()
+            && let Some(drawing) = &mut self.drawing
+        {
+            drawing.set_normal(drawing.surface_normal);
+        }
         let normal = self
             .measurement_plane()
             .map(|p| p.1)
+            .or_else(|| self.drawing.as_ref().map(|drawing| drawing.normal))
             .or(state.line_normal)
             .unwrap_or(DVec3::Z);
         self.snap = self.xr_ray_snap(pointer, start, normal);
+        self.xr_shape_plane(pointer.ray);
         self.apply_grid_snap();
         let valid_offset = self.xr_measurement_offset(pointer.ray);
         if !clicked || !valid_offset {
@@ -193,6 +251,16 @@ impl BenchUpApp {
             } else if let Some(snap) = self.snap {
                 self.line_start = Some(snap.point);
                 state.line_normal = pointer.hit.map(|hit| hit.normal).or(Some(DVec3::Z));
+            }
+        } else if self.tool.is_drawing() {
+            if self.drawing.is_some() {
+                self.commit_drawing_at_snap(ctx, false);
+            } else {
+                let surface = pointer.hit.filter(|hit| {
+                    self.snap
+                        .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
+                });
+                self.begin_drawing_at_snap(surface.map(|hit| hit.normal));
             }
         } else if self.measurement_precision_available() && !self.length_input.trim().is_empty() {
             self.commit_measurement_value(ctx);
@@ -227,9 +295,13 @@ impl BenchUpApp {
 
     fn xr_ray_snap(&self, pointer: &Pointer, start: Option<DVec3>, normal: DVec3) -> Option<Snap> {
         let ray = pointer.ray;
-        let constraint = (self.tool != Tool::Dimensions)
-            .then(|| self.axis_constraint())
-            .flatten();
+        let constraint = if self.tool.is_drawing() && self.tool != Tool::Line {
+            self.shape_lock().map(AxisConstraint::Plane)
+        } else {
+            (self.tool != Tool::Dimensions)
+                .then(|| self.axis_constraint())
+                .flatten()
+        };
         let allowed = |point: DVec3| {
             start
                 .zip(constraint)
@@ -358,6 +430,33 @@ impl BenchUpApp {
             point,
             kind: Inference::Plane,
         })
+    }
+
+    fn xr_shape_plane(&mut self, ray: Ray) {
+        let (Some(drawing), Some(snap)) = (&self.drawing, self.snap) else {
+            return;
+        };
+        if self.lock.is_none()
+            && drawing.on_surface
+            && matches!(snap.kind, Inference::Axis(_))
+            && (snap.point - drawing.origin)
+                .dot(drawing.surface_normal)
+                .abs()
+                > 1e-6
+        {
+            self.snap = plane_point(ray, drawing.origin, drawing.normal).map(|point| Snap {
+                point,
+                kind: Inference::Plane,
+            });
+        }
+        if self.lock.is_none()
+            && let Some(snap) = self.snap.filter(|snap| snap.kind != Inference::Plane)
+        {
+            self.drawing
+                .as_mut()
+                .unwrap()
+                .align_to(snap.point, ray.origin);
+        }
     }
 
     fn xr_measurement_offset(&mut self, ray: Ray) -> bool {

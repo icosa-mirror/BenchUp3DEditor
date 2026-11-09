@@ -1158,14 +1158,19 @@ impl BenchUpApp {
                 benchup_core::faces::plane(&self.doc.model, &self.doc.model.faces[&id].vertices)
             })
             .filter(|plane| (snap.point - plane.origin).dot(plane.normal).abs() < 1e-6);
-        let normal = surface.map_or(DVec3::Z, |plane| plane.normal);
+        self.begin_drawing_at_snap(surface.map(|plane| plane.normal));
+        self.update_pointer(pos);
+    }
+    fn begin_drawing_at_snap(&mut self, surface_normal: Option<DVec3>) {
+        let Some(snap) = self.snap else { return };
+        let normal = surface_normal.unwrap_or(DVec3::Z);
         let u = (DVec3::X - normal * normal.x)
             .try_normalize()
             .unwrap_or(DVec3::Y);
         let mut drawing = Drawing {
             origin: snap.point,
             surface_normal: normal,
-            on_surface: surface.is_some(),
+            on_surface: surface_normal.is_some(),
             normal,
             u,
             v: normal.cross(u),
@@ -1173,7 +1178,6 @@ impl BenchUpApp {
         };
         drawing.set_lock(self.shape_lock());
         self.drawing = Some(drawing);
-        self.update_pointer(pos);
     }
     fn set_axis_lock(&mut self, lock: Option<Axis>, ctx: &egui::Context) {
         self.lock = lock;
@@ -1381,6 +1385,11 @@ impl BenchUpApp {
                 self.update_pointer(pos);
             }
         }
+        self.commit_drawing_at_snap(ctx, true);
+    }
+    // World input already supplied a snap; it must not refresh from the desktop
+    // cursor or reject a shape based on an unrelated desktop camera projection.
+    fn commit_drawing_at_snap(&mut self, ctx: &egui::Context, desktop_minimum: bool) {
         let points = match self.precise_drawing_points() {
             Ok(points) => points,
             Err(message) => {
@@ -1388,7 +1397,7 @@ impl BenchUpApp {
                 return;
             }
         };
-        let flat_rectangle = self.tool == Tool::Rectangle
+        let flat_rectangle = desktop_minimum && self.tool == Tool::Rectangle
             && self.length_input.trim().is_empty()
             && points.windows(2).any(|pair| {
                 self.doc

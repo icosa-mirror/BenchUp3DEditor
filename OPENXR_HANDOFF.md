@@ -65,9 +65,17 @@ the snapped point, including when drawing on the empty model ground plane.
 Dimension placement uses a stable controller-facing plane containing its span;
 an invalid/parallel placement ray cannot commit an old offset.
 
+Rectangle, Circle and Polygon also accept controller rays. Pick a first corner
+or centre, then the opposite corner or radius. Their initialization and commits
+share the desktop Drawing state and document operations, with model-space
+degeneracy checks instead of the unrelated desktop camera's pixel threshold.
+Surface planes, explicit shape-plane locks and target-driven plane alignment
+use the existing geometry routines. Large shape buttons and polygon Sides -/+
+controls use the existing immediately persisted tool preferences.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-shapes, text, transforms, solid tools, paint and section handles. Those tools
+freehand, text, transforms, solid tools, paint and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;
