@@ -40,6 +40,8 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
             "Hold trigger on the selection and move it; release to commit. Cancel discards."
         }
         Tool::PushPull => "Hold trigger on a face and pull it; release to commit. Cancel discards.",
+        Tool::Scale => "Hold trigger away from the selection centre, move to resize, then release.",
+        Tool::Offset => "Hold trigger near a face edge, move inward or outward, then release.",
         Tool::TapeMeasure => "Trigger: first point, then second point. Cancel clears.",
         Tool::Protractor => "Trigger: centre, baseline, then angle. Cancel clears.",
         Tool::Dimensions => "Trigger: two endpoints, then annotation position.",
@@ -196,7 +198,12 @@ impl BenchUpApp {
                 }
             });
             ui.horizontal(|ui| {
-                for (label, tool) in [("Move", Tool::Move), ("Push/Pull", Tool::PushPull)] {
+                for (label, tool) in [
+                    ("Move", Tool::Move),
+                    ("Push/Pull", Tool::PushPull),
+                    ("Scale", Tool::Scale),
+                    ("Offset", Tool::Offset),
+                ] {
                     if ui
                         .add_sized(
                             [100., 42.],
@@ -277,7 +284,10 @@ impl BenchUpApp {
             return;
         }
         let clicked = activate && pointer.activate;
-        if matches!(self.tool, Tool::Move | Tool::PushPull) {
+        if matches!(
+            self.tool,
+            Tool::Move | Tool::PushPull | Tool::Scale | Tool::Offset
+        ) {
             self.xr_model_grab(pointer, state, clicked, activate, ctx);
             return;
         }
@@ -470,7 +480,7 @@ impl BenchUpApp {
         ctx: &egui::Context,
     ) {
         self.snap = None;
-        if self.tool == Tool::PushPull {
+        if matches!(self.tool, Tool::PushPull | Tool::Offset) {
             self.hover = pointer
                 .hit
                 .map(|hit| hit.face)
@@ -483,13 +493,13 @@ impl BenchUpApp {
             let Some(hit) = pointer.hit else {
                 return;
             };
-            let (face, direction) = if self.tool == Tool::PushPull {
+            let (face, direction) = if matches!(self.tool, Tool::PushPull | Tool::Offset) {
                 let Some(face) = self.doc.model.faces.get(&hit.face) else {
-                    self.say(ctx, "Choose an original document face to pull.");
+                    self.say(ctx, "Choose an original document face to edit.");
                     return;
                 };
                 if self.doc.model.is_locked(face.id) {
-                    self.say(ctx, "Unlock the face before pulling it.");
+                    self.say(ctx, "Unlock the face before editing it.");
                     return;
                 }
                 let Some(plane) = benchup_core::faces::plane(&self.doc.model, &face.vertices)
@@ -497,22 +507,26 @@ impl BenchUpApp {
                     return;
                 };
                 if (hit.point - plane.origin).dot(plane.normal).abs() > 1e-6 {
-                    self.say(ctx, "Choose an original document face to pull.");
+                    self.say(ctx, "Choose an original document face to edit.");
                     return;
                 }
-                let direction = plane.normal
-                    * if plane.normal.dot(pointer.ray.origin - hit.point) >= 0. {
-                        1.
-                    } else {
-                        -1.
-                    };
+                let direction = if self.tool == Tool::Offset {
+                    self.offset_direction(face, hit.point, plane)
+                } else {
+                    plane.normal
+                        * if plane.normal.dot(pointer.ray.origin - hit.point) >= 0. {
+                            1.
+                        } else {
+                            -1.
+                        }
+                };
                 if self.selected_modeling_face() != Some(hit.face) {
                     self.selected = BTreeSet::from([hit.face]);
                 }
                 (Some(hit.face), direction)
             } else {
                 if !self.doc.model.contains_entity(&hit.entity) {
-                    self.say(ctx, "Choose an original document entity to move.");
+                    self.say(ctx, "Choose an original document entity to transform.");
                     return;
                 }
                 self.prepare_picking();
@@ -523,12 +537,28 @@ impl BenchUpApp {
                     self.selected = BTreeSet::from([hit.entity]);
                 }
                 if self.doc.model.selection_locked(&self.selected) {
-                    self.say(ctx, "Unlock the selection before moving it.");
+                    self.say(ctx, "Unlock the selection before transforming it.");
                     return;
                 }
                 (None, DVec3::ZERO)
             };
             self.begin_modeling_at_anchor(hit.point, direction, face, Pos2::ZERO, pointer.ray);
+            if self.tool == Tool::Scale
+                && let Some(edit) = &self.modeling
+            {
+                let reference = edit.anchor - edit.center;
+                let reference = edit
+                    .scale_constraint
+                    .map_or(reference, |constraint| constraint.project(reference));
+                if reference.length_squared() < 1e-12 {
+                    self.modeling = None;
+                    self.say(
+                        ctx,
+                        "Grab a point away from the selection centre and any locked scale axis.",
+                    );
+                    return;
+                }
+            }
             state.grab_depth = Some(
                 (hit.point - pointer.ray.origin)
                     .dot(pointer.ray.direction)
@@ -544,7 +574,11 @@ impl BenchUpApp {
         // including pulls where the ray is parallel to the extrusion axis.
         let mut delta = pointer.ray.origin + pointer.ray.direction * depth - edit.anchor;
         let constraint = self.axis_constraint();
-        let pull_direction = self.pull_direction(edit.unlocked_direction);
+        let direction = if self.tool == Tool::PushPull {
+            self.pull_direction(edit.unlocked_direction)
+        } else {
+            edit.unlocked_direction
+        };
         let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
         let edit = self.modeling.as_mut().unwrap();
         edit.snap = None;
@@ -558,9 +592,32 @@ impl BenchUpApp {
             }
             edit.direction = delta;
             edit.value = delta.length();
+        } else if self.tool == Tool::Scale {
+            edit.scale_constraint = constraint;
+            let reference = edit.anchor - edit.center;
+            let target = edit.anchor + delta - edit.center;
+            let (reference, target) = constraint.map_or((reference, target), |constraint| {
+                (constraint.project(reference), constraint.project(target))
+            });
+            if reference.length_squared() < 1e-12 {
+                state.grab_depth = None;
+                self.modeling = None;
+                self.say(ctx, "The scale reference lies on the locked axis. Choose another point or unlock the axis.");
+                return;
+            }
+            let mut radius = target.length();
+            if self.snap_to_grid {
+                radius = (radius / spacing).round() * spacing;
+            }
+            edit.value = (radius / reference.length()).clamp(0.001, 1000.);
         } else {
-            edit.direction = pull_direction;
-            edit.value = delta.dot(pull_direction);
+            edit.direction = direction;
+            if self.tool == Tool::Offset
+                && let Some(constraint) = constraint
+            {
+                delta = constraint.project(delta);
+            }
+            edit.value = delta.dot(direction);
             if self.snap_to_grid {
                 edit.value = (edit.value / spacing).round() * spacing;
             }
@@ -568,11 +625,9 @@ impl BenchUpApp {
         self.refresh_modeling_preview();
         if !pointer.primary_down {
             state.grab_depth = None;
-            if self
-                .modeling
-                .as_ref()
-                .is_some_and(|edit| edit.value.abs() >= 1e-7)
-                || !self.length_input.trim().is_empty()
+            if self.modeling.as_ref().is_some_and(|edit| {
+                (edit.value - if self.tool == Tool::Scale { 1. } else { 0. }).abs() >= 1e-7
+            }) || !self.length_input.trim().is_empty()
             {
                 self.commit_modeling_at_value(ctx);
             }

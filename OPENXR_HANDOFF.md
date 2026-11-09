@@ -125,12 +125,18 @@ Tracked release commits once. Cancel, loss of pointer ownership/focus/tracking o
 grip navigation discards the uncommitted preview. Zero-distance release does not
 create an edit. Locked or generated-only targets cannot start a grab. The beam
 follows the modeling preview marker even when the ray no longer hits geometry.
-Geometry/reference snapping during grabs, standalone-edge grabs, rotation, scale
-and Offset remain future work. Controller behavior awaits headset validation.
+Scale and Offset use the same trigger-grab lifecycle: Scale compares the grabbed point's radius
+with its original radius about the selection centre (respecting axis/plane
+constraints); Offset uses the same nearest-boundary direction as desktop. Scale
+is positive and bounded, and a reference on a locked axis cancels with a message.
+Grid snapping uses radial distance for Scale and inset distance for Offset.
+Their previews, authoritative operations and undo commits are shared with desktop.
+Geometry/reference snapping during grabs, standalone-edge grabs and rotation
+remain future work. Controller behavior awaits headset validation.
 
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-rotation, scale, Offset, solid tools and section handles. Those tools
+rotation, solid tools and section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

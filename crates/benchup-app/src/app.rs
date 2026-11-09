@@ -1572,6 +1572,34 @@ impl BenchUpApp {
             Err(message) => self.say(ctx, message),
         }
     }
+    fn offset_direction(&self, face: &benchup_core::Face, point: DVec3, plane: benchup_core::faces::Plane) -> DVec3 {
+        let model = &self.doc.model;
+        let closest = std::iter::once(&face.vertices)
+            .chain(face.holes.iter())
+            .enumerate()
+            .flat_map(|(hole, ring)| {
+                let area: f64 = (0..ring.len()).map(|i| {
+                    plane.project(model.vertices[&ring[i]].position).perp_dot(
+                        plane.project(model.vertices[&ring[(i + 1) % ring.len()]].position),
+                    )
+                }).sum();
+                let sign = area.signum() * if hole == 0 { 1. } else { -1. };
+                (0..ring.len()).map(move |i| {
+                    let a = model.vertices[&ring[i]].position;
+                    let b = model.vertices[&ring[(i + 1) % ring.len()]].position;
+                    let closest = a + (b - a)
+                        * ((point - a).dot(b - a) / (b - a).length_squared()).clamp(0., 1.);
+                    (closest, plane.normal.cross(b - a).normalize() * sign)
+                })
+            })
+            .min_by(|a, b| {
+                a.0.distance_squared(point)
+                    .total_cmp(&b.0.distance_squared(point))
+            })
+            .unwrap();
+        let delta = point - closest.0;
+        if delta.length() > 1e-7 { delta.normalize() } else { closest.1 }
+    }
     fn begin_modeling(&mut self, pos: Pos2, ctx: &egui::Context) {
         self.last_move_copy = None;
         let size = dv(self.viewport.size());
@@ -1605,32 +1633,7 @@ impl BenchUpApp {
                         -1.
                     }
             } else {
-                let model = &self.doc.model;
-                let closest = std::iter::once(&face.vertices)
-                    .chain(face.holes.iter())
-                    .enumerate()
-                    .flat_map(|(hole, ring)| {
-                        let area: f64 = (0..ring.len()).map(|i| {
-                            plane.project(model.vertices[&ring[i]].position).perp_dot(
-                                plane.project(model.vertices[&ring[(i + 1) % ring.len()]].position),
-                            )
-                        }).sum();
-                        let sign = area.signum() * if hole == 0 { 1. } else { -1. };
-                        (0..ring.len()).map(move |i| {
-                            let a = model.vertices[&ring[i]].position;
-                            let b = model.vertices[&ring[(i + 1) % ring.len()]].position;
-                            let closest = a + (b - a)
-                                * ((point - a).dot(b - a) / (b - a).length_squared()).clamp(0., 1.);
-                            (closest, plane.normal.cross(b - a).normalize() * sign)
-                        })
-                    })
-                    .min_by(|a, b| {
-                        a.0.distance_squared(point)
-                            .total_cmp(&b.0.distance_squared(point))
-                    })
-                    .unwrap();
-                let delta = point - closest.0;
-                if delta.length() > 1e-7 { delta.normalize() } else { closest.1 }
+                self.offset_direction(face, point, plane)
             };
             if selected_face != Some(id) {
                 self.selected = BTreeSet::from([id]);
