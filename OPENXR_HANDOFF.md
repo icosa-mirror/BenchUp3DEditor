@@ -542,3 +542,12 @@ additional focused quad test covers forward, parallel, behind, outside and
 degenerate cases; all eight isolated world-picking checks pass.
 The native editor build passes with the final paste-placement capture guard.
 Headset confirmation remains pending; broader validation is still deferred.
+
+Paste-placement ray targets now follow placement rules regardless of the tool
+active when Paste was chosen. In particular, copying while Paint, Push/Pull,
+Offset, Text, Grain Direction or a solid tool is active no longer suppresses
+eligible edge or guide targets. Existing geometry/edge snap settings still
+control inference. Flip handles do not capture paste rays. This uses the same
+shared paste preview, cancellation and atomic document operation as before.
+The native editor build passes for this routing change. No preview process is
+running; interactive guide, flip and paste checks await the user's next launch.

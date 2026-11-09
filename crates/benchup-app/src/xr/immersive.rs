@@ -312,7 +312,8 @@ impl Scene {
             origin: inverse.transform_point3(ray.origin),
             direction: inverse.transform_vector3(ray.direction).normalize(),
         };
-        if source.tool == benchup_core::Tool::Flip && !source.modeling && source.paste.is_none()
+        let placing_copy = source.paste.is_some();
+        if source.tool == benchup_core::Tool::Flip && !source.modeling && !placing_copy
             && let Some((&entity, (axis, point, _))) = source.selected.first().zip(
                 source.overlays.flip_planes.iter().filter_map(|&(axis,quad)| {
                     let (point,depth) = super::world_picking::quad_point(model_ray,quad)?;
@@ -326,9 +327,9 @@ impl Scene {
             });
         }
         let face_hit = self.picking.nearest(&self.faces, &self.entities, model_ray, false);
-        let face_tool = matches!(source.tool,benchup_core::Tool::Paint | benchup_core::Tool::PushPull | benchup_core::Tool::Offset);
-        let selection_tool = (matches!(source.tool,benchup_core::Tool::Select | benchup_core::Tool::Move | benchup_core::Tool::Rotate | benchup_core::Tool::Scale | benchup_core::Tool::Erase) || source.tool.is_solid()) && source.paste.is_none();
-        let attachment_tool = matches!(source.tool,benchup_core::Tool::Text | benchup_core::Tool::GrainDirection);
+        let face_tool = !placing_copy && matches!(source.tool,benchup_core::Tool::Paint | benchup_core::Tool::PushPull | benchup_core::Tool::Offset);
+        let selection_tool = !placing_copy && (matches!(source.tool,benchup_core::Tool::Select | benchup_core::Tool::Move | benchup_core::Tool::Rotate | benchup_core::Tool::Scale | benchup_core::Tool::Erase) || source.tool.is_solid());
+        let attachment_tool = !placing_copy && matches!(source.tool,benchup_core::Tool::Text | benchup_core::Tool::GrainDirection);
         let want_edges = !face_tool && (selection_tool || attachment_tool || source.snap_edges);
         if !source.modeling && want_edges { self.edge_picking.prepare(&source.model); }
         let edge_hit = (!source.modeling && want_edges).then(|| self.edge_picking.query(model_ray,0.01,
@@ -342,7 +343,7 @@ impl Scene {
             }
         )).flatten();
         let want_guides = !source.modeling && source.display.guides && !face_tool
-            && !attachment_tool && !source.tool.is_solid()
+            && !attachment_tool && (placing_copy || !source.tool.is_solid())
             && (selection_tool || source.snap_geometry);
         let (guide_hit, guide_points) = if want_guides && edge_hit.is_none() {
             self.guide_picking.prepare_guides(&source.model, placement.guide_frame());
