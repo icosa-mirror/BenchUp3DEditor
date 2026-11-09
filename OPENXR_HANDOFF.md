@@ -496,3 +496,9 @@ path, not successful initialization on a headset runtime.
   not deployment: do not create release tags or change the release version.
 - At the end of each change follow the existing-process/compiler-log check in
   `AGENTS.md`; report when no existing app/log is available.
+
+An empty project now initializes a one-to-one model-space XR workspace instead
+of waiting for geometry bounds. Fit 3D uses the same fallback for an empty or
+zero-extent project, so the first controller drawing ray can reach its drawing
+plane. Nonzero scene bounds retain the existing fit behavior. The native OpenXR
+editor build passes; first-stroke headset confirmation remains deferred.

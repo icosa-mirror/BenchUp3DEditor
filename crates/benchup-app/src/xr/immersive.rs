@@ -144,24 +144,26 @@ impl Scene {
         }
         self.picking.update(&self.faces);
         if self.placement.is_none() || fit {
-            if let Some((min, max)) = source.model.bounds().or_else(|| {
+            let bounds = source.model.bounds().or_else(|| {
                 source
                     .paste
                     .as_ref()
                     .and_then(|p| p.model.bounds().map(|(a, b)| (a + p.offset, b + p.offset)))
-            }) {
-                let extent = (max - min).max_element().max(0.001);
+            });
+            let (center, fit_scale) = bounds.map_or((DVec3::ZERO,1.0),|(min,max)| {
+                let extent = (max-min).max_element();
+                ((min+max)*0.5,if extent > 0.0 {1.6/extent.max(0.001)} else {1.0})
+            });
                 self.placement = Some(Placement {
-                    center: (min + max) * 0.5,
-                    fit_scale: 1.6 / extent,
+                    center,
+                    fit_scale,
                     anchor,
                 });
                 println!(
                     "[BenchUpXR] Immersive scene fitted: {} faces, scale {:.5} metres per model metre",
                     source.model.faces.len(),
-                    1.6 / extent
+                    fit_scale
                 );
-            }
         }
         self.source = Some(source);
     }
