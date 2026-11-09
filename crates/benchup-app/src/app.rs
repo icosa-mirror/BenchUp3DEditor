@@ -525,6 +525,9 @@ impl BenchUpApp {
             modeling: self.modeling.is_some(),
             snap_edges: self.snap_to_edge,
             snap_geometry: self.doc.snap_to_geometry,
+            guide_preview: (self.history_preview.is_none() && self.create_guides
+                && self.measurement.as_ref().is_some_and(|m| !m.complete || !self.length_input.is_empty()))
+                .then(|| self.measurement_guide()).flatten(),
             tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
             joinery_members:self.joinery_edit_members(),

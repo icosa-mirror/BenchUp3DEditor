@@ -513,3 +513,13 @@ of waiting for geometry bounds. Fit 3D uses the same fallback for an empty or
 zero-extent project, so the first controller drawing ray can reach its drawing
 plane. Nonzero scene bounds retain the existing fit behavior. The native OpenXR
 editor build passes; first-stroke headset confirmation remains deferred.
+
+The XR Tape Measure and Protractor controls now expose Create construction
+guides directly, using the existing saved preference and immediate persistence.
+Their live construction-line preview is submitted as a small GPU-line overlay
+using the same model-space span as saved guides. It follows the shared
+measurement/precision state and respects guide visibility and history preview.
+The existing preference regression coverage already exercises both guide-mode
+values and restoration; no new preference schema or defaults were introduced.
+The guide-workflow native OpenXR editor build passes. Headset confirmation of
+these controls and previews remains pending; broad validation stays deferred.

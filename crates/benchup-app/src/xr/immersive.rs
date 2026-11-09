@@ -20,6 +20,7 @@ pub(crate) struct Source {
     pub modeling: bool,
     pub snap_edges: bool,
     pub snap_geometry: bool,
+    pub guide_preview: Option<benchup_core::ConstructionGuide>,
     pub hover: Option<u64>,
     pub outliner_hover: BTreeSet<u64>,
     pub erasing: BTreeSet<u64>,
@@ -690,6 +691,15 @@ impl Scene {
                             lines.push(Line::marker(guide.origin - origin, color, 4.0).overlay());
                         }
                     }
+                }
+                if source.display.guides && let Some(guide) = &source.guide_preview {
+                    let (a, b) = placement.guide_frame().segment(guide);
+                    lines.push(Line::dashed(
+                        a - origin,
+                        b - origin,
+                        egui::Color32::from_rgb(0, 174, 214).to_normalized_gamma_f32(),
+                        1.5,
+                    ));
                 }
                 if let Some((lo, hi)) = self.faces.context_bounds(&source.model, &self.entities) {
                     let padding = ((hi - lo).max_element() * 0.04).max(0.05);

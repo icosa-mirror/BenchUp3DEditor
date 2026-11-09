@@ -228,6 +228,14 @@ impl BenchUpApp {
             });
             let mut changed = false;
             match self.tool {
+                Tool::TapeMeasure | Tool::Protractor => {
+                    changed |= ui
+                        .checkbox(
+                            &mut self.create_guides,
+                            egui::RichText::new("Create construction guides").size(18.),
+                        )
+                        .changed();
+                }
                 Tool::Polygon => {
                     ui.horizontal(|ui| {
                         ui.label(
