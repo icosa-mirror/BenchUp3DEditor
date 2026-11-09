@@ -337,6 +337,7 @@ impl Editor {
     }
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
+        self.scene.navigate(input.navigation);
         self.scene.set_input(input.scene);
         if let Some(scene) = input.scene {
             if scene.select || scene.clear {
@@ -356,6 +357,7 @@ impl Editor {
         self.input.pressed = input.pressed;
         self.input.focused = input.focused;
         self.input.scene = input.scene;
+        self.input.navigation=input.navigation;
     }
 
     pub(super) fn logical_size(&self) -> egui::Vec2 {
@@ -369,6 +371,10 @@ impl Editor {
     pub(super) fn scene_interaction_enabled(&self) -> bool {
         self.app.xr_panel_preferences().immersive_scene
             && self.app.xr_scene_interaction_enabled(&self.ctx)
+    }
+
+    pub(super) fn navigation_enabled(&self)->bool {
+        self.app.xr_panel_preferences().immersive_scene && self.ctx.memory(|memory|memory.top_modal_layer().is_none())
     }
 
     pub(super) fn pick_scene_ray(&self, ray: benchup_core::Ray) -> Option<super::input::SceneHit> {

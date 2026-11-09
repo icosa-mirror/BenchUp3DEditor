@@ -22,6 +22,30 @@ The initial plan/panel milestone is commit `e21b8c9`.
 
 ### Current work: immersive visual parity
 
+### Two-grip scene navigation
+
+The user requested Open Brush-style navigation: hold both grip buttons to scale,
+rotate and translate the scene. Grip poses and squeeze actions are bound for
+Touch, Vive and Index controllers (simple controllers have no squeeze binding).
+Both grips establish a two-hand frame; subsequent midpoint, span and frame changes
+apply a uniform similarity transform to the XR scene root. Rendering, annotations,
+environment and scene-ray picking use that same transform. The editor quad stays
+in place, and document/model coordinates and undo history are unchanged.
+
+Release either grip to leave the scene in place. Any held grip reserves pointing
+input, cancels captured UI/scene clicks and disarms held triggers until released.
+Focus/tracking loss or nearly coincident hands freezes navigation and requires
+both grips to be released before another grab. Grip press/release thresholds have
+hysteresis. A continuous hand-frame up direction avoids wrist-cancellation flips.
+Scale is bounded, and Fit 3D resets the transient grab transform and saved 3D zoom.
+The HUD describes the current grab/release state. Tracking-space navigation is
+session-local; physical room poses are not written into saved document/settings.
+
+The executable builds and the offscreen eye-render startup passes. Actual grip
+bindings/motion need the next controller check; no headset result is claimed yet.
+
+### Visual parity implementation
+
 The user explicitly asked to continue until a useful parity test is ready, rather
 than stop after each milestone. Keep committing implementation milestones and
 continue independently; do not end the work merely to report a completed commit.

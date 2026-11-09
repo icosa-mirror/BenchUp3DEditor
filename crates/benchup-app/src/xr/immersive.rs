@@ -48,6 +48,7 @@ pub(super) struct Scene {
     depth: Option<([u32; 2], wgpu::TextureView)>,
     picking: crate::picking::PickingCache,
     input: Option<super::input::SceneInput>,
+    navigation: super::navigation::Navigation,
     lines: super::world_lines::Lines,
     text: super::world_text::Text,
     head: DMat4,
@@ -79,6 +80,7 @@ impl Scene {
             depth: None,
             picking: Default::default(),
             input: None,
+            navigation: Default::default(),
             lines: super::world_lines::Lines::new(device, format),
             text: super::world_text::Text::new(device, format),
             head: DMat4::IDENTITY,
@@ -100,6 +102,9 @@ impl Scene {
     }
 
     pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: bool) {
+        if fit {
+            self.navigation.reset();
+        }
         self.head = pose_matrix(anchor);
         self.faces
             .update_for_revision(&source.model, source.revision);
@@ -160,9 +165,26 @@ impl Scene {
         self.input = input;
     }
 
+    pub fn navigate(&mut self, input: super::navigation::Input) {
+        let previous = self.navigation.grabbing();
+        self.navigation.update(input);
+        if previous != self.navigation.grabbing() {
+            println!(
+                "[BenchUpXR] Scene grab {} (relative scale {:.3})",
+                if self.navigation.grabbing() {
+                    "started"
+                } else {
+                    "released"
+                },
+                self.navigation.scale()
+            );
+        }
+    }
+
     pub fn diagnostic_eye(&mut self, scale: f32, size: [u32; 2]) -> Option<xr::View> {
         let source = self.source.as_ref()?;
-        let transform = self.placement.as_ref()?.model_to_tracking(scale as f64);
+        let transform =
+            self.navigation.matrix() * self.placement.as_ref()?.model_to_tracking(scale as f64);
         let camera = &source.camera;
         let position = transform.transform_point3(camera.eye()).as_vec3();
         let right = transform.transform_vector3(camera.right()).normalize();
@@ -208,7 +230,7 @@ impl Scene {
                 owners: Default::default(),
                 depth: false,
                 shapes: vec![Glyph::Paragraph {
-                    text: source.status.clone(),
+                    text: format!("{}\n{}", source.status, self.navigation.hint()),
                     size: 12.0,
                     width: 320.0,
                     color: colors.ink,
@@ -274,7 +296,7 @@ impl Scene {
         let (Some(source), Some(placement)) = (&self.source, &self.placement) else {
             return None;
         };
-        let transform = placement.model_to_tracking(scale as f64);
+        let transform = self.navigation.matrix() * placement.model_to_tracking(scale as f64);
         let inverse = transform.inverse();
         let model_ray = benchup_core::Ray {
             origin: inverse.transform_point3(ray.origin),
@@ -344,7 +366,8 @@ impl Scene {
                 let (Some(source), Some(placement)) = (&self.source, &self.placement) else {
                     return;
                 };
-                let transform = placement.model_to_tracking(preferences.scene_scale as f64);
+                let transform = self.navigation.matrix()
+                    * placement.model_to_tracking(preferences.scene_scale as f64);
                 let eye_to_tracking = pose_matrix(eye.pose);
                 let model_from_eye = transform.inverse() * eye_to_tracking;
                 let view = renderer::RenderView {
@@ -635,7 +658,8 @@ impl Scene {
                 }
                 lines
             });
-            let transform = placement.model_to_tracking(preferences.scene_scale as f64);
+            let transform = self.navigation.matrix()
+                * placement.model_to_tracking(preferences.scene_scale as f64);
             let tracking_view = projection(eye.fov, 0.03, 200.0) * pose_matrix(eye.pose).inverse();
             let display = crate::app::display_scene::effective_display(
                 &source.display,

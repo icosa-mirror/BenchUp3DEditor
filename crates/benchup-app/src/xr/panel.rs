@@ -782,6 +782,7 @@ fn run_content(duration: Duration, show_editor: bool) -> Result<()> {
                     focused,
                     now.duration_since(last_input).as_secs_f32(),
                     editor.scene_interaction_enabled(),
+                    editor.navigation_enabled(),
                     |ray| editor.pick_scene_ray(ray),
                 )?;
                 editor.set_input(input);

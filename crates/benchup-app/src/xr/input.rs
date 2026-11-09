@@ -38,6 +38,7 @@ pub(super) struct FrameInput {
     pub pressed: bool,
     pub focused: bool,
     pub scene: Option<SceneInput>,
+    pub navigation: super::navigation::Input,
 }
 
 #[derive(Default)]
@@ -185,7 +186,11 @@ impl Pointer {
 
 pub(super) struct Controllers {
     spaces: [xr::Space; 2],
+    grip_spaces: [xr::Space; 2],
     aim: xr::Action<xr::Posef>,
+    grip_pose: xr::Action<xr::Posef>,
+    squeeze: xr::Action<f32>,
+    grip_down: [bool; 2],
     select: xr::Action<bool>,
     secondary: xr::Action<bool>,
     scroll: xr::Action<xr::Vector2f>,
@@ -208,16 +213,19 @@ impl Controllers {
         ];
         let set = instance.create_action_set("editor_panel", "Editor panel", 0)?;
         let aim = set.create_action::<xr::Posef>("aim", "Aim at panel", &paths)?;
+        let grip_pose = set.create_action::<xr::Posef>("grip_pose", "Grip pose", &paths)?;
+        let squeeze = set.create_action::<f32>("grab_scene", "Grab scene", &paths)?;
         let select = set.create_action::<bool>("select", "Primary click", &paths)?;
         let secondary = set.create_action::<bool>("secondary", "Secondary click", &paths)?;
         let scroll = set.create_action::<xr::Vector2f>("scroll", "Scroll panel", &paths)?;
         let scroll_touch = set.create_action::<bool>("scroll_touch", "Scroll contact", &paths)?;
-        for (profile, primary, secondary_left, secondary_right, axis) in [
+        for (profile, primary, secondary_left, secondary_right, axis, grip) in [
             (
                 "khr/simple_controller",
                 "select/click",
                 "menu/click",
                 "menu/click",
+                None,
                 None,
             ),
             (
@@ -226,6 +234,7 @@ impl Controllers {
                 "menu/click",
                 "menu/click",
                 Some("trackpad"),
+                Some("squeeze/click"),
             ),
             (
                 "valve/index_controller",
@@ -233,6 +242,7 @@ impl Controllers {
                 "b/click",
                 "b/click",
                 Some("thumbstick"),
+                Some("squeeze/value"),
             ),
             (
                 "oculus/touch_controller",
@@ -240,6 +250,7 @@ impl Controllers {
                 "menu/click",
                 "b/click",
                 Some("thumbstick"),
+                Some("squeeze/value"),
             ),
         ] {
             let mut bindings = Vec::new();
@@ -248,6 +259,10 @@ impl Controllers {
                     instance.string_to_path(&format!("/user/hand/{side}/input/{component}"))
                 };
                 bindings.push(xr::Binding::new(&aim, path("aim/pose")?));
+                bindings.push(xr::Binding::new(&grip_pose, path("grip/pose")?));
+                if let Some(grip) = grip {
+                    bindings.push(xr::Binding::new(&squeeze, path(grip)?));
+                }
                 bindings.push(xr::Binding::new(&select, path(primary)?));
                 bindings.push(xr::Binding::new(
                     &secondary,
@@ -275,8 +290,16 @@ impl Controllers {
             aim.create_space(session, paths[0], xr::Posef::IDENTITY)?,
             aim.create_space(session, paths[1], xr::Posef::IDENTITY)?,
         ];
+        let grip_spaces = [
+            grip_pose.create_space(session, paths[0], xr::Posef::IDENTITY)?,
+            grip_pose.create_space(session, paths[1], xr::Posef::IDENTITY)?,
+        ];
         Ok(Self {
             spaces,
+            grip_spaces,
+            grip_pose,
+            squeeze,
+            grip_down: [false; 2],
             aim,
             select,
             secondary,
@@ -303,12 +326,48 @@ impl Controllers {
         focused: bool,
         seconds: f32,
         scene_enabled: bool,
+        navigation_enabled: bool,
         mut scene_hit: impl FnMut(Ray) -> Option<SceneHit>,
     ) -> xr::Result<FrameInput> {
         if !focused {
             return Ok(self.cancel());
         }
         session.sync_actions(&[(&self.set).into()])?;
+        let mut navigation = super::navigation::Input {
+            enabled: navigation_enabled,
+            ..Default::default()
+        };
+        for index in 0..2 {
+            let state = self.squeeze.state(session, self.paths[index])?;
+            if state.is_active && state.current_state.is_finite() {
+                self.grip_down[index] =
+                    state.current_state >= if self.grip_down[index] { 0.45 } else { 0.65 };
+                navigation.buttons[index] = Some(self.grip_down[index]);
+            } else {
+                self.grip_down[index] = false;
+            }
+            if self.grip_pose.is_active(session, self.paths[index])? {
+                let location = self.grip_spaces[index].locate(space, time)?;
+                let required = xr::SpaceLocationFlags::POSITION_VALID
+                    | xr::SpaceLocationFlags::ORIENTATION_VALID
+                    | xr::SpaceLocationFlags::POSITION_TRACKED
+                    | xr::SpaceLocationFlags::ORIENTATION_TRACKED;
+                if location.location_flags.contains(required)
+                    && let Some(orientation) = rotation(location.pose.orientation)
+                {
+                    navigation.hands[index] = Some(super::navigation::Grip {
+                        position: position(location.pose.position),
+                        orientation,
+                    });
+                }
+            }
+        }
+        if navigation_enabled && navigation.buttons.iter().any(|down| *down == Some(true)) {
+            let mut output = self.cancel_pointers();
+            output.focused = true;
+            output.navigation = navigation;
+            return Ok(output);
+        }
         let panel_rotation = rotation(panel_pose.orientation);
         let mut hands = [Hand::default(); 2];
         for (index, hand) in hands.iter_mut().enumerate() {
@@ -452,10 +511,16 @@ impl Controllers {
         };
         output.focused = true;
         output.scene = scene;
+        output.navigation = navigation;
         Ok(output)
     }
 
     pub fn cancel(&mut self) -> FrameInput {
+        self.grip_down = [false; 2];
+        self.cancel_pointers()
+    }
+
+    fn cancel_pointers(&mut self) -> FrameInput {
         self.scene_owner = None;
         self.scene_captured = false;
         self.scene_armed = [false; 2];

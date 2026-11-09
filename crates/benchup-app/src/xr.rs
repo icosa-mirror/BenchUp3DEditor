@@ -38,6 +38,9 @@ mod backdrop;
 #[cfg(feature = "openxr")]
 mod floor_grid;
 
+#[cfg(feature = "openxr")]
+mod navigation;
+
 /// A flat editor surface. Logical size is in egui points, not texture pixels.
 #[derive(Clone, Copy, Debug)]
 pub struct EditorPanel {
