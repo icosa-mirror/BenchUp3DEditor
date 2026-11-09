@@ -148,9 +148,18 @@ operation, and Cancel discards the ghost. This reuses the immutable paste model
 and updates its transform rather than cloning geometry each frame. XR controls
 hide while shared modal dialogs are open, so text/name dialogs stay accessible.
 
+Outer Shell, Union, Intersect, Trim, Split and Flip accept controller clicks.
+Large tool buttons reuse desktop solid-tool setup and saved active-tool choice;
+world hits enter the shared operand validation and boolean/history operations.
+Trim preserves cutter-then-target order. Flip clicks query the same three quads
+as the shared GPU overlays and apply the existing flip operation. Quad queries
+run only on a click, not as a per-frame scan of selected geometry; plane hover
+feedback remains to be added. Cancel clears pending operands and paste previews,
+and cancelling a paste keeps the original selection. Headset tests are pending.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
-solid tools and section handles. Those tools
+section handles. Those tools
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;

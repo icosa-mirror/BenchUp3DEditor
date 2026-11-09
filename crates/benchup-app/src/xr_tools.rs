@@ -52,6 +52,13 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::Select => "Trigger selects. Cancel clears selection.",
         Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
         Tool::Erase => "Trigger erases the highlighted entity. Undo restores it.",
+        Tool::Trim => "Trigger: choose the cutter, then the target body. Cancel clears operands.",
+        Tool::OuterShell | Tool::Union | Tool::Intersect | Tool::Split => {
+            "Trigger: choose the first body, then the second. Cancel clears operands."
+        }
+        Tool::Flip => {
+            "Trigger: choose a body, then one of its coloured flip planes. Undo restores it."
+        }
         _ => "This tool uses the editor panel.",
     }
 }
@@ -101,13 +108,7 @@ impl BenchUpApp {
                         )
                         .clicked()
                     {
-                        self.stop_drawing();
-                        self.measurement = None;
-                        self.modeling = None;
-                        self.paste_preview = None;
-                        if action == 0 && self.tool == Tool::Select {
-                            self.selected.clear();
-                        }
+                        self.xr_cancel_action(action == 0);
                         if action != 0 {
                             self.undo(&ctx, action == 2);
                         }
@@ -254,6 +255,28 @@ impl BenchUpApp {
                     self.context_action(&ctx, ContextAction::Paste);
                 }
             });
+            ui.horizontal(|ui| {
+                for (label, tool) in [
+                    ("Outer Shell", Tool::OuterShell),
+                    ("Union", Tool::Union),
+                    ("Intersect", Tool::Intersect),
+                    ("Trim", Tool::Trim),
+                    ("Split", Tool::Split),
+                    ("Flip", Tool::Flip),
+                ] {
+                    if ui
+                        .add_sized(
+                            [110., 42.],
+                            egui::Button::new(egui::RichText::new(label).size(18.))
+                                .selected(self.tool == tool),
+                        )
+                        .clicked()
+                    {
+                        self.start_solid_tool(tool, &ctx);
+                        self.persist_inspector_changes(&ctx, Some(storage), false);
+                    }
+                }
+            });
             let hint = if self.paste_preview.is_some() {
                 "Trigger places the copy. Cancel discards the preview."
             } else {
@@ -261,6 +284,19 @@ impl BenchUpApp {
             };
             ui.label(egui::RichText::new(hint).size(16.));
         });
+    }
+
+    fn xr_cancel_action(&mut self, clear_selection: bool) {
+        let placing_copy = self.paste_preview.is_some();
+        self.stop_drawing();
+        self.measurement = None;
+        self.modeling = None;
+        self.paste_preview = None;
+        self.solid_first = None;
+        self.flip_hover = None;
+        if clear_selection && self.tool == Tool::Select && !placing_copy {
+            self.selected.clear();
+        }
     }
 
     pub(crate) fn xr_world_pointer(
@@ -304,16 +340,10 @@ impl BenchUpApp {
         self.drawing_axis_guides.clear();
         self.drawing_projection = None;
         if activate && pointer.cancel {
-            self.stop_drawing();
-            self.measurement = None;
-            self.modeling = None;
-            self.paste_preview = None;
+            self.xr_cancel_action(true);
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
-            if self.tool == Tool::Select {
-                self.selected.clear();
-            }
             ctx.request_repaint();
             return;
         }
@@ -335,6 +365,27 @@ impl BenchUpApp {
                 }
             }
             ctx.request_repaint();
+            return;
+        }
+        if self.tool.is_solid() {
+            self.snap = None;
+            if clicked {
+                if self.tool == Tool::Flip
+                    && let Some((axis, point)) = self.xr_flip_plane(pointer.ray)
+                {
+                    self.apply_flip(axis, ctx);
+                    self.snap = Some(Snap {
+                        point,
+                        kind: Inference::Plane,
+                    });
+                } else {
+                    let target = pointer
+                        .hit
+                        .map(|hit| hit.entity)
+                        .filter(|id| self.doc.model.contains_entity(id));
+                    self.solid_click_at_target(target, ctx);
+                }
+            }
             return;
         }
         if matches!(
@@ -522,6 +573,31 @@ impl BenchUpApp {
             );
         }
         ctx.request_repaint();
+    }
+
+    fn xr_flip_plane(&self, ray: Ray) -> Option<(Axis, DVec3)> {
+        // Only query the three shared flip quads on a click; no per-frame scan
+        // of selected geometry or separate plane geometry is introduced.
+        self.flip_planes()
+            .into_iter()
+            .filter_map(|(axis, quad)| {
+                let u = quad[1] - quad[0];
+                let v = quad[3] - quad[0];
+                let normal = u.cross(v).try_normalize()?;
+                let point = plane_point(ray, quad[0], normal)?;
+                let delta = point - quad[0];
+                let (a, b) = (
+                    delta.dot(u) / u.length_squared(),
+                    delta.dot(v) / v.length_squared(),
+                );
+                ((0. ..=1.).contains(&a) && (0. ..=1.).contains(&b)).then_some((
+                    axis,
+                    point,
+                    (point - ray.origin).dot(ray.direction),
+                ))
+            })
+            .min_by(|a, b| a.2.total_cmp(&b.2))
+            .map(|(axis, point, _)| (axis, point))
     }
 
     fn xr_model_grab(

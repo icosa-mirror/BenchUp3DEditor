@@ -10,7 +10,7 @@ shared GPU previews. A large XR tool bar exposes these tools, cancellation and
 undo/redo with persisted active-tool selection. Initial inference is local to the
 hit face plus drawing planes and axis constraints. Remaining direct interaction
 work includes standalone-edge/guide snapping, shared reference acquisition,
-solid tools and section-handle manipulation.
+section-handle manipulation.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
 large XR buttons and polygon side controls persist through existing preferences.
@@ -45,6 +45,10 @@ controller-ray placement and the retained GPU paste ghost. Grid and geometry
 targets move the ghost's transform; trigger commits and Cancel discards. Keyboard
 and menu paste enter the same path. Shared modal dialogs hide the XR controls to
 keep their contents and actions accessible.
+Solid tools accept world-ray operand hits through desktop's shared validation,
+setup and boolean/history operations. Trim retains cutter-then-target order;
+Flip clicks intersect the shared model-space flip quads and use the existing
+flip operation. Plane queries occur only on clicks; live plane hover is pending.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

@@ -192,13 +192,18 @@ impl BenchUpApp {
                 return;
             }
         }
-        let Some(hit) = selection::pick_entity(
+        let hit = selection::pick_entity(
             &self.doc.model,
             &self.doc.camera,
             dv(self.viewport.size()),
             dv(pos - self.viewport.min),
             8.,
-        ) else {
+        );
+        self.solid_click_at_target(hit, ctx);
+    }
+
+    pub(super) fn solid_click_at_target(&mut self, hit: Option<u64>, ctx: &egui::Context) {
+        let Some(hit) = hit else {
             self.say(ctx, tr!("solid_tools.click_a_group_component_or_connected_body"));
             return;
         };
