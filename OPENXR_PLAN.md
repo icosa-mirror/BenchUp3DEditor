@@ -283,6 +283,8 @@ opaque UI does not cover it. Model Z-up to XR Y-up, fitting and scale are view
 transforms; the source model and desktop camera are unchanged. Persistent
 3D-view and scale controls plus a Fit 3D action are included. The executable built
 and a ten-second runtime run submitted stereo scene frames, reached VISIBLE/
-FOCUSED and stopped cleanly after 650 frames. A five-minute user preview is now
-running. Further test suites, graphics validation and broad backend checks are
+FOCUSED and stopped cleanly after 650 frames. The user preview then reached
+STOPPING/IDLE/EXITING and exited successfully after 16,257 editor frames, with
+stereo scene submission active at startup. Human visual confirmation of the 3D
+scene has not yet been recorded. Further test suites, graphics validation and broad backend checks are
 deferred at the user's request while functionality is prioritized.

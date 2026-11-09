@@ -296,7 +296,9 @@ annotations, special display previews and editing tools remain on the panel.
 The native executable built. A ten-second run selected the RTX 4090, created
 2112 × 2304 targets per eye, fitted the 404-face model, submitted head-tracked
 stereo frames, reached VISIBLE/FOCUSED and stopped cleanly after 650 frames. The
-user's five-minute preview is running. Validation layers, test suites and broad
+user's preview reached STOPPING/IDLE/EXITING and exited successfully after 16,257
+editor frames, with stereo scene submission active at startup. Human visual
+confirmation of the 3D scene is not yet recorded. Validation layers, test suites and broad
 backend checks are deferred as requested; existing validation issues are not
 claimed resolved. Evidence is `.local/openxr/immersive-build.log`,
 `immersive-startup.log` and `immersive-live.log`.
