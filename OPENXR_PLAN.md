@@ -40,6 +40,11 @@ standalone-edge grabs remain future work. Rotate also supports a trigger grab
 about the selection centre, sharing desktop rotation-axis rules, angle, arc
 preview and authoritative commit. World-driven modeling ignores desktop pointer
 refreshes, including refreshes caused by keyboard lock/modifier changes.
+Copy/Paste use the existing clipboard setup and document/history operation with
+controller-ray placement and the retained GPU paste ghost. Grid and geometry
+targets move the ghost's transform; trigger commits and Cancel discards. Keyboard
+and menu paste enter the same path. Shared modal dialogs hide the XR controls to
+keep their contents and actions accessible.
 Upright two-grip navigation remains the default. Continue functionality work;
 broad validation and multiview remain deferred as previously agreed.
 

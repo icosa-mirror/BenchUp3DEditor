@@ -140,6 +140,14 @@ requested by keyboard axis or modifier changes. Geometry/reference snapping
 during grabs and standalone-edge grabs remain future work. Controller behavior
 awaits headset validation.
 
+Copied geometry can be placed with the controller ray. Large Copy/Paste buttons
+use the existing clipboard and paste setup; keyboard/menu paste enters the same
+world placement path. The retained GPU ghost follows geometry or the drawing
+plane with grid snapping. Trigger commits through the shared paste/history
+operation, and Cancel discards the ghost. This reuses the immutable paste model
+and updates its transform rather than cloning geometry each frame. XR controls
+hide while shared modal dialogs are open, so text/name dialogs stay accessible.
+
 Remaining: world snapping to standalone edges, construction guides and off-face
 nearby geometry; desktop reference-acquisition parity; controller paths for
 solid tools and section handles. Those tools

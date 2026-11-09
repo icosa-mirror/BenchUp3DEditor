@@ -104,6 +104,7 @@ impl BenchUpApp {
                         self.stop_drawing();
                         self.measurement = None;
                         self.modeling = None;
+                        self.paste_preview = None;
                         if action == 0 && self.tool == Tool::Select {
                             self.selected.clear();
                         }
@@ -230,7 +231,35 @@ impl BenchUpApp {
                     self.persist_inspector_changes(&ctx, Some(storage), false);
                 }
             });
-            ui.label(egui::RichText::new(hint(self.tool)).size(16.));
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        !self.selected.is_empty(),
+                        egui::Button::new(egui::RichText::new("Copy").size(18.))
+                            .min_size(egui::vec2(100., 42.)),
+                    )
+                    .clicked()
+                {
+                    self.copy_selection(&ctx);
+                }
+                if ui
+                    .add_enabled(
+                        self.clipboard.is_some(),
+                        egui::Button::new(egui::RichText::new("Paste").size(18.))
+                            .min_size(egui::vec2(100., 42.)),
+                    )
+                    .clicked()
+                {
+                    self.context_position = None;
+                    self.context_action(&ctx, ContextAction::Paste);
+                }
+            });
+            let hint = if self.paste_preview.is_some() {
+                "Trigger places the copy. Cancel discards the preview."
+            } else {
+                hint(self.tool)
+            };
+            ui.label(egui::RichText::new(hint).size(16.));
         });
     }
 
@@ -278,6 +307,7 @@ impl BenchUpApp {
             self.stop_drawing();
             self.measurement = None;
             self.modeling = None;
+            self.paste_preview = None;
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
@@ -288,6 +318,25 @@ impl BenchUpApp {
             return;
         }
         let clicked = activate && pointer.activate;
+        if self.paste_preview.is_some() {
+            let normal = self.plane_lock().map_or(DVec3::Z, Axis::vector);
+            self.snap = self.xr_ray_snap(pointer, None, normal);
+            self.apply_grid_snap_in_plane(Some(normal));
+            if let Some(snap) = self.snap {
+                self.paste_preview.as_mut().unwrap().point = snap.point;
+                if clicked {
+                    let preview = self.paste_preview.take().unwrap();
+                    self.paste_at(
+                        ctx,
+                        &preview.clipboard,
+                        preview.point - preview.clipboard.anchor,
+                    );
+                    self.snap = None;
+                }
+            }
+            ctx.request_repaint();
+            return;
+        }
         if matches!(
             self.tool,
             Tool::Move | Tool::PushPull | Tool::Scale | Tool::Offset | Tool::Rotate
