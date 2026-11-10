@@ -58,6 +58,14 @@ pub(crate) enum UiHost<'a> {
 }
 
 impl UiHost<'_> {
+    pub(crate) fn is_xr(&self) -> bool {
+        match self {
+            Self::Desktop(_) => false,
+            #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+            Self::OpenXr(_) => true,
+        }
+    }
+
     pub(crate) fn frame_mut(&mut self) -> Option<&mut Frame> {
         match self {
             Self::Desktop(frame) => Some(frame),

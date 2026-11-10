@@ -5,7 +5,18 @@ Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continui
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
-## User direction
+## Paused, test-ready milestone
+
+The user has paused the implementation goal. Their latest instruction was to
+finish the soonest plausible milestone, then stop with an executable ready for
+testing. The immersive-first panel milestone is complete in source and built:
+no duplicate 2D model canvas in immersive mode, shared inspector/context controls
+in the panel, and existing XR tools/comfort/numeric controls retained. The native
+build and isolated RTX 4090 panel/eye snapshots pass. Do not continue development
+or launch a preview until the user asks. This stop does not mark the overall
+OpenXR plan complete.
+
+## User direction when resumed
 
 1. Continue immersive viewport replacement autonomously, updating both documents
    with reality as milestones land. Only pause for human verification when the
@@ -69,8 +80,11 @@ Git history retains the earlier milestones and historical handoff revisions.
    not a session deadline. Desktop mirroring is not implemented.
 4. `immersive.rs` uses explicit eye transforms and shared retained geometry and
    display state. GPU environment, analytic grid, shadows, styles/X-Ray, section
-   caps/contours, labels and overlays are implemented. The duplicate 2D model view
-   is still present; full visual equivalence has not been established.
+   caps/contours, labels and overlays are implemented. Immersive mode hosts the
+   shared inspector/context UI instead of a duplicate model canvas. The XR tool
+   picker remains; legacy camera/tool rails remain in panel-only mode. Controller
+   instructions retain transient notices and modeling values. Full visual
+   equivalence has not been established.
 5. `viewport_overlays.rs` shares model-space previews/hints. `world_lines.rs`,
    `world_text.rs`, `world_surfaces.rs`, `floor_grid.rs` and `backdrop.rs` render
    spatial feedback. Glyph/annotation layout is reused across head motion; both
@@ -92,7 +106,7 @@ Git history retains the earlier milestones and historical handoff revisions.
    focus/tracking loss and capture cancellation require release-to-rearm. Absolute
    room poses and the transient navigation transform are not saved as preferences.
 
-## Current next work
+## Next work after the user resumes
 
 1. Follow the numbered spatial parity inventory in `OPENXR_PLAN.md`. Audit concrete
    desktop consumers and immersive input routes: editing context/context actions,
@@ -104,9 +118,12 @@ Git history retains the earlier milestones and historical handoff revisions.
    guards and cap-only picking/occlusion. Original-face occlusion queries do not
    fully represent rendered section caps. Guide intersections are locally bounded
    to 16 candidates/eight exact targets; dense clusters can omit a target.
-3. Remove the duplicate 2D model viewport from the XR panel once the supported
-   workflows no longer require it. Keep floating inspectors/toolbars/dialogs and
-   preserve desktop/web support. Do not label this milestone complete yet.
+3. The duplicate 2D model viewport is now removed from immersive mode. The
+   existing 3D-view preference switches between the immersive-first inspector/tool
+   panel and the original panel-only editor. Shared inspector visibility, sections,
+   docking state and tables are reused, with direct edit/close-context controls.
+   Remaining tool/gesture/display acceptance work is still open.
+
 4. Keep implementing while human verification is pending. A requested headset
    session is a deliberate handoff, not an excuse to interrupt early or repeatedly
    ask readiness. Broad acceptance gates remain deferred as listed in the plan.
@@ -161,7 +178,10 @@ Git history retains the earlier milestones and historical handoff revisions.
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-2. Latest native build: `.local/openxr/fit-selection-build.log`.
+2. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+   `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
+   inspected: shared inspector/controls without the duplicate model, and the clean
+   404-face example in the independent eye renderer. No headset session was started.
    `.local/openxr/fit-selection-controls.png` was checked for control fit in the
    GPU-rendered panel using a fresh example and carried-forward preferences.
    This verifies layout, not live selected-target framing in the headset.

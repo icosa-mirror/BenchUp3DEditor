@@ -3039,7 +3039,7 @@ impl BenchUpApp {
                 });
             });
     }
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
+    fn status_bar(&mut self, ui: &mut egui::Ui, _immersive: bool) {
         let colors = Palette::for_ui(ui);
         let ctx = ui.ctx().clone();
         egui::Panel::bottom("status")
@@ -3052,6 +3052,14 @@ impl BenchUpApp {
             .show(ui, |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let message = self.viewport_status_message(&ctx);
+                    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+                    let message = if _immersive {
+                        self.notice.as_ref().filter(|(_,until)|ctx.input(|i|i.time)<*until)
+                            .map(|(message,_)|message.clone())
+                            .or_else(||self.shared_status(ctx.input(|i|i.time)))
+                            .or_else(||self.modeling_status_text())
+                            .unwrap_or_else(||xr_tools::hint(self.tool).to_owned())
+                    } else { message };
                     // Reserve the precision controls before fitting the status message.
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if self.tool == Tool::Text { return; }
@@ -3908,6 +3916,52 @@ impl BenchUpApp {
                 .inner
             },
         );
+    }
+
+    fn immersive_workspace(&mut self, ui: &mut egui::Ui) {
+        self.connection_sidebar_selection(ui.ctx());
+        let ctx=ui.ctx().clone();
+        let colors=Palette::for_ui(ui);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(colors.paper).inner_margin(8))
+            .show(ui, |ui| {
+                // Retain valid dimensions for legacy command/export sizing,
+                // without routing panel input through a 2D model canvas.
+                self.viewport=ui.available_rect_before_wrap();
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().interact_size.y=36.;
+                    ui.label(egui::RichText::new("Immersive scene").strong().size(18.));
+                    if let Some(id)=self.doc.model.edit_context {
+                        let name=self.doc.model.objects.get(&id).map_or("Object",|object|object.name.as_str());
+                        ui.label(format!("Editing: {name}"));
+                        if ui.button("Close context").clicked() {
+                            self.context_action(&ctx,ContextAction::CloseContext);
+                        }
+                    } else { ui.label("Scene context"); }
+                    if self.selected.len()==1 && let Some(&id)=self.selected.first()
+                        && let Some(object)=self.doc.model.objects.get(&id)
+                    {
+                        let label=if object.kind==ObjectKind::Group {"Edit group"} else {"Edit component"};
+                        if ui.add_enabled(!self.doc.model.is_locked(id) && !self.doc.model.is_hidden(id),egui::Button::new(label)).clicked() {
+                            self.context_action(&ctx,ContextAction::EditObject);
+                        }
+                    }
+                    if ui.button(if self.inspector {"Hide inspector"} else {"Show inspector"}).clicked() {
+                        self.inspector=!self.inspector;
+                    }
+                });
+                ui.separator();
+                if self.inspector {
+                    if fasteners::AVAILABLE && self.fasteners.open {
+                        self.automatic_fasteners_sidebar(ui);
+                    } else if self.joinery.open {
+                        self.wood_joinery_sidebar(ui);
+                    } else { self.inspector_contents(ui); }
+                } else {
+                    ui.label("The model is rendered in the headset. Hold both grips to move, turn and scale it.");
+                    ui.label("Use the tool picker below and the File, Edit, View and Tools menus above.");
+                }
+            });
     }
 
     fn inspector_panel(&mut self, ui: &mut egui::Ui) {
@@ -6409,11 +6463,16 @@ impl BenchUpApp {
         }
         let theme_before = ctx.options(|options| options.theme_preference);
         self.top_bar(ui);
-        self.status_bar(ui);
-        self.tool_rail(ui);
+        let immersive = host.is_xr() && self.xr_panel.immersive_scene;
+        self.status_bar(ui, immersive);
         let inspector_order_before = self.inspector_order;
-        self.inspector_panel(ui);
-        self.viewport_panel(ui);
+        if immersive {
+            self.immersive_workspace(ui);
+        } else {
+            self.tool_rail(ui);
+            self.inspector_panel(ui);
+            self.viewport_panel(ui);
+        }
         if theme_before != ctx.options(|options| options.theme_preference)
             && let Some(storage) = host.storage_mut()
         {

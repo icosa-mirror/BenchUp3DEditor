@@ -5,6 +5,17 @@ completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
+## Current stop point
+
+The user paused the implementation goal and requested one bounded milestone,
+then a stop with a build ready to test. That milestone is now implemented:
+immersive mode uses the panel for shared inspector/context controls and XR tools,
+with no duplicate 2D model canvas. Panel-only mode still uses the original editor.
+The native build and isolated panel/eye GPU images pass. This is a test-ready
+layout milestone, not proof of complete tool/visual parity or phase acceptance.
+Keep the goal paused; wait for the user's next instruction before more work or
+an interactive launch.
+
 ## Outcome and working rules
 
 1. Replace the XR panel's duplicate 2D model viewport with the immersive,
@@ -13,7 +24,7 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 2. Keep one authoritative document, selection and undo history. Share model
    operations and tool state with desktop/web; do not translate desktop pixels
    into 3D operations or fork the editor.
-3. Continue authorized implementation autonomously. Do not pause for human
+3. When the user resumes the full goal, continue authorized implementation autonomously. Do not pause for human
    verification unless the user requests it. Pending human confirmation is a
    reporting limit, not a reason to stop development or ask repeated readiness
    questions. Have a working executable before offering or starting a requested test.
@@ -40,9 +51,9 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
 | 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
 | 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; native lifetime window; shared Close/Quit path; saved preferences | In-headset virtual keyboard, native file-dialog access, other window commands and end-to-end project workflow verification |
-| 2A: shared scene/overlay preparation | Evaluated-model GPU scene; shared model-space overlay descriptions; retained references, glyphs and previews | Shared evaluated-model preparation and scoped XR snapshots are implemented; remaining UI/input dependencies still need closing before duplicate-view removal |
+| 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit when the user resumes |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
-| 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and final replacement of the 2D model view |
+| 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and remaining workflow/gesture parity; immersive mode no longer duplicates the 2D model view |
 
 ## Current architecture and boundaries
 
@@ -96,7 +107,7 @@ The numbered rows are the checklist for the replacement milestone.
 | 5 | Names and attached text | Group labels with owner-aware GPU visibility; saved text and leaders; readable shared-basis glyphs; world text creation and existing-text editing | Compare wrapping/appearance and visibility; virtual keyboard remains absent |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours and controller section handles | Original-face ray hierarchy does not cover cap-only picking/occlusion; audit settings/handle parity and display combinations |
 | 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, joint edit/warning glyphs, owner-aware guides, solid operand feedback and shared boolean/flip commands | Audit all desktop-supported target/edit gestures in immersive space; evaluated-only paint targets remain restricted |
-| 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input | Audit reachable commands, numeric/lock input and native dialogs; complete removal of the duplicate 2D model view |
+| 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input | Audit reachable commands, numeric/lock input and native dialogs; immersive inspector/tool layout implemented; remaining input and dialog parity |
 
 The object-length axis diagram in `entity_gizmo.rs` is inspector UI, not a spatial
 manipulation gizmo. Classify remaining painter paths by function rather than filename.
@@ -121,7 +132,7 @@ reference search. XR grid refinement no longer scans all edges/faces; containmen
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.
 
-## Next work, in order
+## Next work when the user resumes
 
 1. Reconcile the eight parity rows against actual desktop consumers and XR input
    routes. Record concrete missing cases, especially editing context/context
@@ -134,10 +145,13 @@ or complete-parity claims.
    broader reference/alignment behavior, fast erase-sweep interpolation, safe handling of
    unsupported evaluated targets and cap-only interaction/occlusion semantics.
    Preserve shared operations, bounded queries and retained GPU feedback.
-3. Make the immersive view the XR model viewport once the audit shows the
-   supported workflows no longer depend on the duplicate view. Remove that
-   duplicate from the XR panel; retain toolbars, inspectors and dialogs and keep
-   normal desktop/web viewports supported. This milestone is not implemented yet.
+3. The immersive-first layout is now implemented: when 3D view is enabled, the
+   panel hosts the shared inspector, context controls, menus and numeric status,
+   plus the existing XR tool picker. The 2D model canvas and desktop camera/tool
+   rails are not drawn or given viewport input. Shared inspector state/keys are
+   preserved. Turning 3D view off restores the original panel-only editor; normal
+   desktop/web hosts retain their original layout. Full parity is not yet proven.
+
 4. Keep current builds and documents synchronized as milestones land. Use source
    review, appropriate narrow math/regression checks and existing hardware snapshot
    paths when needed. Continue implementation while human confirmation is pending;
@@ -151,9 +165,10 @@ or complete-parity claims.
    under head movement; controller cursor/clicks and scrolling work; Closer/Text +
    and Recenter work. Basic immersive viewing and two-grip navigation received
    positive feedback. This is not a complete overlay/tool/display comparison.
-2. The latest native build passes for immersive Fit selection and shared scene
-   preparation/scoped snapshots. Its new control fits in the isolated GPU panel
-   snapshot; headset framing confirmation is not recorded. Two focused application tests prove edit refresh without 2D painting
+2. The latest native build passes for the immersive-first panel. Isolated RTX 4090
+   Vulkan images show its inspector/controls without a duplicate model canvas and
+   the clean 404-face model in the eye path. These are layout/rendering checks;
+   headset confirmation of the new layout and selected-target framing is not recorded. Two focused application tests prove edit refresh without 2D painting
    and group-scope propagation with stable geometry snapshots. An isolated clean-
    example eye snapshot renders 404 faces on the RTX 4090 Vulkan path and was
    inspected. Two erase regressions and the immediate-save preference regression

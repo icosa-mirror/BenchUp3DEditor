@@ -194,7 +194,7 @@ impl BenchUpApp {
         let mut lines = vec![format!(
             "{}\n{}",
             self.tool.label(),
-            self.viewport_status_message(ctx)
+            self.shared_status(ctx.input(|i|i.time)).unwrap_or_else(||super::xr_tools::hint(self.tool).to_owned())
         )];
         if let Some(message) = self.modeling_status_text() {
             lines.push(message);

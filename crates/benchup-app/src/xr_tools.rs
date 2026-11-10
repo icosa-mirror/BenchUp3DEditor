@@ -107,7 +107,7 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::GrainDirection => {
             "Trigger: choose a part and starting point, then the grain direction."
         }
-        Tool::Select => "Trigger selects. Cancel clears selection.",
+        Tool::Select => "Trigger selects. Add/remove selection toggles targets. Cancel clears selection.",
         Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
         Tool::Erase => "Hold trigger over entities; release to erase. Cancel discards the stroke.",
         Tool::Trim => "Trigger: choose the cutter, then the target body. Cancel clears operands.",
@@ -117,7 +117,7 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         Tool::Flip => {
             "Trigger: choose a body, then one of its coloured flip planes. Undo restores it."
         }
-        _ => "This tool uses the editor panel.",
+        Tool::Orbit | Tool::Walk => "Hold both grips to move, turn and scale the scene. Choose an editing tool on the panel.",
     }
 }
 
