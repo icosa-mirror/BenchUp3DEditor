@@ -178,11 +178,12 @@ mod guide_preference_tests {
         assert!(!old.xr_panel.keyboard_visible);
         assert!(!old.xr_panel.keyboard_caps);
         assert!(!old.xr_panel.keyboard_symbols);
+        assert!(!old.xr_panel.precise_modeling);
         assert_eq!(old.xr_files, crate::app_host::XrFilePreferences::default());
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
-        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, keep_upright:false, extend_selection:true, keyboard_visible:true, keyboard_caps:true, keyboard_symbols:true, ..Default::default() };
+        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, keep_upright:false, extend_selection:true, keyboard_visible:true, keyboard_caps:true, keyboard_symbols:true, precise_modeling:true, ..Default::default() };
         app.xr_files = crate::app_host::XrFilePreferences { directory: Some(std::path::PathBuf::from("F:/BenchUp Documents")), show_hidden: true, show_all_files: true };
         app.persist_inspector_changes(&ctx, Some(&mut storage), false);
         assert!(storage.flushed);

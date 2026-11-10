@@ -13,8 +13,9 @@ controller-keyboard build `8008118` is preserved and was launched on request wit
 a clean Example scene. Do not replace a running preview during development.
 Precise line/shape/measurement input now retains the world target while aiming
 at the panel, invalidating it on loss or operation/document changes. Immersive
-Enter no longer refreshes from the desktop camera. Explicit numeric modeling
-remains an input gap. An in-panel file chooser now routes Open, Save As, imports
+Enter no longer refreshes from the desktop camera. Move, Rotate, Scale, Push/Pull
+and Offset now have a persistent Exact value mode: choose anchor and target,
+then type into the automatically focused shared value field. An in-panel file chooser now routes Open, Save As, imports
 and exports through the existing workers; headset workflow acceptance remains open. Complete tool/visual parity and
 phase acceptance remain open.
 
@@ -104,9 +105,9 @@ The numbered rows are the checklist for the replacement milestone.
 |---|---|---|---|
 | 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation |
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired edge references and locked-axis projection | Broader off-face/global alignment; references to evaluated-only edges; prove every desktop lock/precision workflow has an XR route |
-| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Pending line/shape/measurement target retention and world-based numeric Enter implemented; numeric modeling and remaining desktop handles/precision routes still need work |
+| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Pending drawing/measurement targets and Exact value modeling use world-based numeric Enter; remaining desktop handles/lock/precision routes need audit |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
-| 5 | Names and attached text | Group labels with owner-aware GPU visibility; saved text and leaders; readable shared-basis glyphs; world text creation and existing-text editing | Compare wrapping/appearance and visibility; controller keyboard implemented; headset text-entry acceptance pending |
+| 5 | Names and attached text | Group labels with owner-aware GPU visibility; saved text and leaders; readable shared-basis glyphs; world text creation and existing-text editing | Fix rough/clipped group-label glyph edges seen in the GPU eye snapshot; compare wrapping/appearance and visibility; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours and controller section handles | Original-face ray hierarchy does not cover cap-only picking/occlusion; audit settings/handle parity and display combinations |
 | 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, joint edit/warning glyphs, owner-aware guides, solid operand feedback and shared boolean/flip commands | Audit all desktop-supported target/edit gestures in immersive space; evaluated-only paint targets remain restricted |
 | 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input | Audit reachable commands, numeric/lock input and native dialogs; immersive inspector/tool layout implemented; remaining input and dialog parity |
@@ -121,7 +122,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 | 1 | Selection and navigation | World hover/replace/toggle select; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
-| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate trigger grabs use shared modeling state and commits; original-document guards reject unsupported evaluated-only targets |
+| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; original-document guards reject unsupported evaluated-only targets |
 | 5 | Paint and erase | Face/group paint; held-trigger erase accumulates sampled targets, previews them and commits once on release; cancel/loss/keyboard commands discard it. Fast sweep interpolation and evaluated-only paint remain open |
 | 6 | Text and annotations | Text anchor/leader placement and shared editor modal; saved text/dimension labels and strokes can be selected, erased or transformed; Text opens an editable saved text; section-clipped and face-occluded targets are filtered |
 | 7 | Solids and grain | Shared solid validation/operand order and boolean history; Flip uses the displayed quads for hover/click; Grain Direction uses shared part/reference validation and assignment |

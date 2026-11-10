@@ -24,6 +24,7 @@ pub(crate) struct XrPanelPreferences {
     pub keyboard_visible: bool,
     pub keyboard_caps: bool,
     pub keyboard_symbols: bool,
+    pub precise_modeling: bool,
 }
 
 impl Default for XrPanelPreferences {
@@ -39,6 +40,7 @@ impl Default for XrPanelPreferences {
             keyboard_visible: false,
             keyboard_caps: false,
             keyboard_symbols: false,
+            precise_modeling: false,
         }
     }
 }
@@ -64,6 +66,7 @@ impl XrPanelPreferences {
             keyboard_visible: self.keyboard_visible,
             keyboard_caps: self.keyboard_caps,
             keyboard_symbols: self.keyboard_symbols,
+            precise_modeling: self.precise_modeling,
         }
     }
 }

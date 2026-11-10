@@ -69,7 +69,12 @@ pub(crate) struct State {
     erasing: bool,
     panel_hover: bool,
     precision_target: Option<PrecisionTarget>,
+    model_phase: Option<ModelPhase>,
+    request_precision_input: bool,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ModelPhase { Aiming, Typing }
 
 // A panel may retain only a target acquired for this exact pending operation.
 // Geometry/context edits and advancing a chained tool invalidate it immediately.
@@ -83,6 +88,19 @@ struct PrecisionTarget {
     line_start: Option<DVec3>,
     drawing: Option<(DVec3, DVec3, usize, Option<DVec3>)>,
     measurement: Option<(Vec<DVec3>, bool, Option<u64>)>,
+    modeling: Option<ModelingTarget>,
+}
+
+#[derive(PartialEq)]
+struct ModelingTarget {
+    anchor: DVec3,
+    direction: DVec3,
+    center: DVec3,
+    face: Option<u64>,
+    value: f64,
+    copy: bool,
+    keep_starting_face: bool,
+    rotation: Option<(DVec3, Option<DVec3>)>,
 }
 
 struct SectionGrab {
@@ -91,6 +109,18 @@ struct SectionGrab {
 }
 
 impl State {
+    pub(crate) fn take_precision_input_request(&mut self) -> bool {
+        std::mem::take(&mut self.request_precision_input)
+    }
+
+    fn cancel_precision_modeling(&mut self, app: &mut BenchUpApp) {
+        if self.model_phase.take().is_some() {
+            app.modeling = None;
+            app.length_input.clear();
+            self.grab_depth = None;
+        }
+        self.request_precision_input = false;
+    }
     pub(crate) fn set_panel_hover(&mut self, hover: bool) {
         self.panel_hover = hover;
     }
@@ -104,7 +134,10 @@ impl State {
     }
 }
 
-pub(crate) fn hint(tool: Tool) -> &'static str {
+pub(crate) fn hint(tool: Tool, precise_modeling: bool) -> &'static str {
+    if precise_modeling && matches!(tool, Tool::Move | Tool::Rotate | Tool::Scale | Tool::PushPull | Tool::Offset) {
+        return "Trigger: anchor, then target. Type an exact value and press Enter. Cancel discards.";
+    }
     match tool {
         Tool::Line => "Trigger: start / next endpoint. Cancel ends the chain.",
         Tool::Rectangle => "Trigger: first corner, then opposite corner. Cancel clears.",
@@ -150,9 +183,14 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 }
 
 impl BenchUpApp {
-    fn xr_precision_target(&mut self, ctx: &egui::Context) -> Option<PrecisionTarget> {
-        if self.snap.is_none() || self.tool == Tool::Freehand || self.modeling.is_some()
-            || !(self.line_start.is_some() || self.drawing.is_some() || self.measurement_precision_available())
+    fn xr_precision_target(&mut self, ctx: &egui::Context, include_modeling: bool) -> Option<PrecisionTarget> {
+        let modeling = self.modeling.as_ref().filter(|edit| include_modeling && edit.world_input).map(|edit| ModelingTarget {
+            anchor: edit.anchor, direction: edit.direction, center: edit.center, face: edit.face,
+            value: edit.value, copy: edit.copy, keep_starting_face: edit.keep_starting_face,
+            rotation: edit.rotation.as_ref().map(|rotation| (rotation.normal, rotation.reference)),
+        });
+        if modeling.is_none() && (self.snap.is_none() || self.tool == Tool::Freehand || self.modeling.is_some()
+            || !(self.line_start.is_some() || self.drawing.is_some() || self.measurement_precision_available()))
         {
             return None;
         }
@@ -165,6 +203,7 @@ impl BenchUpApp {
             line_start: self.line_start,
             drawing: self.drawing.as_ref().map(|drawing| (drawing.origin, drawing.normal, drawing.points.len(), drawing.points.last().copied())),
             measurement: self.measurement.as_ref().map(|measurement| (measurement.points.clone(), measurement.complete, measurement.guide_id)),
+            modeling,
         })
     }
 
@@ -279,6 +318,16 @@ impl BenchUpApp {
                 });
             });
             let mut changed = false;
+            if matches!(self.tool, Tool::Move | Tool::Rotate | Tool::Scale | Tool::PushPull | Tool::Offset) {
+                if ui.checkbox(&mut preferences.precise_modeling, egui::RichText::new("Exact value").size(18.))
+                    .on_hover_text("Choose an anchor, then a target with the trigger. The keyboard opens to enter a length, angle or scale factor. Leaving Exact value off uses held-trigger dragging.")
+                    .changed()
+                {
+                    state.cancel_precision_modeling(self);
+                    if state.grab_depth.take().is_some() { self.modeling = None; self.length_input.clear(); }
+                    state.precision_target = None;
+                }
+            }
             match self.tool {
                 Tool::Select => {
                     ui.horizontal(|ui| {
@@ -361,7 +410,7 @@ impl BenchUpApp {
             let hint = if self.paste_preview.is_some() {
                 "Trigger places the copy. Cancel discards the preview."
             } else {
-                hint(self.tool)
+                hint(self.tool, preferences.precise_modeling)
             };
             ui.label(egui::RichText::new(hint).size(16.));
         });
@@ -400,10 +449,16 @@ impl BenchUpApp {
         storage: &mut dyn eframe::Storage,
     ) {
         state.pointer_target = None;
+        if state.model_phase == Some(ModelPhase::Typing)
+            && (state.precision_target.is_none() || state.precision_target != self.xr_precision_target(ctx, true))
+        {
+            state.cancel_precision_modeling(self);
+            state.precision_target = None;
+        }
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
             let retain_precision = state.panel_hover && self.xr_scene_interaction_enabled(ctx)
                 && state.precision_target.is_some()
-                && state.precision_target == self.xr_precision_target(ctx);
+                && state.precision_target == self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
             state.erasing = false;
             self.xr_erasing.clear();
             if state.section.take().is_some() && self.world_section_info().is_some() {
@@ -429,6 +484,7 @@ impl BenchUpApp {
             }
             state.active = false;
             if !retain_precision {
+                state.cancel_precision_modeling(self);
                 state.reference = None;
                 state.precision_target = None;
             }
@@ -438,6 +494,7 @@ impl BenchUpApp {
         state.active = true;
         self.flip_hover = None;
         if state.tool != Some(self.tool) {
+            state.cancel_precision_modeling(self);
             if state.section.take().is_some() && self.world_section_info().is_some() {
                 self.cancel_section_drag(ctx);
                 self.persist_inspector_changes(ctx, Some(storage), false);
@@ -460,6 +517,7 @@ impl BenchUpApp {
             return;
         }
         if activate && pointer.cancel {
+            state.cancel_precision_modeling(self);
             self.xr_cancel_action(true, ctx, storage);
             state.line_normal = None;
             state.stroke = false;
@@ -692,7 +750,7 @@ impl BenchUpApp {
             self.xr_freehand(pointer, state, clicked, activate, ctx);
             return;
         }
-        state.precision_target = self.xr_precision_target(ctx);
+        state.precision_target = self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
         if !clicked || !valid_offset {
             return;
         }
@@ -766,7 +824,7 @@ impl BenchUpApp {
                 ctx,
             );
         }
-        state.precision_target = self.xr_precision_target(ctx);
+        state.precision_target = self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
         ctx.request_repaint();
     }
 
@@ -855,6 +913,10 @@ impl BenchUpApp {
         ctx: &egui::Context,
     ) {
         self.snap = None;
+        if state.model_phase == Some(ModelPhase::Typing) {
+            state.precision_target = self.xr_precision_target(ctx, true);
+            return;
+        }
         if matches!(self.tool, Tool::PushPull | Tool::Offset) {
             self.hover = pointer
                 .hit
@@ -864,7 +926,8 @@ impl BenchUpApp {
         if !activate {
             return;
         }
-        if clicked {
+        let confirming = clicked && state.model_phase == Some(ModelPhase::Aiming) && self.modeling.is_some();
+        if clicked && !confirming {
             let Some(hit) = pointer.hit else {
                 return;
             };
@@ -965,6 +1028,7 @@ impl BenchUpApp {
                     .dot(pointer.ray.direction)
                     .max(1e-6),
             );
+            state.model_phase = self.xr_panel.precise_modeling.then_some(ModelPhase::Aiming);
         }
         let (Some(depth), Some(edit)) = (state.grab_depth, self.modeling.as_ref()) else {
             state.grab_depth = None;
@@ -1043,7 +1107,19 @@ impl BenchUpApp {
             }
         }
         self.refresh_modeling_preview();
-        if !pointer.primary_down {
+        if confirming {
+            if self.tool == Tool::Move && self.modeling.as_ref().is_none_or(|edit| edit.direction.length_squared() < 1e-12) {
+                self.say(ctx, "Point away from the anchor to choose a move direction.");
+                return;
+            }
+            state.model_phase = Some(ModelPhase::Typing);
+            state.grab_depth = None;
+            state.precision_target = self.xr_precision_target(ctx, true);
+            state.request_precision_input = true;
+            ctx.request_repaint();
+            return;
+        }
+        if !pointer.primary_down && state.model_phase != Some(ModelPhase::Aiming) {
             state.grab_depth = None;
             if self.modeling.as_ref().is_some_and(|edit| {
                 (edit.value - if self.tool == Tool::Scale { 1. } else { 0. }).abs() >= 1e-7
@@ -1483,6 +1559,127 @@ mod precision_panel_tests {
             app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
             assert!(app.snap.is_none(), "no stale restoration, change={change}");
         }
+    }
+}
+
+#[cfg(test)]
+mod precise_modeling_tests {
+    use super::*;
+
+    struct Storage;
+    impl eframe::Storage for Storage {
+        fn get_string(&self, _: &str) -> Option<String> { None }
+        fn set_string(&mut self, _: &str, _: String) {}
+        fn remove_string(&mut self, _: &str) {}
+        fn flush(&mut self) {}
+    }
+
+    fn fixture(tool: Tool, precise: bool) -> (BenchUpApp, State, egui::Context, u64) {
+        let mut document = Document::default();
+        document.model.draw_polyline(&[DVec3::ZERO, DVec3::X * 2., DVec3::new(2.,1.,0.), DVec3::Y, DVec3::ZERO], false).unwrap();
+        let face = *document.model.faces.keys().next().unwrap();
+        let mut app = BenchUpApp::with_document(document, None, true);
+        app.tool = tool;
+        app.xr_panel.precise_modeling = precise;
+        (app, State::default(), egui::Context::default(), face)
+    }
+
+    fn point(app: &BenchUpApp, position: DVec3, face: Option<u64>, clicked: bool, down: bool) -> Pointer {
+        Pointer { ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
+            model: Arc::new(app.doc.model.clone()), hit: face.map(|face| Hit {
+                entity: face, face: Some(face), edge: None, guide: None, guide_points: [None;8],
+                flip: None, annotation: None, edge_targets: [None;3], point: position,
+                normal: DVec3::Z, center: Some(DVec3::new(1.,0.5,0.)),
+            }), activate: clicked, cancel: false, primary_down: down, visible_reference: None }
+    }
+
+    fn aim_and_confirm(app: &mut BenchUpApp, state: &mut State, ctx: &egui::Context, face: u64, target: DVec3) {
+        let anchor = DVec3::new(1.5,0.25,0.);
+        let pointer = point(app, anchor, Some(face), true, true);
+        app.xr_world_pointer(Some(&pointer), state, true, ctx, &mut Storage);
+        assert!(app.modeling.is_some());
+        let pointer = point(app, anchor, Some(face), false, false);
+        app.xr_world_pointer(Some(&pointer), state, true, ctx, &mut Storage);
+        assert_eq!(state.model_phase, Some(ModelPhase::Aiming));
+        let pointer = point(app, target, None, true, true);
+        app.xr_world_pointer(Some(&pointer), state, true, ctx, &mut Storage);
+        assert_eq!(state.model_phase, Some(ModelPhase::Typing));
+        assert!(state.take_precision_input_request());
+        assert!(!state.take_precision_input_request());
+    }
+
+    #[test]
+    fn exact_values_for_all_five_modeling_tools_commit_once_and_undo() {
+        for (tool, input, target) in [
+            (Tool::Move, "25cm", DVec3::new(2.5,0.25,0.)),
+            (Tool::Rotate, "45", DVec3::new(1.25,1.,0.)),
+            (Tool::Scale, "1.5", DVec3::new(2.,0.,0.)),
+            (Tool::PushPull, "30cm", DVec3::new(1.5,0.25,0.2)),
+            (Tool::Offset, "5cm", DVec3::new(1.5,0.35,0.)),
+        ] {
+            let (mut app, mut state, ctx, face) = fixture(tool, true);
+            let original = app.doc.model.clone();
+            aim_and_confirm(&mut app, &mut state, &ctx, face, target);
+            let preview_value = app.modeling.as_ref().unwrap().value;
+            let pointer = point(&app, DVec3::splat(100.), None, false, false);
+            app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut Storage);
+            assert_eq!(app.modeling.as_ref().unwrap().value, preview_value);
+            state.set_panel_hover(true);
+            app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
+            assert_eq!(app.doc.model, original);
+            assert!(app.modeling.is_some());
+            app.length_input = input.into();
+            app.commit_precision_input(&ctx, true);
+            assert!(app.modeling.is_none(), "tool={tool:?}");
+            assert_ne!(app.doc.model, original, "tool={tool:?}");
+            let (lo, hi) = app.doc.model.bounds().unwrap();
+            match tool {
+                Tool::Move => assert!((lo.x - 0.25).abs() < 1e-8),
+                Tool::Scale => assert!((hi.x - lo.x - 3.).abs() < 1e-8),
+                Tool::Rotate => assert!((hi.x - lo.x - 3. / 2f64.sqrt()).abs() < 1e-8),
+                Tool::PushPull => assert!((hi.z - lo.z - 0.3).abs() < 1e-8),
+                _ => {}
+            }
+            app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
+            assert!(state.model_phase.is_none());
+            app.undo(&ctx, false);
+            assert_eq!(app.doc.model, original, "one undo, tool={tool:?}");
+        }
+    }
+
+    #[test]
+    fn exact_modeling_cancels_without_edit_on_loss_cancel_tool_or_document_change() {
+        for change in 0..4 {
+            let (mut app, mut state, ctx, face) = fixture(Tool::Move, true);
+            aim_and_confirm(&mut app, &mut state, &ctx, face, DVec3::new(2.5,0.25,0.));
+            state.set_panel_hover(true);
+            let mut pointer = None;
+            match change {
+                0 => state.set_panel_hover(false),
+                1 => { let mut cancel = point(&app, DVec3::ZERO, None, false, false); cancel.cancel = true; pointer = Some(cancel); }
+                2 => app.tool = Tool::Line,
+                _ => { app.doc.model.add_edge(DVec3::splat(5.), DVec3::splat(6.)).unwrap(); app.changed(&ctx); }
+            }
+            let expected = app.doc.model.clone();
+            app.xr_world_pointer(pointer.as_ref(), &mut state, true, &ctx, &mut Storage);
+            assert!(app.modeling.is_none(), "change={change}");
+            assert!(state.model_phase.is_none());
+            assert_eq!(app.doc.model, expected);
+        }
+    }
+
+    #[test]
+    fn default_mode_still_commits_on_trigger_release() {
+        let (mut app, mut state, ctx, face) = fixture(Tool::Move, false);
+        let original = app.doc.model.clone();
+        let pointer = point(&app, DVec3::new(1.5,0.25,0.), Some(face), true, true);
+        app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut Storage);
+        let pointer = point(&app, DVec3::new(2.5,0.25,0.), None, false, false);
+        app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut Storage);
+        assert!(app.modeling.is_none());
+        assert!(state.model_phase.is_none());
+        assert!(!state.take_precision_input_request());
+        assert_ne!(app.doc.model, original);
     }
 }
 

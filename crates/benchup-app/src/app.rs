@@ -550,7 +550,7 @@ impl BenchUpApp {
             guide_preview: (self.history_preview.is_none() && self.create_guides
                 && self.measurement.as_ref().is_some_and(|m| !m.complete || !self.length_input.is_empty()))
                 .then(|| self.measurement_guide()).flatten(),
-            tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
+            tool:self.tool, precise_modeling:self.xr_panel.precise_modeling,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:{
                 let mut ids=match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()};
                 ids.extend(self.xr_erasing.iter().copied());
@@ -3086,7 +3086,7 @@ impl BenchUpApp {
                             .map(|(message,_)|message.clone())
                             .or_else(||self.shared_status(ctx.input(|i|i.time)))
                             .or_else(||self.modeling_status_text())
-                            .unwrap_or_else(||xr_tools::hint(self.tool).to_owned())
+                            .unwrap_or_else(||xr_tools::hint(self.tool, self.xr_panel.precise_modeling).to_owned())
                     } else { message };
                     // Reserve the precision controls before fitting the status message.
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -3132,6 +3132,7 @@ impl BenchUpApp {
                         let field = ui.add_enabled(
                             available,
                             egui::TextEdit::singleline(&mut self.length_input)
+                                .id(egui::Id::unique("benchup.precision_input"))
                                 .desired_width(if self.tool == Tool::Rectangle { 300. } else { 212. })
                                 .font(egui::TextStyle::Monospace)
                                 .hint_text(hint)

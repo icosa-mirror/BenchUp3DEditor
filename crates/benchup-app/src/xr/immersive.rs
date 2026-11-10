@@ -16,6 +16,7 @@ pub(crate) struct Source {
     pub overlays: crate::app::viewport_overlays::Overlays,
     pub references: Arc<crate::app::viewport_overlays::Overlays>,
     pub tool: benchup_core::Tool,
+    pub precise_modeling: bool,
     pub tool_target: Option<DVec3>,
     pub modeling: bool,
     pub snap_edges: bool,
@@ -253,7 +254,7 @@ impl Scene {
                 owners: Default::default(),
                 depth: false,
                 shapes: vec![Glyph::Paragraph {
-                    text: format!("{}\n{}\n{}", source.status, crate::app::xr_tools::hint(source.tool), self.navigation.hint()),
+                    text: format!("{}\n{}\n{}", source.status, crate::app::xr_tools::hint(source.tool, source.precise_modeling), self.navigation.hint()),
                     size: 12.0,
                     width: 320.0,
                     color: colors.ink,
