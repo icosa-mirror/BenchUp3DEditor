@@ -244,9 +244,16 @@ impl Editor {
             .input
             .scene
             .and_then(|input| self.scene.tool_pointer(input, preferences.scene_scale));
+        self.world_tools.set_panel_hover(self.input.focused && self.input.cursor.is_some() && pointer.is_none());
         // egui may repeat layout; consume a model operation only once.
         let mut activate = true;
         let mut output = self.ctx.run_ui(raw, |ui| {
+            // Validate retained world targets before a field can consume Enter.
+            // The second callback below also observes tool/document changes made
+            // by this frame's editor UI.
+            if pointer.is_none() {
+                self.app.xr_world_pointer(None, &mut self.world_tools, false, &self.ctx, &mut self.preferences);
+            }
             let keyboard_height = super::keyboard::Keyboard::height(preferences.keyboard_visible);
             crate::modal::set_bottom_inset(&self.ctx, keyboard_height);
             egui::Panel::bottom("benchup.xr.keyboard_space")
@@ -501,6 +508,7 @@ impl Editor {
         // Rendering can be skipped across a tracking/focus transition. Do not
         // carry a queued virtual keystroke into a later resumed session.
         self.keyboard.take_events(&self.ctx, false);
+        self.world_tools.set_panel_hover(false);
         // Cancellation must reach world tools even when rendering is skipped
         // and no panel pointer events need a UI pass.
         self.app.xr_world_pointer(None, &mut self.world_tools, false, &self.ctx, &mut self.preferences);

@@ -5,17 +5,20 @@ Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continui
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
-## Paused, test-ready stop
+## Active continuation
 
-The requested bounded milestone is ready: a controller-operated keyboard for
-editor text fields and modal dialogs, using shared egui text/key input and
-persistent XR keyboard preferences. The immersive-first panel remains in place.
-The native executable was built at 2026-11-10 12:16:03 local time. Preserve it in
-`.local/openxr/preview-builds/<this-commit>/openxr_editor.exe`. Stop here and keep
-the goal paused; do not replace the existing preview without a user request.
-This does not complete the overall OpenXR plan.
+The user resumed the full goal after the bounded keyboard milestone. Continue
+implementation and keep these documents current; do not pause at local milestones
+or request human verification unless the user asks. Build `8008118` is preserved
+in `.local/openxr/preview-builds/8008118/openxr_editor.exe` (built 2026-11-10
+12:16:03). Its requested clean-scene preview launched at 12:56, PID 67972 at
+launch, with stereo and quad frames and VISIBLE state. Inspect current ownership
+and liveness before any later requested replacement; leave it alone while coding.
+No human keyboard feedback or complete visual parity confirmation is recorded.
+Current work connects world-target retention and precise numeric input; in-panel
+file choosing is the next end-to-end workflow gap.
 
-## User direction when resumed
+## User direction
 
 1. Continue immersive viewport replacement autonomously, updating both documents
    with reality as milestones land. Only pause for human verification when the
@@ -117,12 +120,18 @@ This does not complete the overall OpenXR plan.
    inspector preference save/restore path, with defaults for older saved data.
    Focus targets, queued text and geometry are not saved as keyboard preferences.
    Focus/tracking cancellation discards queued virtual input.
-3. This adds editor/dialog text entry, not native Windows file-dialog control.
-   Precise world drawing while aiming at the keyboard remains open: the current
-   scene-pointer cancellation path can clear the tool's last snap. Do not claim
-   complete numeric/lock parity from successful inspector field entry.
+3. `xr_tools::State` now retains a pending line/shape/measurement target while
+   the focused controller points at the panel. The key includes document revision,
+   editing scope, tool/locks and operation stage. Losing panel tracking, changing
+   the operation or editing geometry clears it. Validate before the shared field
+   can consume Enter and again after UI actions. Held modeling/section/freehand
+   gestures keep their cancellation behavior.
+4. The status field routes immersive Enter through the supplied world snap/value,
+   without desktop pointer refresh. This covers line/shape and measurement input;
+   an explicit precise-modeling workflow remains open because ordinary held grabs
+   cancel on leaving the scene. Native Windows file-dialog control remains open.
 
-## Next work after the user resumes
+## Next implementation work
 
 1. Follow the numbered spatial parity inventory in `OPENXR_PLAN.md`. Audit concrete
    desktop consumers and immersive input routes: editing context/context actions,
@@ -192,7 +201,18 @@ This does not complete the overall OpenXR plan.
 
 ## Evidence and limits
 
-1. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
+1. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
+   line direction plus numeric length/undo and post-commit invalidation; rectangle
+   dimensions without desktop projection; and clearing targets after tracking,
+   tool, editing-scope, operation-stage or geometry changes. The latest test binary
+   also passes the two existing erase regressions and two virtual-keyboard cases
+   (`precision-erase-regressions.log`, `precision-keyboard-regressions.log`).
+   The native build passes without warnings in `precision-panel-build.log` and
+   is preserved under this milestone commit in `.local/openxr/preview-builds/`.
+   This is narrow software coverage, not full tool or headset acceptance.
+
+
+2. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
    actual rendered-key clicks update a shared text field in both editor and modal
    contexts (including Backspace), and focus loss discards queued input.
    `.local/openxr/keyboard-preference-tests.log` passes immediate persistence,
@@ -202,11 +222,11 @@ This does not complete the overall OpenXR plan.
    below the inspector. These are software/GPU checks, not headset confirmation.
 
 
-2. Human feedback confirmed the quad's visibility/readability/upright orientation
+3. Human feedback confirmed the quad's visibility/readability/upright orientation
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-3. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+4. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
    `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
    inspected: shared inspector/controls without the duplicate model, and the clean
    404-face example in the independent eye renderer. A subsequent requested
@@ -224,14 +244,14 @@ This does not complete the overall OpenXR plan.
    spatial/reference and grid checks are in `reference-projection-checks.log` and
    `grid-hit-checks.log` under `.local/openxr/`. The full suite was not run.
 
-4. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
+5. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
    `openxr_editor --desktop-snapshot <png>` and `--immersive-snapshot <png>` support
    narrow hardware rendering checks without a headset session. They do not prove
    human visual equivalence or all recent controller interactions.
-5. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
+6. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
    restart coverage, large-scene timings and current desktop/browser compatibility
    remain open. `OPENXR_WINDOWS.md` retains historical runtime/wgpu validation
    findings; validation-disabled preview success does not resolve those findings.
-6. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
+7. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
    across geometry, visibility, overlays and text with a two-pass fallback. No
    multiview, validation-layer or benchmark detour during this functionality pass.

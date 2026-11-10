@@ -67,6 +67,22 @@ pub(crate) struct State {
     pointer_target: Option<DVec3>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
+    panel_hover: bool,
+    precision_target: Option<PrecisionTarget>,
+}
+
+// A panel may retain only a target acquired for this exact pending operation.
+// Geometry/context edits and advancing a chained tool invalidate it immediately.
+#[derive(PartialEq)]
+struct PrecisionTarget {
+    revision: u64,
+    context: Option<u64>,
+    tool: Tool,
+    lock: Option<Axis>,
+    second_lock: Option<Axis>,
+    line_start: Option<DVec3>,
+    drawing: Option<(DVec3, DVec3, usize, Option<DVec3>)>,
+    measurement: Option<(Vec<DVec3>, bool, Option<u64>)>,
 }
 
 struct SectionGrab {
@@ -75,6 +91,9 @@ struct SectionGrab {
 }
 
 impl State {
+    pub(crate) fn set_panel_hover(&mut self, hover: bool) {
+        self.panel_hover = hover;
+    }
     pub(crate) fn cancel_erasing(&mut self, app: &mut BenchUpApp) {
         self.erasing = false;
         app.xr_erasing.clear();
@@ -131,6 +150,24 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 }
 
 impl BenchUpApp {
+    fn xr_precision_target(&mut self, ctx: &egui::Context) -> Option<PrecisionTarget> {
+        if self.snap.is_none() || self.tool == Tool::Freehand || self.modeling.is_some()
+            || !(self.line_start.is_some() || self.drawing.is_some() || self.measurement_precision_available())
+        {
+            return None;
+        }
+        Some(PrecisionTarget {
+            revision: self.document_revision(ctx),
+            context: self.doc.model.edit_context,
+            tool: self.tool,
+            lock: self.lock,
+            second_lock: self.second_lock,
+            line_start: self.line_start,
+            drawing: self.drawing.as_ref().map(|drawing| (drawing.origin, drawing.normal, drawing.points.len(), drawing.points.last().copied())),
+            measurement: self.measurement.as_ref().map(|measurement| (measurement.points.clone(), measurement.complete, measurement.guide_id)),
+        })
+    }
+
     pub(crate) fn xr_tool_controls(
         &mut self,
         ui: &mut egui::Ui,
@@ -364,6 +401,9 @@ impl BenchUpApp {
     ) {
         state.pointer_target = None;
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
+            let retain_precision = state.panel_hover && self.xr_scene_interaction_enabled(ctx)
+                && state.precision_target.is_some()
+                && state.precision_target == self.xr_precision_target(ctx);
             state.erasing = false;
             self.xr_erasing.clear();
             if state.section.take().is_some() && self.world_section_info().is_some() {
@@ -378,7 +418,7 @@ impl BenchUpApp {
                 self.stop_drawing();
                 state.stroke = false;
             }
-            if state.active {
+            if !retain_precision && (state.active || state.precision_target.is_some()) {
                 self.drawing_reference = None;
                 self.flip_hover = None;
                 self.snap = None;
@@ -388,9 +428,13 @@ impl BenchUpApp {
                 self.drawing_projection = None;
             }
             state.active = false;
-            state.reference = None;
+            if !retain_precision {
+                state.reference = None;
+                state.precision_target = None;
+            }
             return;
         };
+        state.precision_target = None;
         state.active = true;
         self.flip_hover = None;
         if state.tool != Some(self.tool) {
@@ -648,6 +692,7 @@ impl BenchUpApp {
             self.xr_freehand(pointer, state, clicked, activate, ctx);
             return;
         }
+        state.precision_target = self.xr_precision_target(ctx);
         if !clicked || !valid_offset {
             return;
         }
@@ -721,6 +766,7 @@ impl BenchUpApp {
                 ctx,
             );
         }
+        state.precision_target = self.xr_precision_target(ctx);
         ctx.request_repaint();
     }
 
@@ -1352,6 +1398,91 @@ impl BenchUpApp {
             self.measurement.as_mut().unwrap().offset = offset;
         }
         offset.is_some()
+    }
+}
+
+#[cfg(test)]
+mod precision_panel_tests {
+    use super::*;
+
+    struct Storage;
+    impl eframe::Storage for Storage {
+        fn get_string(&self, _: &str) -> Option<String> { None }
+        fn set_string(&mut self, _: &str, _: String) {}
+        fn remove_string(&mut self, _: &str) {}
+        fn flush(&mut self) {}
+    }
+
+    fn fixture(rectangle: bool) -> (BenchUpApp, State, egui::Context) {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.tool = if rectangle { Tool::Rectangle } else { Tool::Line };
+        if rectangle {
+            app.drawing = Some(Drawing { origin: DVec3::ZERO, surface_normal: DVec3::Z,
+                on_surface: false, normal: DVec3::Z, u: DVec3::X, v: DVec3::Y, points: Vec::new() });
+        } else {
+            app.line_start = Some(DVec3::ZERO);
+        }
+        let pointer = Pointer { ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
+            model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
+            primary_down: false, visible_reference: None };
+        let mut state = State::default();
+        app.xr_world_pointer(Some(&pointer), &mut state, false, &ctx, &mut Storage);
+        assert!(app.snap.is_some());
+        assert!(state.precision_target.is_some());
+        state.set_panel_hover(true);
+        (app, state, ctx)
+    }
+
+    #[test]
+    fn panel_retains_line_direction_for_numeric_commit_then_invalidates_old_target() {
+        let (mut app, mut state, ctx) = fixture(false);
+        let target = app.snap.unwrap().point;
+        for _ in 0..3 { app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage); }
+        assert_eq!(app.snap.unwrap().point, target);
+        app.length_input = "50cm".into();
+        app.commit_precision_input(&ctx, true);
+        let endpoint = app.line_start.unwrap();
+        assert!((endpoint.length() - 0.5).abs() < 1e-8);
+        assert!(endpoint.normalize().distance(target.normalize()) < 1e-8);
+        assert!(!app.doc.model.edges.is_empty());
+        app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
+        assert!(app.snap.is_none());
+        assert!(state.precision_target.is_none());
+        app.undo(&ctx, false);
+        assert!(app.doc.model.edges.is_empty());
+    }
+
+    #[test]
+    fn rectangle_numeric_commit_uses_world_plane_without_desktop_refresh() {
+        let (mut app, mut state, ctx) = fixture(true);
+        app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
+        app.length_input = "40cm,20cm".into();
+        app.commit_precision_input(&ctx, true);
+        assert!(app.drawing.is_none());
+        assert!(!app.doc.model.faces.is_empty());
+        let (lo, hi) = app.doc.model.bounds().unwrap();
+        assert!((hi.x - lo.x - 0.4).abs() < 1e-8);
+        assert!((hi.y - lo.y - 0.2).abs() < 1e-8);
+    }
+
+    #[test]
+    fn panel_target_is_discarded_after_loss_tool_scope_stage_or_geometry_change() {
+        for change in 0..5 {
+            let (mut app, mut state, ctx) = fixture(false);
+            match change {
+                0 => state.set_panel_hover(false),
+                1 => app.tool = Tool::Rectangle,
+                2 => app.doc.model.edit_context = Some(99),
+                3 => app.line_start = Some(DVec3::X),
+                _ => { app.doc.model.add_edge(DVec3::ZERO, DVec3::Z).unwrap(); app.changed(&ctx); }
+            }
+            app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
+            assert!(app.snap.is_none(), "change={change}");
+            state.set_panel_hover(true);
+            app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage);
+            assert!(app.snap.is_none(), "no stale restoration, change={change}");
+        }
     }
 }
 

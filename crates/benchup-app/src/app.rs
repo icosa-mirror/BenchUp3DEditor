@@ -1132,6 +1132,23 @@ impl BenchUpApp {
         self.commit_line_snap(ctx, precise);
         self.refresh_snap(ctx);
     }
+    fn commit_precision_input(&mut self, ctx: &egui::Context, world_input: bool) {
+        if self.measurement_precision_available() {
+            self.commit_measurement_value(ctx);
+        } else if self.modeling.is_some() {
+            if world_input { self.commit_modeling_at_value(ctx); }
+            else { self.commit_modeling(ctx); }
+        } else if self.last_move_copy.is_some() {
+            self.commit_move_array(ctx);
+        } else if self.drawing.is_some() {
+            if world_input { self.commit_drawing_at_snap(ctx, false); }
+            else { self.commit_drawing(ctx); }
+        } else if world_input {
+            self.commit_line_snap(ctx, true);
+        } else {
+            self.commit_line(ctx, true);
+        }
+    }
     // Shared desktop/XR commit: the caller supplies an authoritative snap.
     fn commit_line_snap(&mut self, ctx: &egui::Context, precise: bool) {
         let Some(start) = self.line_start else {
@@ -3117,17 +3134,7 @@ impl BenchUpApp {
                         if (field.has_focus() || field.lost_focus())
                             && ctx.input(|i| i.key_pressed(Key::Enter))
                         {
-                            if self.measurement_precision_available() {
-                                self.commit_measurement_value(&ctx);
-                            } else if self.modeling.is_some() {
-                                self.commit_modeling(&ctx);
-                            } else if self.last_move_copy.is_some() {
-                                self.commit_move_array(&ctx);
-                            } else if self.drawing.is_some() {
-                                self.commit_drawing(&ctx);
-                            } else {
-                                self.commit_line(&ctx, true);
-                            }
+                            self.commit_precision_input(&ctx, _immersive);
                             field.surrender_focus();
                         }
                         ui.text_label(

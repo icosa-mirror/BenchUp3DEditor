@@ -5,16 +5,17 @@ completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
-## Current test-ready stop
+## Current continuation
 
-The user requested the soonest plausible milestone, then a stop with a build
-ready to test. The immersive-first panel is implemented: the model renders only
-in the stereo scene, while shared inspector/context controls remain in the panel.
-The controller-operated keyboard for shared text fields and dialogs is now
-implemented and built. Two focused keyboard checks, the immediate-save preference
-check and the native build pass; the GPU panel snapshot was inspected. Stop here
-with the build ready. Do not launch or replace the existing preview without a
-user request. This does not establish complete tool/visual parity or phase acceptance.
+The user resumed the full goal. Continue implementation autonomously; do not
+stop at local milestones or request headset verification unless asked. The
+controller-keyboard build `8008118` is preserved and was launched on request with
+a clean Example scene. Do not replace a running preview during development.
+Precise line/shape/measurement input now retains the world target while aiming
+at the panel, invalidating it on loss or operation/document changes. Immersive
+Enter no longer refreshes from the desktop camera. Explicit numeric modeling
+and an in-panel file chooser are the next input/workflow gaps. Complete tool/visual parity and
+phase acceptance remain open.
 
 ## Outcome and working rules
 
@@ -24,7 +25,7 @@ user request. This does not establish complete tool/visual parity or phase accep
 2. Keep one authoritative document, selection and undo history. Share model
    operations and tool state with desktop/web; do not translate desktop pixels
    into 3D operations or fork the editor.
-3. When the user resumes the full goal, continue authorized implementation autonomously. Do not pause for human
+3. Continue authorized implementation autonomously. Do not pause for human
    verification unless the user requests it. Pending human confirmation is a
    reporting limit, not a reason to stop development or ask repeated readiness
    questions. Have a working executable before offering or starting a requested test.
@@ -51,7 +52,7 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
 | 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
 | 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; native lifetime window; shared Close/Quit path; saved preferences | Headset keyboard acceptance; native file-dialog access, other window commands and end-to-end project workflow verification |
-| 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit when the user resumes |
+| 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
 | 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and remaining workflow/gesture parity; immersive mode no longer duplicates the 2D model view |
 
@@ -102,7 +103,7 @@ The numbered rows are the checklist for the replacement milestone.
 |---|---|---|---|
 | 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation |
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired edge references and locked-axis projection | Broader off-face/global alignment; references to evaluated-only edges; prove every desktop lock/precision workflow has an XR route |
-| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Audit every desktop handle/preview and precision/cancel path against its XR route |
+| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Pending line/shape/measurement target retention and world-based numeric Enter implemented; numeric modeling and remaining desktop handles/precision routes still need work |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU visibility; saved text and leaders; readable shared-basis glyphs; world text creation and existing-text editing | Compare wrapping/appearance and visibility; controller keyboard implemented; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours and controller section handles | Original-face ray hierarchy does not cover cap-only picking/occlusion; audit settings/handle parity and display combinations |
@@ -132,7 +133,7 @@ reference search. XR grid refinement no longer scans all edges/faces; containmen
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.
 
-## Next work when the user resumes
+## Next implementation work
 
 1. Reconcile the eight parity rows against actual desktop consumers and XR input
    routes. Record concrete missing cases, especially editing context/context
@@ -156,7 +157,7 @@ or complete-parity claims.
    review, appropriate narrow math/regression checks and existing hardware snapshot
    paths when needed. Continue implementation while human confirmation is pending;
    only pause for a human test when the user requests one.
-5. Resume the broader acceptance work below when requested. Only then claim
+5. Complete the broader acceptance work below as appropriate. Only claim
    verified parity or phase completion based on the recorded evidence.
 
 ## Evidence and acceptance gates
