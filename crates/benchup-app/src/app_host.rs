@@ -13,6 +13,9 @@ pub(crate) struct XrPanelPreferences {
     pub scene_scale: f32,
     pub keep_upright:bool,
     pub extend_selection: bool,
+    pub keyboard_visible: bool,
+    pub keyboard_caps: bool,
+    pub keyboard_symbols: bool,
 }
 
 impl Default for XrPanelPreferences {
@@ -25,6 +28,9 @@ impl Default for XrPanelPreferences {
             scene_scale: 1.0,
             keep_upright:true,
             extend_selection: false,
+            keyboard_visible: false,
+            keyboard_caps: false,
+            keyboard_symbols: false,
         }
     }
 }
@@ -47,6 +53,9 @@ impl XrPanelPreferences {
             scene_scale: clamp(self.scene_scale, defaults.scene_scale, 0.05, 20.0),
             keep_upright:self.keep_upright,
             extend_selection: self.extend_selection,
+            keyboard_visible: self.keyboard_visible,
+            keyboard_caps: self.keyboard_caps,
+            keyboard_symbols: self.keyboard_symbols,
         }
     }
 }

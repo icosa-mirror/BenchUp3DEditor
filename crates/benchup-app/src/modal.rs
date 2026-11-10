@@ -6,6 +6,24 @@ use eframe::egui::{self, Color32, Margin, Stroke};
 
 const RESIZE_OUTSET: f32 = 6.;
 
+// Hosts can reserve space for input UI. Frame-local state keeps normal desktop
+// and web dialog bounds unchanged, including after a host stops reserving space.
+pub(crate) fn set_bottom_inset(ctx: &egui::Context, height: f32) {
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data_mut(|data| data.insert_temp(egui::Id::unique("modal.bottom_inset"), (frame, height)));
+}
+
+fn available_rect(ctx: &egui::Context) -> egui::Rect {
+    let mut rect = ctx.content_rect();
+    let inset = ctx.data(|data| data.get_temp::<(u64, f32)>(egui::Id::unique("modal.bottom_inset")));
+    if let Some((frame, height)) = inset {
+        if frame == ctx.cumulative_frame_nr() {
+            rect.max.y -= height.clamp(0.0, (rect.height() - 100.0).max(0.0));
+        }
+    }
+    rect
+}
+
 // Position belongs only to the current opening, never to saved preferences.
 // A missing frame means the dialog closed; a later opening starts centered.
 #[derive(Clone, Copy, Default)]
@@ -106,6 +124,7 @@ impl Modal {
             egui::Modal::default_area(self.id)
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(shake_offset, 0.))
         };
+        let area = area.constrain_to(available_rect(ctx));
         let response = egui::Modal::new(self.id)
             .area(area)
             .backdrop_color(Color32::from_black_alpha(80))
@@ -125,7 +144,7 @@ impl Modal {
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.;
                 if self.resizable {
-                    let max_size = (ctx.content_rect().size() - egui::vec2(32., 32.))
+                    let max_size = (available_rect(ctx).size() - egui::vec2(32., 32.))
                         .max(egui::vec2(80., 80.));
                     let min_size = egui::vec2(400., 280.).min(max_size);
                     let size = crate::app::modal_size(ctx, self.key)
@@ -152,7 +171,7 @@ impl Modal {
                     )
                     .inner
                 } else {
-                    ui.set_width(self.width.min((ctx.content_rect().width() - 32.).max(80.)));
+                    ui.set_width(self.width.min((available_rect(ctx).width() - 32.).max(80.)));
                     content(&mut ModalSlots {
                         ui,
                         id: self.id,
@@ -202,7 +221,7 @@ impl Modal {
         ui.set_clip_rect(
             frame
                 .expand(RESIZE_OUTSET)
-                .intersect(ui.ctx().content_rect()),
+                .intersect(available_rect(ui.ctx())),
         );
         for border in ResizeBorder::ALL {
             let id = self.id.with(("resize_border", border as u8));
@@ -463,7 +482,7 @@ impl ModalSlots<'_> {
         content: impl FnOnce(&mut egui::Ui) -> R,
     ) -> R {
         let max_height =
-            (self.ui.ctx().content_rect().height() - self.ui.min_rect().height() - 136.).max(24.);
+            (available_rect(self.ui.ctx()).height() - self.ui.min_rect().height() - 136.).max(24.);
         let height = if self.resizable {
             (self.ui.available_height() - 64.).max(24.)
         } else {
@@ -489,7 +508,7 @@ impl ModalSlots<'_> {
     ) -> R {
         // Reserve room for body padding, wrapped footer actions and screen edges.
         let max_height =
-            (self.ui.ctx().content_rect().height() - self.ui.min_rect().height() - 176.).max(24.);
+            (available_rect(self.ui.ctx()).height() - self.ui.min_rect().height() - 176.).max(24.);
         let max_height = if self.resizable {
             (self.ui.available_height() - 104.).max(24.)
         } else {

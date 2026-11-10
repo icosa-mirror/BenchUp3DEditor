@@ -5,16 +5,16 @@ completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
-## Current stop point
+## Current test-ready stop
 
-The user paused the implementation goal and requested one bounded milestone,
-then a stop with a build ready to test. That milestone is now implemented:
-immersive mode uses the panel for shared inspector/context controls and XR tools,
-with no duplicate 2D model canvas. Panel-only mode still uses the original editor.
-The native build and isolated panel/eye GPU images pass. This is a test-ready
-layout milestone, not proof of complete tool/visual parity or phase acceptance.
-Keep the goal paused; wait for the user's next instruction before more work or
-an interactive launch.
+The user requested the soonest plausible milestone, then a stop with a build
+ready to test. The immersive-first panel is implemented: the model renders only
+in the stereo scene, while shared inspector/context controls remain in the panel.
+The controller-operated keyboard for shared text fields and dialogs is now
+implemented and built. Two focused keyboard checks, the immediate-save preference
+check and the native build pass; the GPU panel snapshot was inspected. Stop here
+with the build ready. Do not launch or replace the existing preview without a
+user request. This does not establish complete tool/visual parity or phase acceptance.
 
 ## Outcome and working rules
 
@@ -50,7 +50,7 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 1A: panel/input foundation | Metric panel geometry; ray mapping; OpenXR actions; capture and focus/tracking cancellation | Complete drag/loss/restart coverage on the headset |
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
 | 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
-| 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; native lifetime window; shared Close/Quit path; saved preferences | In-headset virtual keyboard, native file-dialog access, other window commands and end-to-end project workflow verification |
+| 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; native lifetime window; shared Close/Quit path; saved preferences | Headset keyboard acceptance; native file-dialog access, other window commands and end-to-end project workflow verification |
 | 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit when the user resumes |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
 | 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and remaining workflow/gesture parity; immersive mode no longer duplicates the 2D model view |
@@ -104,7 +104,7 @@ The numbered rows are the checklist for the replacement milestone.
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired edge references and locked-axis projection | Broader off-face/global alignment; references to evaluated-only edges; prove every desktop lock/precision workflow has an XR route |
 | 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Audit every desktop handle/preview and precision/cancel path against its XR route |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
-| 5 | Names and attached text | Group labels with owner-aware GPU visibility; saved text and leaders; readable shared-basis glyphs; world text creation and existing-text editing | Compare wrapping/appearance and visibility; virtual keyboard remains absent |
+| 5 | Names and attached text | Group labels with owner-aware GPU visibility; saved text and leaders; readable shared-basis glyphs; world text creation and existing-text editing | Compare wrapping/appearance and visibility; controller keyboard implemented; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours and controller section handles | Original-face ray hierarchy does not cover cap-only picking/occlusion; audit settings/handle parity and display combinations |
 | 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, joint edit/warning glyphs, owner-aware guides, solid operand feedback and shared boolean/flip commands | Audit all desktop-supported target/edit gestures in immersive space; evaluated-only paint targets remain restricted |
 | 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input | Audit reachable commands, numeric/lock input and native dialogs; immersive inspector/tool layout implemented; remaining input and dialog parity |
@@ -202,7 +202,7 @@ or complete-parity claims.
 3. A later multiview implementation needs capability negotiation, layered
    swapchain/depth/visibility resources and view-indexed geometry, overlay and text
    shaders. Keep the two-pass path as a backend fallback.
-4. Desktop mirroring, additional native window commands, virtual keyboard input,
+4. Desktop mirroring, additional native window commands, extended virtual keyboard input,
    standalone Quest packaging, Steam Frame support and broader platform adaptation are
    future work. The current target is Windows + SteamVR + Vulkan on the RTX 4090.
 

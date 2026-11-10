@@ -5,16 +5,15 @@ Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continui
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
-## Paused, test-ready milestone
+## Paused, test-ready stop
 
-The user has paused the implementation goal. Their latest instruction was to
-finish the soonest plausible milestone, then stop with an executable ready for
-testing. The immersive-first panel milestone is complete in source and built:
-no duplicate 2D model canvas in immersive mode, shared inspector/context controls
-in the panel, and existing XR tools/comfort/numeric controls retained. The native
-build and isolated RTX 4090 panel/eye snapshots pass. Do not continue development
-or launch a preview until the user asks. This stop does not mark the overall
-OpenXR plan complete.
+The requested bounded milestone is ready: a controller-operated keyboard for
+editor text fields and modal dialogs, using shared egui text/key input and
+persistent XR keyboard preferences. The immersive-first panel remains in place.
+The native executable was built at 2026-11-10 12:16:03 local time. Preserve it in
+`.local/openxr/preview-builds/<this-commit>/openxr_editor.exe`. Stop here and keep
+the goal paused; do not replace the existing preview without a user request.
+This does not complete the overall OpenXR plan.
 
 ## User direction when resumed
 
@@ -74,7 +73,7 @@ OpenXR plan complete.
    reusing placement/navigation reset and saved zoom handling; empty/degenerate
    bounds retain the existing fallback. The desktop camera is not changed.
 3. `desktop.rs` owns the normal taskbar window on the main thread. XR runs on a
-   worker. Physical keyboard/text/IME and Windows clipboard are bridged; desktop
+   worker. Physical keyboard/text/IME and Windows clipboard are bridged; controller text entry is added in the current milestone; desktop
    mouse/focus do not replace headset pointing/focus. Close/Alt+F4 and shared
    Close/File Quit request shutdown. The eight-second stalled-shutdown guard is
    not a session deadline. Desktop mirroring is not implemented.
@@ -105,6 +104,23 @@ OpenXR plan complete.
    defaults on; yaw-only rotation retains vertical translation and scale. Navigation,
    focus/tracking loss and capture cancellation require release-to-rearm. Absolute
    room poses and the transient navigation transform are not saved as preferences.
+
+## Controller keyboard milestone
+
+1. `xr/keyboard.rs` supplies the always-reachable Keyboard strip, alphanumeric
+   and symbol pages, persistent Caps, Space, Backspace, arrows and Enter.
+   Opening it replaces the larger XR tool controls; hiding it restores them.
+   Select a text/numeric field first. Keys retain that field and feed ordinary
+   egui text/key events on the next frame. Modal layering keeps the keyboard
+   interactive above the backdrop; the shared modal shell reserves its height.
+2. Visibility, Caps and Symbols use `XrPanelPreferences` and the existing immediate
+   inspector preference save/restore path, with defaults for older saved data.
+   Focus targets, queued text and geometry are not saved as keyboard preferences.
+   Focus/tracking cancellation discards queued virtual input.
+3. This adds editor/dialog text entry, not native Windows file-dialog control.
+   Precise world drawing while aiming at the keyboard remains open: the current
+   scene-pointer cancellation path can clear the tool's last snap. Do not claim
+   complete numeric/lock parity from successful inspector field entry.
 
 ## Next work after the user resumes
 
@@ -161,9 +177,11 @@ OpenXR plan complete.
    autosaves are not copied. App autosave continues normally within each new
    session; explicit Save/Save As remain available. The launcher records executable
    path/mtime, PID and data directory in `launch.json`, with session-local logs.
-4. The helper's syntax parsing passed; its first real clean-scene launch has not
-   yet been requested/exercised. Verify startup when it is used, without replacing
-   another session or claiming success from syntax alone.
+4. The clean-scene helper was exercised for commit `8c9c183`: session
+   `20261110-114406-794-286ed31e`, PID 90260 at launch. Logs recorded the clean
+   404-face model, stereo plus quad frames and FOCUSED state. Inspect current
+   ownership/liveness before any replacement; this launch does not validate
+   subsequent keyboard changes.
 5. `.local/openxr/parity-data` and older `editor-data`, `grain-data`, `section-data`
    contain previous workspace state. Preserve them; do not resume their edited
    models for a fresh test. The user can reopen
@@ -174,14 +192,25 @@ OpenXR plan complete.
 
 ## Evidence and limits
 
-1. Human feedback confirmed the quad's visibility/readability/upright orientation
+1. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
+   actual rendered-key clicks update a shared text field in both editor and modal
+   contexts (including Backspace), and focus loss discards queued input.
+   `.local/openxr/keyboard-preference-tests.log` passes immediate persistence,
+   restoration and legacy defaults without model edits. The final native build
+   passes without warnings in `virtual-keyboard-final-build.log`. The RTX 4090
+   Vulkan snapshot `virtual-keyboard-panel.png` was inspected for keyboard fit
+   below the inspector. These are software/GPU checks, not headset confirmation.
+
+
+2. Human feedback confirmed the quad's visibility/readability/upright orientation
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-2. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+3. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
    `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
    inspected: shared inspector/controls without the duplicate model, and the clean
-   404-face example in the independent eye renderer. No headset session was started.
+   404-face example in the independent eye renderer. A subsequent requested
+   clean-scene headset launch is recorded above; full visual parity is unverified.
    `.local/openxr/fit-selection-controls.png` was checked for control fit in the
    GPU-rendered panel using a fresh example and carried-forward preferences.
    This verifies layout, not live selected-target framing in the headset.
@@ -195,14 +224,14 @@ OpenXR plan complete.
    spatial/reference and grid checks are in `reference-projection-checks.log` and
    `grid-hit-checks.log` under `.local/openxr/`. The full suite was not run.
 
-3. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
+4. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
    `openxr_editor --desktop-snapshot <png>` and `--immersive-snapshot <png>` support
    narrow hardware rendering checks without a headset session. They do not prove
    human visual equivalence or all recent controller interactions.
-4. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
+5. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
    restart coverage, large-scene timings and current desktop/browser compatibility
    remain open. `OPENXR_WINDOWS.md` retains historical runtime/wgpu validation
    findings; validation-disabled preview success does not resolve those findings.
-5. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
+6. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
    across geometry, visibility, overlays and text with a two-pass fallback. No
    multiview, validation-layer or benchmark detour during this functionality pass.

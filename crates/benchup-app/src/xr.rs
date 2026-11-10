@@ -15,6 +15,9 @@ pub mod panel;
 mod editor;
 
 #[cfg(feature = "openxr")]
+mod keyboard;
+
+#[cfg(feature = "openxr")]
 mod input;
 
 #[cfg(feature = "openxr")]

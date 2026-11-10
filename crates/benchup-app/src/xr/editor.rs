@@ -104,6 +104,7 @@ pub(super) struct Editor {
     native_output: Option<super::desktop::NativeOutput>,
     keyboard_modifiers: egui::Modifiers,
     staged_source: Option<super::immersive::Source>,
+    keyboard: super::keyboard::Keyboard,
 }
 
 impl Editor {
@@ -161,6 +162,7 @@ impl Editor {
             native_output: None,
             keyboard_modifiers: Default::default(),
             staged_source: None,
+            keyboard: Default::default(),
         })
     }
 
@@ -218,6 +220,7 @@ impl Editor {
 
     fn update_ui(&mut self) -> Result<egui::FullOutput> {
         let mut events = std::mem::take(&mut self.input.events);
+        events.extend(self.keyboard.take_events(&self.ctx, self.input.focused));
         // A keyboard command may undo, replace or hide geometry before the
         // world callback. Never let an earlier erase stroke commit afterward.
         if events.iter().any(|event|matches!(event,egui::Event::Key {pressed:true,..})) {
@@ -244,8 +247,14 @@ impl Editor {
         // egui may repeat layout; consume a model operation only once.
         let mut activate = true;
         let mut output = self.ctx.run_ui(raw, |ui| {
+            let keyboard_height = super::keyboard::Keyboard::height(preferences.keyboard_visible);
+            crate::modal::set_bottom_inset(&self.ctx, keyboard_height);
+            egui::Panel::bottom("benchup.xr.keyboard_space")
+                .resizable(false)
+                .exact_size(keyboard_height)
+                .show(ui, |_| {});
             // Leave shared text/name/file dialogs fully visible and clickable.
-            if self.ctx.memory(|memory| memory.top_modal_layer().is_none()) {
+            if !preferences.keyboard_visible && self.ctx.memory(|memory| memory.top_modal_layer().is_none()) {
             egui::Panel::bottom("benchup.xr.panel_controls")
                 .resizable(false)
                 .frame(egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(8))
@@ -325,6 +334,8 @@ impl Editor {
             }
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
+            self.keyboard.remember_target(&self.ctx);
+            self.keyboard.show(&self.ctx, &mut preferences);
             self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx, &mut self.preferences);
             activate = false;
             if preferences.immersive_scene {
@@ -487,6 +498,9 @@ impl Editor {
         queue: &wgpu::Queue,
     ) -> Result<()> {
         self.set_input(input);
+        // Rendering can be skipped across a tracking/focus transition. Do not
+        // carry a queued virtual keystroke into a later resumed session.
+        self.keyboard.take_events(&self.ctx, false);
         // Cancellation must reach world tools even when rendering is skipped
         // and no panel pointer events need a UI pass.
         self.app.xr_world_pointer(None, &mut self.world_tools, false, &self.ctx, &mut self.preferences);
