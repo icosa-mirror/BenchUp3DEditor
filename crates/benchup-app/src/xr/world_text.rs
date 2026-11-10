@@ -625,7 +625,6 @@ impl Text {
         renderer: &egui_wgpu::Renderer,
         pass: &mut wgpu::RenderPass<'_>,
         visibility: Option<&wgpu::TextureView>,
-        depth: &wgpu::TextureView,
     ) {
         if self.count == 0 {
             return;
@@ -668,10 +667,6 @@ impl Text {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(visibility),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(depth),
                 },
             ],
         });

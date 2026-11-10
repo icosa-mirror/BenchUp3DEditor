@@ -1040,7 +1040,6 @@ impl Scene {
                 renderer,
                 &mut pass,
                 visibility.as_ref().map(|v| &v.0),
-                depth,
             );
             if self
                 .source
@@ -1059,7 +1058,6 @@ impl Scene {
                     renderer,
                     &mut pass,
                     visibility.as_ref().map(|v| &v.0),
-                    depth,
                 );
             }
         }

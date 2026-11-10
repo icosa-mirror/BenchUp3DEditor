@@ -16,7 +16,8 @@ launch, with stereo and quad frames and VISIBLE state. Inspect current ownership
 and liveness before any later requested replacement; leave it alone while coding.
 No human keyboard feedback or complete visual parity confirmation is recorded.
 The numeric-input build `56f7149` and file-chooser build `5c99aac` are also
-preserved. Current work adds explicit precise modeling with controller text entry.
+preserved, along with the precise-modeling build `468f1f7`. Latest work fixes
+world-text cutouts caused by the extra final-scene depth comparison.
 
 ## User direction
 
@@ -131,6 +132,24 @@ preserved. Current work adds explicit precise modeling with controller text entr
    Exact value modeling now supplies an explicit frozen target while ordinary held
    grabs retain their cancellation behavior. XR uses the in-panel chooser below.
 
+## World text visibility
+
+1. XR text now uses the retained GPU opaque-face/section-cap visibility texture
+   and sorted owner slots. It no longer samples the final scene depth attachment,
+   which includes expanded opaque edge cores and was cutting holes through labels
+   on their own objects. This follows desktop markers' face-only visibility rule.
+   Wire strokes no longer occlude text; foreign opaque faces and caps still do.
+   World guide-line depth handling, retained text buffers and shared head basis
+   are unchanged. Overlay/HUD text retains its existing bypass policy.
+2. The final code embeds the WGSL shader normally. The temporary runtime shader
+   override used to isolate the rejection paths was removed before the final
+   build. Its local probe executable/shaders under `text-depth-probes/` are
+   diagnostics only and must not be confused with a test-ready milestone build.
+3. GPU evidence fixes the observed glyph cutouts, not every label-parity case.
+   Compare wrapping/angular size and layered foreign occluders behind owner
+   surfaces against desktop's owner-excluding query. Full headset readability
+   and visual equivalence remain unconfirmed.
+
 ## Exact value modeling
 
 1. Enable Exact value in the XR controls for Move, Rotate, Scale, Push/Pull or
@@ -239,7 +258,19 @@ preserved. Current work adds explicit precise modeling with controller text entr
 
 ## Evidence and limits
 
-1. Exact value modeling: `.local/openxr/precise-modeling-tests.log` passes three
+1. World text: `text-surface-visibility-build.log` passes the native build without
+   warnings. On RTX 4090 Vulkan, the final embedded shader's clean-example image
+   `text-surface-visibility-eye.png` matches the successful prototype pixel for
+   pixel, restoring 163 incorrectly rejected label pixels in this fixed view.
+   The final active-Z-section image `text-surface-visibility-cap.png` likewise
+   matches the prototype cap-occlusion result. Diagnostic rejection classification
+   in `text-depth-probes/` distinguishes the extra scene-depth rejection from
+   foreign-face rejection; the active 1.1 m section case exercises cap rejection.
+   The clean scene and final cap image were inspected. No OpenXR/headset session
+   was started. The exact executable is preserved under this milestone commit.
+
+
+2. Exact value modeling: `.local/openxr/precise-modeling-tests.log` passes three
    cases covering all five tools, exact transform values, one-step undo, discard
    after tracking/Cancel/tool/document changes, and default trigger-release edits.
    `precise-modeling-tool-regressions.log` passes all ten current XR tool cases;
@@ -249,13 +280,13 @@ preserved. Current work adds explicit precise modeling with controller text entr
    `exact-modeling-controls.png` was inspected for control/hint fit; the RTX 4090
    Vulkan `exact-modeling-hud.png` snapshot renders the 404-face example but its
    diagnostic camera does not establish headset HUD readability. Group labels
-   still show rough/clipped glyph edges; inspect world-text depth/owner visibility
-   before claiming visual equivalence. The checked executable is preserved under
-   this milestone commit in `.local/openxr/preview-builds/`. No headset session
+   in that earlier image showed rough/clipped glyph edges; the world-text fix
+   above resolves the observed cutouts. Full visual equivalence remains open. The checked executable is preserved under
+   commit `468f1f7` in `.local/openxr/preview-builds/`. No headset session
    was launched for this change.
 
 
-2. File chooser: `.local/openxr/file-dialog-tests.log` passes three cases covering
+3. File chooser: `.local/openxr/file-dialog-tests.log` passes three cases covering
    footer placement above the keyboard, folder/type/hidden filtering plus relative
    folder navigation, and final-extension replacement confirmation with Cancel
    preserving the original file. `file-dialog-project-roundtrip.log` exercises the
@@ -267,7 +298,7 @@ preserved. Current work adds explicit precise modeling with controller text entr
    These checks do not prove a full controller open/edit/save/reopen workflow.
 
 
-3. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
+4. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
    line direction plus numeric length/undo and post-commit invalidation; rectangle
    dimensions without desktop projection; and clearing targets after tracking,
    tool, editing-scope, operation-stage or geometry changes. The latest test binary
@@ -278,7 +309,7 @@ preserved. Current work adds explicit precise modeling with controller text entr
    This is narrow software coverage, not full tool or headset acceptance.
 
 
-4. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
+5. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
    actual rendered-key clicks update a shared text field in both editor and modal
    contexts (including Backspace), and focus loss discards queued input.
    `.local/openxr/keyboard-preference-tests.log` passes immediate persistence,
@@ -288,11 +319,11 @@ preserved. Current work adds explicit precise modeling with controller text entr
    below the inspector. These are software/GPU checks, not headset confirmation.
 
 
-5. Human feedback confirmed the quad's visibility/readability/upright orientation
+6. Human feedback confirmed the quad's visibility/readability/upright orientation
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-6. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+7. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
    `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
    inspected: shared inspector/controls without the duplicate model, and the clean
    404-face example in the independent eye renderer. A subsequent requested
@@ -310,14 +341,14 @@ preserved. Current work adds explicit precise modeling with controller text entr
    spatial/reference and grid checks are in `reference-projection-checks.log` and
    `grid-hit-checks.log` under `.local/openxr/`. The full suite was not run.
 
-7. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
+8. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
    `openxr_editor --desktop-snapshot <png>` and `--immersive-snapshot <png>` support
    narrow hardware rendering checks without a headset session. They do not prove
    human visual equivalence or all recent controller interactions.
-8. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
+9. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
    restart coverage, large-scene timings and current desktop/browser compatibility
    remain open. `OPENXR_WINDOWS.md` retains historical runtime/wgpu validation
    findings; validation-disabled preview success does not resolve those findings.
-9. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
+10. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
    across geometry, visibility, overlays and text with a two-pass fallback. No
    multiview, validation-layer or benchmark detour during this functionality pass.

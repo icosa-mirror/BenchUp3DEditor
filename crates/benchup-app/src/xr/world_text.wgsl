@@ -11,7 +11,6 @@ struct View {
 @group(1) @binding(1) var atlas_sampler: sampler;
 @group(2) @binding(0) var<storage,read> owner_slots: array<u32>;
 @group(2) @binding(1) var visibility: texture_2d<u32>;
-@group(2) @binding(2) var scene_depth:texture_depth_2d;
 struct Output {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -43,9 +42,11 @@ struct Output {
     return out;
 }
 @fragment fn fragment(in: Output) -> @location(0) vec4<f32> {
+    // Text is an annotation: match desktop markers' face-only visibility.
+    // Expanded edge cores write a different depth at their stroke footprint;
+    // using that buffer here punches holes through labels on their own objects.
+    // The visibility target already includes opaque faces and section caps.
     let face=textureLoad(visibility,vec2<i32>(in.position.xy),0).xy;
-    let depth=textureLoad(scene_depth,vec2<i32>(in.position.xy),0);
-    if in.owners.x!=0xffffffffu && depth<in.position.z-0.000001 && (face.x==0u || depth<bitcast<f32>(face.y)-0.000001) {discard;}
     if in.owners.x!=0xffffffffu && face.x!=0u && bitcast<f32>(face.y)<in.position.z-0.00000024 {
         // Sorted slots avoid a per-fragment linear scan of large group contents.
         var lo=in.owners.x; var hi=in.owners.y;
