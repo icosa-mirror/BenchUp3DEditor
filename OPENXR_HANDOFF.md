@@ -51,6 +51,8 @@ Git history retains the earlier milestones and historical handoff revisions.
    swapchain images, frame pacing and quad/stereo submission.
 2. `editor.rs` runs the existing application/egui UI offscreen, sharing its document,
    operations, history, GPU callbacks and persistent preferences through `app_host.rs`.
+   Evaluated-model/cache preparation still relies on `paint_evaluated_scene`;
+   removing that dependency is the next host-separation milestone.
 3. `desktop.rs` owns the normal taskbar window on the main thread. XR runs on a
    worker. Physical keyboard/text/IME and Windows clipboard are bridged; desktop
    mouse/focus do not replace headset pointing/focus. Close/Alt+F4 and shared
@@ -65,7 +67,11 @@ Git history retains the earlier milestones and historical handoff revisions.
    spatial feedback. Glyph/annotation layout is reused across head motion; both
    eyes share the billboard basis. Group labels use owner-aware GPU visibility.
 6. `xr_tools.rs` routes controller input into shared drawing, measurements, modeling,
-   paint/erase, text, grain, solids, clipboard and history commands. Section grabs
+   paint/erase, text, grain, solids, clipboard and history commands. Held-trigger
+   erase accumulates sampled targets for one release-time shared command/undo,
+   with geometry/guide/annotation preview colors. Cancel, lost input, tool changes,
+   paste and keyboard commands discard the pending erase. Fast-motion ray sweep
+   interpolation is not implemented yet. Section grabs
    use shared drag/settings/persistence machinery. See the plan's tool table.
 7. `world_picking.rs` retains edge/guide hierarchies and finite guide spans;
    `world_labels.rs` retains label rectangles and annotation-stroke indices;
@@ -82,8 +88,9 @@ Git history retains the earlier milestones and historical handoff revisions.
 1. Follow the numbered spatial parity inventory in `OPENXR_PLAN.md`. Audit concrete
    desktop consumers and immersive input routes: editing context/context actions,
    remaining handles, precision/locks, joinery/fastener targeting and display modes.
-2. Close the remaining dependencies on the 2D model view. Known limits include
-   broader off-face/global references, continuous erase, evaluated-only paint/edit
+2. Extract evaluated-model/render-cache preparation from `paint_evaluated_scene`
+   before removing the 2D view. Then close its remaining workflow dependencies. Known limits include
+   broader off-face/global references, fast erase-sweep interpolation, evaluated-only paint/edit
    guards and cap-only picking/occlusion. Original-face occlusion queries do not
    fully represent rendered section caps. Guide intersections are locally bounded
    to 16 candidates/eight exact targets; dense clusters can omit a target.
@@ -142,7 +149,10 @@ Git history retains the earlier milestones and historical handoff revisions.
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-2. The latest native build log is `.local/openxr/multi-selection-build.log`.
+2. The latest native build log is `.local/openxr/erase-stroke-final-build.log`.
+   `.local/openxr/erase-stroke-final-tests.log` passes the two targeted application
+   regressions: one-undo release and cancellation/loss/keyboard cancellation.
+   These use an isolated test data directory, not the user workspace.
    `.local/openxr/selection-preference-checks.log` passes a focused legacy-default/
    saved-mode round trip. The shared immediate-save preference test was extended;
    the full application suite was not run.

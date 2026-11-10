@@ -419,6 +419,8 @@ pub struct BenchUpApp {
     material_removal: Option<benchup_core::MaterialId>,
     general_settings: settings::GeneralSettings,
     xr_panel: crate::app_host::XrPanelPreferences,
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    xr_erasing: BTreeSet<u64>,
     about: bool,
     release_notes: crate::release_notes::ReleaseNotes,
     shortcut_filter: String,
@@ -531,7 +533,11 @@ impl BenchUpApp {
                 && self.measurement.as_ref().is_some_and(|m| !m.complete || !self.length_input.is_empty()))
                 .then(|| self.measurement_guide()).flatten(),
             tool:self.tool,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
-            erasing:match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()},
+            erasing:{
+                let mut ids=match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()};
+                ids.extend(self.xr_erasing.iter().copied());
+                ids
+            },
             joinery_members:self.joinery_edit_members(),
             editing_text:self.text_editor.as_ref().and_then(|editor|editor.id),
             grain_preview:self.grain_preview_axes(),
@@ -653,6 +659,8 @@ impl BenchUpApp {
             material_removal: None,
             general_settings: Default::default(),
             xr_panel: Default::default(),
+            #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+            xr_erasing: BTreeSet::new(),
             about: false,
             release_notes: crate::release_notes::ReleaseNotes::default(),
             shortcut_filter: String::new(),
@@ -5319,7 +5327,7 @@ impl BenchUpApp {
                         .context
                         .is_some_and(|id| ids.contains(&id))
                 }) {
-                    Color32::from_rgb(220, 91, 76)
+                    crate::theme::ERASING
                 } else if self.tool == Tool::Paint
                     && model.face_colors.contains_key(&face.id)
                     && !outliner_hover
@@ -5427,7 +5435,7 @@ impl BenchUpApp {
                             Color32::from_rgb(184, 193, 181)
                         }
                     } else if pending {
-                        Color32::from_rgb(220, 91, 76)
+                        crate::theme::ERASING
                     } else if entity.locked {
                         Color32::from_rgb(90, 133, 176)
                     } else if let Some(color) = joinery_color(e.id) {

@@ -216,6 +216,11 @@ impl Editor {
 
     fn update_ui(&mut self) -> Result<egui::FullOutput> {
         let mut events = std::mem::take(&mut self.input.events);
+        // A keyboard command may undo, replace or hide geometry before the
+        // world callback. Never let an earlier erase stroke commit afterward.
+        if events.iter().any(|event|matches!(event,egui::Event::Key {pressed:true,..})) {
+            self.world_tools.cancel_erasing(&mut self.app);
+        }
         events.insert(0, egui::Event::ModifiersChanged(self.keyboard_modifiers));
         let raw = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(

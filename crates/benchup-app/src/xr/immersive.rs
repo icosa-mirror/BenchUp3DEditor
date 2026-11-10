@@ -733,7 +733,9 @@ impl Scene {
                         .iter()
                         .filter(|(id, _)| !source.model.is_hidden(**id))
                     {
-                        let color = if self.entities.selected(&source.model, *id, &source.selected)
+                        let color = if self.entities.selected(&source.model,*id,&source.erasing) {
+                            crate::theme::ERASING
+                        } else if self.entities.selected(&source.model, *id, &source.selected)
                         {
                             colors.accent
                         } else if self.input.and_then(|input| input.hit).is_some_and(|hit| {

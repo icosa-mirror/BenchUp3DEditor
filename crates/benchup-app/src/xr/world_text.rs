@@ -22,6 +22,7 @@ struct Key {
     revision: u64,
     display: benchup_core::DisplaySettings,
     selected: std::collections::BTreeSet<u64>,
+    erasing: std::collections::BTreeSet<u64>,
     outliner_hover: std::collections::BTreeSet<u64>,
     hover: Option<u64>,
     pixels_per_point: f32,
@@ -132,6 +133,7 @@ impl Text {
             revision: source.revision,
             display: source.display.clone(),
             selected: source.selected.clone(),
+            erasing: source.erasing.clone(),
             outliner_hover: source.outliner_hover.clone(),
             hover,
             pixels_per_point: ctx.pixels_per_point(),
@@ -153,6 +155,8 @@ impl Text {
         let color = |id| {
             if let Some(tint) = tint {
                 tint
+            } else if self.entities.selected(model, id, &source.erasing) {
+                crate::theme::ERASING
             } else if self.entities.selected(model, id, &source.selected) {
                 colors.accent
             } else if source.outliner_hover.contains(&id)
@@ -196,7 +200,8 @@ impl Text {
                         && self.entities.get(object.id).displayed(&source.display)
                 }) {
                     owners.insert(labels.len(), marker.owners.iter().copied().collect());
-                    let selected = source.selected.contains(&object.id);
+                    let erasing = self.entities.selected(model,object.id,&source.erasing);
+                    let selected = source.selected.contains(&object.id) && !erasing;
                     if selected {
                         backgrounds.insert(labels.len(), crate::theme::ACCENT);
                     }
@@ -206,6 +211,8 @@ impl Text {
                         egui::FontId::proportional(13.0),
                         if selected {
                             egui::Color32::WHITE
+                        } else if erasing {
+                            crate::theme::ERASING
                         } else {
                             colors.ink
                         },

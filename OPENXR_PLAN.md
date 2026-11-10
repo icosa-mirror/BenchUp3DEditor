@@ -40,7 +40,7 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
 | 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
 | 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; native lifetime window; shared Close/Quit path; saved preferences | In-headset virtual keyboard, native file-dialog access, other window commands and end-to-end project workflow verification |
-| 2A: shared scene/overlay preparation | Evaluated-model GPU scene; shared model-space overlay descriptions; retained references, glyphs and previews | Finish auditing desktop-only dependencies; duplicate 2D viewport still present |
+| 2A: shared scene/overlay preparation | Evaluated-model GPU scene; shared model-space overlay descriptions; retained references, glyphs and previews | Evaluated-model/cache preparation still occurs in the 2D paint path; extract it before removing the duplicate viewport |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
 | 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and final replacement of the 2D model view |
 
@@ -59,7 +59,9 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
    shared Close/Quit. The empty window is a lifetime surface, not a scene mirror.
 5. `src/xr/immersive.rs` renders explicit eye views from the evaluated model,
    retained renderer caches and shared display/tool state. Desktop cameras are not
-   installed on the document to implement world-ray modeling.
+   installed on the document to implement world-ray modeling. Evaluated-model/cache
+   preparation still occurs in `paint_evaluated_scene`; the current XR source
+   consumes that cache. Extract this preparation before hiding the 2D viewport.
 6. `viewport_overlays.rs`, `world_lines.rs`, `world_text.rs`, `world_surfaces.rs`,
    `floor_grid.rs` and `backdrop.rs` describe/render spatial feedback. Both eyes
    share font layout and a head basis. GPU shaders handle projection, clipping,
@@ -104,7 +106,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
 | 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate trigger grabs use shared modeling state and commits; original-document guards reject unsupported evaluated-only targets |
-| 5 | Paint and erase | Face/group paint and entity erase clicks; continuous erase sweeps and painting evaluated-only generated faces remain unimplemented |
+| 5 | Paint and erase | Face/group paint; held-trigger erase accumulates sampled targets, previews them and commits once on release; cancel/loss/keyboard commands discard it. Fast sweep interpolation and evaluated-only paint remain open |
 | 6 | Text and annotations | Text anchor/leader placement and shared editor modal; saved text/dimension labels and strokes can be selected, erased or transformed; Text opens an editable saved text; section-clipped and face-occluded targets are filtered |
 | 7 | Solids and grain | Shared solid validation/operand order and boolean history; Flip uses the displayed quads for hover/click; Grain Direction uses shared part/reference validation and assignment |
 | 8 | Clipboard/history | Copy/Paste ghost and placement; trigger commit and Cancel; shared Undo/Redo. Paste snapping does not inherit restrictions from the previous tool and flip handles do not capture it |
@@ -123,8 +125,9 @@ or complete-parity claims.
    actions, remaining handles, precision/locks, joinery/fastener targeting and
    display combinations. Do not substitute repeated minor snap refinements for
    this replacement-viewport checklist.
-2. Close the identified dependencies on the 2D model view. Known work includes
-   broader reference/alignment behavior, continuous erase, safe handling of
+2. First extract evaluated scene/render-cache preparation from the 2D paint path.
+   Then close the identified dependencies on the 2D model view. Known work includes
+   broader reference/alignment behavior, fast erase-sweep interpolation, safe handling of
    unsupported evaluated targets and cap-only interaction/occlusion semantics.
    Preserve shared operations, bounded queries and retained GPU feedback.
 3. Make the immersive view the XR model viewport once the audit shows the
@@ -145,7 +148,9 @@ or complete-parity claims.
    and Recenter work. Basic immersive viewing and two-grip navigation received
    positive feedback. This is not a complete overlay/tool/display comparison.
 2. Native builds and previous RTX 4090 Vulkan panel/eye snapshots establish working
-   rendering paths. The native OpenXR editor build passes for the selection milestone. A focused
+   rendering paths. The native OpenXR editor build passes for held-trigger erasing. Two targeted
+   application regressions pass for single-undo release and cancellation/loss/
+   keyboard cancellation. A focused
    preference check passes for legacy defaults and saved-mode restoration; shared
    immediate-save coverage is extended but the full application suite is deferred.
    Fifteen isolated picking/reference checks and a separate focused grid regression

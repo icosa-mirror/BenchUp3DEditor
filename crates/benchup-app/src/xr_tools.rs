@@ -66,6 +66,7 @@ pub(crate) struct State {
     section: Option<SectionGrab>,
     pointer_target: Option<DVec3>,
     reference: Option<drawing_inference::DrawingReference>,
+    erasing: bool,
 }
 
 struct SectionGrab {
@@ -74,6 +75,11 @@ struct SectionGrab {
 }
 
 impl State {
+    pub(crate) fn cancel_erasing(&mut self, app: &mut BenchUpApp) {
+        self.erasing = false;
+        app.xr_erasing.clear();
+    }
+
     pub(crate) fn pointer_target(&self) -> Option<DVec3> {
         self.pointer_target
     }
@@ -103,7 +109,7 @@ pub(crate) fn hint(tool: Tool) -> &'static str {
         }
         Tool::Select => "Trigger selects. Cancel clears selection.",
         Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
-        Tool::Erase => "Trigger erases the highlighted entity. Undo restores it.",
+        Tool::Erase => "Hold trigger over entities; release to erase. Cancel discards the stroke.",
         Tool::Trim => "Trigger: choose the cutter, then the target body. Cancel clears operands.",
         Tool::OuterShell | Tool::Union | Tool::Intersect | Tool::Split => {
             "Trigger: choose the first body, then the second. Cancel clears operands."
@@ -225,6 +231,7 @@ impl BenchUpApp {
                     {
                         self.xr_cancel_action(action == 0, &ctx, storage);
                         state.reference = None;
+                        state.erasing = false;
                         if action != 0 {
                             self.undo(&ctx, action == 2);
                         }
@@ -329,6 +336,7 @@ impl BenchUpApp {
         ctx: &egui::Context,
         storage: &mut dyn eframe::Storage,
     ) {
+        self.xr_erasing.clear();
         if self.world_section_info().is_some() {
             self.cancel_section_drag(ctx);
             self.persist_inspector_changes(ctx, Some(storage), false);
@@ -356,6 +364,8 @@ impl BenchUpApp {
     ) {
         state.pointer_target = None;
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
+            state.erasing = false;
+            self.xr_erasing.clear();
             if state.section.take().is_some() && self.world_section_info().is_some() {
                 self.cancel_section_drag(ctx);
                 self.persist_inspector_changes(ctx, Some(storage), false);
@@ -389,6 +399,8 @@ impl BenchUpApp {
                 self.persist_inspector_changes(ctx, Some(storage), false);
             }
             state.tool = Some(self.tool);
+            state.erasing = false;
+            self.xr_erasing.clear();
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
@@ -409,11 +421,14 @@ impl BenchUpApp {
             state.stroke = false;
             state.grab_depth = None;
             state.reference = None;
+            state.erasing = false;
             ctx.request_repaint();
             return;
         }
         let clicked = activate && pointer.activate;
         if self.paste_preview.is_some() {
+            state.erasing = false;
+            self.xr_erasing.clear();
             state.reference = None;
             self.drawing_reference = None;
             let normal = self.plane_lock().map_or(DVec3::Z, Axis::vector);
@@ -482,9 +497,19 @@ impl BenchUpApp {
         }
         if self.tool == Tool::Erase {
             self.snap = None;
-            self.hover = self.hover.filter(|id| !self.doc.model.is_locked(*id));
-            if clicked && let Some(id) = self.hover {
-                self.erase_entities(&BTreeSet::from([id]), tr!("app.erase_geometry"), ctx);
+            self.hover = self.hover.filter(|id|self.doc.model.contains_entity(id) && !self.doc.model.is_locked(*id));
+            if clicked {
+                self.xr_erasing.clear();
+                state.erasing = true;
+            }
+            if state.erasing {
+                if let Some(id) = self.hover { self.xr_erasing.insert(id); }
+                if activate && !pointer.primary_down {
+                    state.erasing = false;
+                    let mut ids=std::mem::take(&mut self.xr_erasing);
+                    ids.retain(|id|self.doc.model.contains_entity(id) && !self.doc.model.is_locked(*id));
+                    if !ids.is_empty() { self.erase_entities(&ids,tr!("app.erase_geometry"),ctx); }
+                }
             }
             return;
         }
@@ -1327,5 +1352,84 @@ impl BenchUpApp {
             self.measurement.as_mut().unwrap().offset = offset;
         }
         offset.is_some()
+    }
+}
+
+#[cfg(test)]
+mod erase_stroke_tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct Storage;
+    impl eframe::Storage for Storage {
+        fn get_string(&self, _: &str) -> Option<String> { None }
+        fn set_string(&mut self, _: &str, _: String) {}
+        fn remove_string(&mut self, _: &str) {}
+        fn flush(&mut self) {}
+    }
+
+    fn fixture() -> (BenchUpApp, Arc<Model>, [u64; 2]) {
+        let mut doc=Document::default();
+        let first=doc.model.add_edge(DVec3::ZERO,DVec3::X).unwrap();
+        let second=doc.model.add_edge(DVec3::Y,DVec3::X+DVec3::Y).unwrap();
+        let model=Arc::new(doc.model.clone());
+        let mut app=BenchUpApp::with_document(doc,None,true);
+        app.set_tool(Tool::Erase);
+        (app,model,[first,second])
+    }
+
+    fn pointer(model: &Arc<Model>, entity: Option<u64>, down: bool, activate: bool) -> Pointer {
+        Pointer {
+            ray:Ray {origin:DVec3::new(0.5,0.,1.),direction:-DVec3::Z},
+            model:Arc::clone(model),
+            hit:entity.map(|entity|Hit {
+                entity,face:None,edge:Some(entity),guide:None,guide_points:[None;8],
+                flip:None,annotation:None,edge_targets:[None;3],
+                point:DVec3::new(0.5,0.,0.),normal:DVec3::Z,center:None,
+            }),
+            activate,cancel:false,primary_down:down,visible_reference:None,
+        }
+    }
+
+    #[test]
+    fn held_erase_commits_all_targets_on_release_as_one_undo() {
+        let (mut app,model,ids)=fixture();
+        let ctx=egui::Context::default();
+        let mut state=State::default();
+        let mut storage=Storage;
+        for (index,id) in ids.into_iter().enumerate() {
+            app.xr_world_pointer(Some(&pointer(&model,Some(id),true,index==0)),&mut state,true,&ctx,&mut storage);
+            assert_eq!(app.doc.model.edges.len(),2);
+        }
+        assert_eq!(app.xr_erasing,BTreeSet::from(ids));
+        app.xr_world_pointer(Some(&pointer(&model,None,false,false)),&mut state,true,&ctx,&mut storage);
+        assert!(app.doc.model.edges.is_empty());
+        assert!(app.xr_erasing.is_empty());
+        app.undo(&ctx,false);
+        assert_eq!(app.doc.model,*model);
+    }
+
+    #[test]
+    fn lost_pointer_and_cancel_discard_erase_without_later_release_commit() {
+        for cancel in 0..3 {
+            let (mut app,model,ids)=fixture();
+            let ctx=egui::Context::default();
+            let mut state=State::default();
+            let mut storage=Storage;
+            app.xr_world_pointer(Some(&pointer(&model,Some(ids[0]),true,true)),&mut state,true,&ctx,&mut storage);
+            if cancel == 1 {
+                let mut input=pointer(&model,Some(ids[1]),true,false);
+                input.cancel=true;
+                app.xr_world_pointer(Some(&input),&mut state,true,&ctx,&mut storage);
+            } else if cancel == 0 {
+                app.xr_world_pointer(None,&mut state,false,&ctx,&mut storage);
+            } else {
+                state.cancel_erasing(&mut app);
+            }
+            app.xr_world_pointer(Some(&pointer(&model,None,false,false)),&mut state,true,&ctx,&mut storage);
+            assert_eq!(app.doc.model,*model);
+            assert!(app.xr_erasing.is_empty());
+            assert!(!state.erasing);
+        }
     }
 }

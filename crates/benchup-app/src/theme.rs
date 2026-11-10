@@ -7,6 +7,7 @@ pub const BORDER: Color32 = Color32::from_rgb(225, 228, 220);
 pub const PAPER: Color32 = Color32::from_rgb(250, 251, 247);
 pub const CANVAS: Color32 = Color32::from_rgb(240, 242, 234);
 pub const GREEN: Color32 = Color32::from_rgb(78, 120, 91);
+pub const ERASING: Color32 = Color32::from_rgb(220, 91, 76);
 
 const PREFERENCE_KEY: &str = "benchup.theme.v1";
 const PROJECT_TITLE_FONT: &str = "benchup.project-title.extra-bold";
