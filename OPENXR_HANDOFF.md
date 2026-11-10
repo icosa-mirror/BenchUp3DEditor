@@ -582,3 +582,21 @@ section segment clipping and exact-point face occlusion. Labels take priority
 over their strokes. The native build and eleven isolated spatial checks pass,
 including segment owner mapping, clipping and occlusion filtering. Headset
 confirmation and broad graphics/performance validation remain deferred.
+
+
+World drawing/measurement now retains a reference from the hovered original
+edge, using the shared DrawingReference and AxisGuide state. The reference is
+validated against current edge geometry and face visibility before reuse. Axis
+inference intersects the reference axes with the drawing plane and active axis
+or plane constraint using model-space ray tolerance, then feeds the shared GPU
+guide overlays. Exact geometry and construction-guide targets retain priority.
+The reference is cleared by focus/tracking loss, navigation, tool changes, paste
+and the XR Cancel/Undo/Redo controls. No full-model reference search is performed.
+This first path acquires the currently hit edge; broader global/off-face alignment
+and references to evaluated-only generated edges remain future work.
+
+Thirteen isolated picking/reference checks pass, including locked-axis/working-
+plane intersections and rejection of far, behind or incompatible reference axes.
+The native OpenXR editor build passes for reference acquisition. The user asked
+to try the preview; the earlier frozen annotation build was closed normally,
+and this completed reference build is being committed and relaunched for them.

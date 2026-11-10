@@ -9,8 +9,7 @@ Protractor and Dimensions through shared document commit/undo operations and
 shared GPU previews. A large XR tool bar exposes these tools, cancellation and
 undo/redo with persisted active-tool selection. Initial inference is local to the
 hit face plus drawing planes and axis constraints. Remaining direct interaction
-work includes shared reference acquisition,
-world reference acquisition.
+work includes broader off-face alignment and global reference candidates.
 Rectangle, Circle and Polygon now share desktop Drawing initialization, plane
 alignment, previews and commit operations with controller world-ray input. Their
 large XR buttons and polygon side controls persist through existing preferences.

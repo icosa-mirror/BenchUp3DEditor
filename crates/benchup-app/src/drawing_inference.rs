@@ -3,8 +3,8 @@ use super::*;
 
 #[derive(Clone, Copy)]
 pub(super) struct DrawingReference {
-    edge: u64,
-    point: DVec3,
+    pub(super) edge: u64,
+    pub(super) point: DVec3,
 }
 
 impl BenchUpApp {

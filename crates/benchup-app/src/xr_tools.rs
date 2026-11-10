@@ -53,6 +53,7 @@ pub(crate) struct Pointer {
     pub activate: bool,
     pub cancel: bool,
     pub primary_down: bool,
+    pub visible_reference: Option<DVec3>,
 }
 
 #[derive(Default)]
@@ -64,6 +65,7 @@ pub(crate) struct State {
     grab_depth: Option<f64>,
     section: Option<SectionGrab>,
     pointer_target: Option<DVec3>,
+    reference: Option<drawing_inference::DrawingReference>,
 }
 
 struct SectionGrab {
@@ -127,6 +129,7 @@ impl BenchUpApp {
         &mut self,
         ui: &mut egui::Ui,
         storage: &mut dyn eframe::Storage,
+        state: &mut State,
     ) {
         let ctx = ui.ctx().clone();
         ui.add_enabled_ui(self.xr_scene_interaction_enabled(&ctx), |ui| {
@@ -220,6 +223,7 @@ impl BenchUpApp {
                         .clicked()
                     {
                         self.xr_cancel_action(action == 0, &ctx, storage);
+                        state.reference = None;
                         if action != 0 {
                             self.undo(&ctx, action == 2);
                         }
@@ -357,6 +361,7 @@ impl BenchUpApp {
                 state.stroke = false;
             }
             if state.active {
+                self.drawing_reference = None;
                 self.flip_hover = None;
                 self.snap = None;
                 self.hover = None;
@@ -365,6 +370,7 @@ impl BenchUpApp {
                 self.drawing_projection = None;
             }
             state.active = false;
+            state.reference = None;
             return;
         };
         state.active = true;
@@ -378,11 +384,11 @@ impl BenchUpApp {
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
+            state.reference = None;
         }
         self.hover = pointer.hit.map(|hit| hit.entity);
-        // Desktop reference acquisition uses screen coordinates; don't retain
-        // those guides when ownership moves to a model-space controller ray.
-        self.drawing_reference = None;
+        // World references survive desktop UI passes without adopting its cursor.
+        self.drawing_reference = state.reference;
         self.drawing_guide = None;
         self.drawing_axis_guides.clear();
         self.drawing_projection = None;
@@ -394,11 +400,14 @@ impl BenchUpApp {
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
+            state.reference = None;
             ctx.request_repaint();
             return;
         }
         let clicked = activate && pointer.activate;
         if self.paste_preview.is_some() {
+            state.reference = None;
+            self.drawing_reference = None;
             let normal = self.plane_lock().map_or(DVec3::Z, Axis::vector);
             self.snap = self.xr_ray_snap(pointer, None, normal);
             self.apply_grid_snap_in_plane(Some(normal));
@@ -550,6 +559,7 @@ impl BenchUpApp {
             .or(state.line_normal)
             .unwrap_or(DVec3::Z);
         self.snap = self.xr_ray_snap(pointer, start, normal);
+        self.xr_reference_inference(pointer,state,start,normal);
         self.xr_shape_plane(pointer.ray);
         if matches!(self.tool, Tool::Text | Tool::GrainDirection) && start.is_none() {
             // A new leader must attach to geometry, even with snapping disabled.
@@ -1034,6 +1044,44 @@ impl BenchUpApp {
             }
         }
         ctx.request_repaint();
+    }
+
+    fn xr_reference_inference(&mut self, pointer: &Pointer, state: &mut State, start: Option<DVec3>, normal: DVec3) {
+        let eligible = (self.tool.is_drawing() || self.tool.is_measuring() || self.tool == Tool::GrainDirection)
+            && self.doc.snap_to_axes && self.doc.snap_to_geometry && self.snap_to_edge;
+        let contains = |reference:drawing_inference::DrawingReference| {
+            let Some(edge) = self.doc.model.edges.get(&reference.edge)
+                .filter(|edge|!self.doc.model.is_hidden(edge.id)) else { return false; };
+            let (a,b) = self.doc.model.points(edge);
+            let segment=b-a;
+            if segment.length_squared()<1e-24 { return false; }
+            let t=(reference.point-a).dot(segment)/segment.length_squared();
+            (-1e-7..=1.0000001).contains(&t) && reference.point.distance(a+segment*t)<1e-6
+        };
+        state.reference = state.reference.filter(|reference|eligible && contains(*reference)
+            && pointer.visible_reference.is_some_and(|point|point.distance(reference.point)<1e-7));
+        if eligible && let Some(hit) = pointer.hit.filter(|hit|hit.edge.is_some()) {
+            let point = self.snap.filter(|snap|hit.contains(&pointer.model,snap.point))
+                .map_or(hit.point,|snap|snap.point);
+            let reference = drawing_inference::DrawingReference {edge:hit.edge.unwrap(),point};
+            if contains(reference) { state.reference=Some(reference); }
+        }
+        self.drawing_reference=state.reference;
+        let (Some(reference),Some(base)) = (state.reference,self.snap) else { return; };
+        if matches!(base.kind,Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter
+            | Inference::Origin | Inference::OnEdge | Inference::OnGuide | Inference::GuidePoint) { return; }
+        let constraint = if self.tool.is_drawing() && self.tool != Tool::Line {
+            self.shape_lock().map(AxisConstraint::Plane)
+        } else if self.tool == Tool::Dimensions { None } else { self.axis_constraint() };
+        let constraint = start.zip(constraint.or_else(||match base.kind {
+            Inference::Axis(axis) => Some(AxisConstraint::Axis(axis)), _ => None,
+        }));
+        let plane = pointer.hit.filter(|hit|base.kind == Inference::OnFace && hit.face.is_some())
+            .map_or((start.unwrap_or(DVec3::ZERO),normal),|hit|(hit.point,hit.normal));
+        if let Some((snap,guide)) = crate::xr::world_inference::reference_axis(pointer.ray,reference.point,constraint,Some(plane)) {
+            self.snap=Some(snap);
+            self.drawing_guide=Some(guide);
+        }
     }
 
     fn xr_ray_snap(&self, pointer: &Pointer, start: Option<DVec3>, normal: DVec3) -> Option<Snap> {

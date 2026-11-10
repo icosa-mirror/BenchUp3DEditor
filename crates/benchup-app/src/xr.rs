@@ -33,6 +33,9 @@ mod world_text;
 mod world_labels;
 
 #[cfg(feature = "openxr")]
+pub(crate) mod world_inference;
+
+#[cfg(feature = "openxr")]
 mod world_surfaces;
 
 #[cfg(feature = "openxr")]

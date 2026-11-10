@@ -21,6 +21,7 @@ pub(crate) struct Source {
     pub snap_edges: bool,
     pub snap_geometry: bool,
     pub pick_text: bool,
+    pub drawing_reference: Option<DVec3>,
     pub guide_preview: Option<benchup_core::ConstructionGuide>,
     pub hover: Option<u64>,
     pub outliner_hover: BTreeSet<u64>,
@@ -469,6 +470,7 @@ impl Scene {
             activate: input.select,
             cancel: input.clear,
             primary_down: input.primary_down,
+            visible_reference:source.drawing_reference.filter(|&point|self.point_visible(ray.origin,point)),
         })
     }
 
