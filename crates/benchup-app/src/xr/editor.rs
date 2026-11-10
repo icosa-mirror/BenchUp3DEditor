@@ -252,6 +252,7 @@ impl Editor {
         // egui may repeat layout; consume a model operation only once.
         let mut activate = true;
         let mut output = self.ctx.run_ui(raw, |ui| {
+            let _keyboard_focus_guard = self.keyboard.protect_focus(&self.ctx);
             // Validate retained world targets before a field can consume Enter.
             // The second callback below also observes tool/document changes made
             // by this frame's editor UI.

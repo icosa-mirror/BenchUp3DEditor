@@ -10,7 +10,49 @@ pub(super) struct Keyboard {
     rect: Option<egui::Rect>,
 }
 
+pub(super) struct FocusGuard {
+    ctx: egui::Context,
+    previous: egui::SurrenderFocusOn,
+}
+
+impl Drop for FocusGuard {
+    fn drop(&mut self) {
+        self.ctx
+            .options_mut(|options| options.input_options.surrender_focus_on = self.previous);
+    }
+}
+
 impl Keyboard {
+    // Must run before editor widgets inspect this frame's pointer events. A key
+    // with non-focusable Sense still counts as a click elsewhere for TextEdit.
+    // Preserve focus only over the keyboard; normal clicks elsewhere keep their
+    // normal focus behavior. The guard restores the host policy after UI layout.
+    pub(super) fn protect_focus(&self, ctx: &egui::Context) -> Option<FocusGuard> {
+        let over_keyboard = ctx.input(|input| {
+            input.focused
+                && input
+                    .pointer
+                    .interact_pos()
+                    .is_some_and(|pos| self.rect.is_some_and(|rect| rect.contains(pos)))
+        });
+        if self.target.is_none()
+            || !over_keyboard
+            || self.target_modal != ctx.memory(|memory| memory.top_modal_layer())
+        {
+            return None;
+        }
+        let previous = ctx.options_mut(|options| {
+            std::mem::replace(
+                &mut options.input_options.surrender_focus_on,
+                egui::SurrenderFocusOn::Never,
+            )
+        });
+        Some(FocusGuard {
+            ctx: ctx.clone(),
+            previous,
+        })
+    }
+
     pub(super) fn height(visible: bool) -> f32 {
         if visible { 290.0 } else { 44.0 }
     }
@@ -22,7 +64,13 @@ impl Keyboard {
         }
         if !self.pending.is_empty() {
             if let Some(target) = self.target {
-                ctx.memory_mut(|memory| memory.request_focus(target));
+                ctx.memory_mut(|memory| {
+                    // Re-requesting active focus resets TextEdit's event filter,
+                    // turning caret arrows into global focus navigation.
+                    if memory.focused() != Some(target) {
+                        memory.request_focus(target);
+                    }
+                });
             }
         }
         std::mem::take(&mut self.pending)
@@ -218,6 +266,7 @@ mod tests {
                 ..Default::default()
             },
             |ui| {
+                let _focus_guard = keyboard.protect_focus(ctx);
                 let field = |ui: &mut egui::Ui| {
                     let response =
                         ui.add(egui::TextEdit::singleline(text).id(egui::Id::unique("test.field")));
@@ -284,7 +333,14 @@ mod tests {
                 modal,
             );
             assert!(keyboard.target.is_some());
-            for label in ["q", "Backspace", "q"] {
+            for (label, expected) in [
+                ("q", "q"),
+                ("w", "qw"),
+                ("Left", "qw"),
+                ("e", "qew"),
+                ("Right", "qew"),
+                ("Backspace", "qe"),
+            ] {
                 let output = frame(
                     &ctx,
                     &mut keyboard,
@@ -295,6 +351,15 @@ mod tests {
                     modal,
                 );
                 let pos = text_position(&output, label);
+                frame(
+                    &ctx,
+                    &mut keyboard,
+                    &mut preferences,
+                    &mut text,
+                    vec![Event::PointerMoved(pos)],
+                    false,
+                    modal,
+                );
                 for pressed in [true, false] {
                     frame(
                         &ctx,
@@ -313,6 +378,11 @@ mod tests {
                         false,
                         modal,
                     );
+                    assert_eq!(
+                        ctx.memory(|memory| memory.focused()),
+                        Some(egui::Id::unique("test.field")),
+                        "field lost focus during keyboard click: modal={modal}, key={label}, pressed={pressed}"
+                    );
                 }
                 frame(
                     &ctx,
@@ -323,12 +393,38 @@ mod tests {
                     false,
                     modal,
                 );
-                assert_eq!(
-                    text,
-                    if label == "Backspace" { "" } else { "q" },
-                    "modal={modal}, key={label}"
+                assert_eq!(text, expected, "modal={modal}, key={label}");
+            }
+            // Leaving the keyboard must still let an ordinary outside click
+            // release field focus; the temporary policy must not escape layout.
+            assert_eq!(
+                ctx.options(|options| options.input_options.surrender_focus_on),
+                egui::SurrenderFocusOn::Clicks
+            );
+            let pos = egui::pos2(700., 400.);
+            for pressed in [true, false] {
+                frame(
+                    &ctx,
+                    &mut keyboard,
+                    &mut preferences,
+                    &mut text,
+                    vec![
+                        Event::PointerMoved(pos),
+                        Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    false,
+                    modal,
                 );
             }
+            assert_ne!(
+                ctx.memory(|memory| memory.focused()),
+                Some(egui::Id::unique("test.field"))
+            );
             drop(output);
         }
     }

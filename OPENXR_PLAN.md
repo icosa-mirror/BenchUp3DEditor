@@ -9,16 +9,22 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 
 The user paused the goal and requested a prepared build with explicit checks.
 The checked executable is `ceae626`, built 2026-11-10 14:15:19 local time, preserved
-in `.local/openxr/preview-builds/ceae626/openxr_editor.exe`. The working source has
-no later implementation changes. Section-cap picking was only being investigated
-and is not implemented in this build. Keep development paused until the user
+in `.local/openxr/preview-builds/ceae626/openxr_editor.exe`. The user confirmed no label holes/flicker and an in-headset file chooser, then
+reported that keyboard clicks lose field focus. A bounded keyboard-focus fix is
+now built in response; its exact executable is recorded in
+`.local/openxr/keyboard-focus-fix/build.json`. Section-cap picking was only being
+investigated and is not implemented. Keep development paused until the user
 resumes the goal; a requested launch is a test handoff, not a development resume.
 
 The test profile `.local/openxr/test-ceae626/preferences.ron` copies the last
 session's comfort settings, starts Select with group names visible, hides the
 keyboard, disables additive selection/Exact value initially, and disables cuts.
-Use the clean-scene helper with this profile when the user requests launch.
-Specific verification steps are in the handoff. Full parity remains unaccepted.
+That profile was used for the initial test. For the focus-fix restart, use the
+clean-scene helper's default latest-session preferences so any comfort changes
+made during the test are retained.
+Ask verification questions one at a time. Repeat File-box typing on the focus-fix
+build before proceeding to Exact value movement/undo. Occlusion policy (hide
+versus fade behind geometry) awaits discussion. Full parity remains unaccepted.
 
 ## Outcome and working rules
 

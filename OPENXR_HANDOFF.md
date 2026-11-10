@@ -10,8 +10,9 @@ Git history retains the earlier milestones and historical handoff revisions.
 The user paused the goal and asked for another build with specific checks.
 Build `ceae626` is ready: `.local/openxr/preview-builds/ceae626/openxr_editor.exe`,
 built 2026-11-10 14:15:19 local time. Its SHA-256 matches the checked target binary.
-No implementation changes followed this build. Cap picking was being investigated
-only; the cap-interaction work is not in this executable. Keep development paused
+A bounded keyboard-focus fix has since been built for the reported test failure;
+its exact executable is recorded in `.local/openxr/keyboard-focus-fix/build.json`.
+Cap picking was being investigated only; cap-interaction work is not included. Keep development paused
 until the user resumes the goal. Do not interpret a test launch as goal resumption.
 
 The test profile copies the last session's comfort/readability preferences and
@@ -20,7 +21,10 @@ and section cuts off. It is separate from the prior session and preserves its
 preferences and edited recovery document. The launcher still copies the exact
 bundled Example and never carries forward an edited model.
 
-Launch only when requested, through host PowerShell 7:
+The following command launches the earlier reproduction build. For the fixed
+build, use the binary path in `keyboard-focus-fix/build.json` and omit
+`-PreferencesFrom` to carry forward the latest session's settings. Launch only when
+requested, through host PowerShell 7:
 
 ```powershell
 ./scripts/openxr_preview.ps1 -Binary ".local/openxr/preview-builds/ceae626/openxr_editor.exe" -PreferencesFrom ".local/openxr/test-ceae626/preferences.ron"
@@ -40,8 +44,21 @@ until the user closes its normal taskbar window:
    keyboard open automatically? Enter 20cm and press Enter. Do the stairs move?
    Hide keyboard, then Undo: does the original position return?
 
-Ask the user to report 1-3 as pass/fail with any unexpected behavior. Do not claim
-full phase or visual acceptance from these three checks.
+Ask checks one at a time, as the user requested after launch. Do not claim full
+phase or visual acceptance from these checks.
+
+Current feedback from the `ceae626` session:
+
+1. The user confirms no label holes or flicker. They observe labels showing through
+   geometry and want discussion before choosing full occlusion versus translucency
+   behind other geometry. Keep that policy decision open; do not interpret this
+   feedback as acceptance of the current occlusion behavior.
+2. The user confirms File > Save As opens an in-headset chooser.
+3. Keyboard typing failed: every key click drops field focus and the user has to
+   select the File box again for each character. The fixed build must repeat this
+   check before proceeding. Exact value movement/undo has not been attempted.
+4. Leave the existing preview untouched until a restart is requested. Keep the
+   broader goal paused while addressing this reported keyboard failure.
 
 ## User direction
 
@@ -155,6 +172,26 @@ full phase or visual acceptance from these three checks.
    without desktop pointer refresh. This covers line/shape and measurement input;
    Exact value modeling now supplies an explicit frozen target while ordinary held
    grabs retain their cancellation behavior. XR uses the in-panel chooser below.
+
+## Keyboard focus correction for the requested test
+
+1. Egui's click-elsewhere focus policy surrenders TextEdit focus on a keyboard
+   click even when the key itself is non-focusable. Earlier keyboard coverage
+   checked final text, so it missed focus loss during the click/release frames.
+2. The XR host now temporarily suppresses click-elsewhere focus surrender only
+   while a valid text target is being used over the virtual keyboard. A scoped
+   guard restores the original policy after UI layout, leaving normal clicks
+   elsewhere unchanged. Keeping active focus also preserves the text field's
+   event filter; caret arrows must not become global focus-navigation keys.
+3. The updated test checks focus on every press/release, successive characters,
+   caret arrows, Backspace, outside-click behavior, editor/modal contexts and
+   queued-input cancellation after tracking loss. The unmodified behavior fails
+   the new focus assertion; the fixed production keyboard module passes both UI
+   cases when linked against this checkout's cached egui dependency. Evidence is
+   in `.local/openxr/keyboard-focus-fix/before.log` and `after.log`. These are
+   isolated UI tests, not complete app/headset acceptance. The native build passes
+   without warnings in `keyboard-focus-fix/build.log`. Retest the user's actual
+   File-box workflow after the requested restart.
 
 ## World text visibility
 
