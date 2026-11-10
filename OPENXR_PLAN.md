@@ -40,7 +40,7 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
 | 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
 | 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; native lifetime window; shared Close/Quit path; saved preferences | In-headset virtual keyboard, native file-dialog access, other window commands and end-to-end project workflow verification |
-| 2A: shared scene/overlay preparation | Evaluated-model GPU scene; shared model-space overlay descriptions; retained references, glyphs and previews | Evaluated-model/cache preparation still occurs in the 2D paint path; extract it before removing the duplicate viewport |
+| 2A: shared scene/overlay preparation | Evaluated-model GPU scene; shared model-space overlay descriptions; retained references, glyphs and previews | Shared evaluated-model preparation and scoped XR snapshots are implemented; remaining UI/input dependencies still need closing before duplicate-view removal |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
 | 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and final replacement of the 2D model view |
 
@@ -59,9 +59,10 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
    shared Close/Quit. The empty window is a lifetime surface, not a scene mirror.
 5. `src/xr/immersive.rs` renders explicit eye views from the evaluated model,
    retained renderer caches and shared display/tool state. Desktop cameras are not
-   installed on the document to implement world-ray modeling. Evaluated-model/cache
-   preparation still occurs in `paint_evaluated_scene`; the current XR source
-   consumes that cache. Extract this preparation before hiding the 2D viewport.
+   installed on the document to implement world-ray modeling. Shared
+   `prepare_render_model` supplies both paint and XR directly; XR no longer needs
+   a preceding 2D paint to refresh evaluated geometry. Scoped snapshots carry
+   editing context, and labels/eye geometry consume the same staged frame source.
 6. `viewport_overlays.rs`, `world_lines.rs`, `world_text.rs`, `world_surfaces.rs`,
    `floor_grid.rs` and `backdrop.rs` describe/render spatial feedback. Both eyes
    share font layout and a head basis. GPU shaders handle projection, clipping,
@@ -125,8 +126,9 @@ or complete-parity claims.
    actions, remaining handles, precision/locks, joinery/fastener targeting and
    display combinations. Do not substitute repeated minor snap refinements for
    this replacement-viewport checklist.
-2. First extract evaluated scene/render-cache preparation from the 2D paint path.
-   Then close the identified dependencies on the 2D model view. Known work includes
+2. Close the remaining UI/input dependencies on the 2D model view; evaluated
+   scene preparation is now independent of painting. Reconcile camera/view commands
+   and desktop-only selection/handle gestures with immersive equivalents. Known work includes
    broader reference/alignment behavior, fast erase-sweep interpolation, safe handling of
    unsupported evaluated targets and cap-only interaction/occlusion semantics.
    Preserve shared operations, bounded queries and retained GPU feedback.
@@ -147,15 +149,15 @@ or complete-parity claims.
    under head movement; controller cursor/clicks and scrolling work; Closer/Text +
    and Recenter work. Basic immersive viewing and two-grip navigation received
    positive feedback. This is not a complete overlay/tool/display comparison.
-2. Native builds and previous RTX 4090 Vulkan panel/eye snapshots establish working
-   rendering paths. The native OpenXR editor build passes for held-trigger erasing. Two targeted
-   application regressions pass for single-undo release and cancellation/loss/
-   keyboard cancellation. A focused
-   preference check passes for legacy defaults and saved-mode restoration; shared
-   immediate-save coverage is extended but the full application suite is deferred.
-   Fifteen isolated picking/reference checks and a separate focused grid regression
-   pass. These do not constitute a full application suite or headset validation
-   of recent annotations, references, sections, flip and grid changes.
+2. The latest native build passes for shared scene preparation and scoped XR
+   snapshots. Two focused application tests prove edit refresh without 2D painting
+   and group-scope propagation with stable geometry snapshots. An isolated clean-
+   example eye snapshot renders 404 faces on the RTX 4090 Vulkan path and was
+   inspected. Two erase regressions and the immediate-save preference regression
+   also pass. Fifteen isolated picking/reference checks and the focused grid
+   regression remain recorded. These checks do not constitute a full suite or
+   headset confirmation of all recent interactions; broad validation is deferred.
+
 3. Phase 1 acceptance remains open: complete open/edit/undo/save/reopen workflow,
    usable text and file-dialog access, capture/loss/restart/disconnect recovery,
    immediate preference restoration and clean graphics validation. Historical

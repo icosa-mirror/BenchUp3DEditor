@@ -103,6 +103,7 @@ pub(super) struct Editor {
     world_tools: crate::app::xr_tools::State,
     native_output: Option<super::desktop::NativeOutput>,
     keyboard_modifiers: egui::Modifiers,
+    staged_source: Option<super::immersive::Source>,
 }
 
 impl Editor {
@@ -159,6 +160,7 @@ impl Editor {
             world_tools: Default::default(),
             native_output: None,
             keyboard_modifiers: Default::default(),
+            staged_source: None,
         })
     }
 
@@ -320,7 +322,12 @@ impl Editor {
             self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx, &mut self.preferences);
             activate = false;
             if preferences.immersive_scene {
-                self.scene.stage_labels(&self.ctx, &self.app.xr_scene_source(&self.ctx));
+                let mut source=self.app.xr_scene_source(&self.ctx);
+                source.tool_target=self.world_tools.pointer_target().or(source.tool_target);
+                self.scene.stage_labels(&self.ctx, &source);
+                self.staged_source=Some(source);
+            } else {
+                self.staged_source=None;
             }
         });
         preferences = preferences.sanitized();
@@ -430,7 +437,7 @@ impl Editor {
     }
 
     pub(super) fn begin_immersive_frame(&mut self, anchor: openxr::Posef) {
-        let mut source = self.app.xr_scene_source(&self.ctx);
+        let mut source = self.staged_source.take().unwrap_or_else(||self.app.xr_scene_source(&self.ctx));
         source.tool_target = self.world_tools.pointer_target().or(source.tool_target);
         self.scene.begin_frame(
             source,

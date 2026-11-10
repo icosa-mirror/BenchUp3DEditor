@@ -39,7 +39,11 @@ Git history retains the earlier milestones and historical handoff revisions.
    that mode. The shared Edit menu already exposes context entry/exit and entity
    actions without requiring the 2D model view. Selection/gesture parity beyond
    ray toggle still needs auditing.
-9. Frozen executables are under `.local/openxr/preview-builds/<commit>/`.
+9. Shared scene preparation now updates the evaluated model without painting a
+   2D viewport. Scoped XR snapshots propagate editing context while retaining
+   geometry snapshots; connection overlays use that scope and labels/eyes share
+   one staged frame source.
+10. Frozen executables are under `.local/openxr/preview-builds/<commit>/`.
    The last requested manual launch used `27ae6c1`; it must not be confused with
    the latest built executable. Inspect current process ownership/path before
    closing, replacing or claiming that a preview runs the newest code.
@@ -51,8 +55,10 @@ Git history retains the earlier milestones and historical handoff revisions.
    swapchain images, frame pacing and quad/stereo submission.
 2. `editor.rs` runs the existing application/egui UI offscreen, sharing its document,
    operations, history, GPU callbacks and persistent preferences through `app_host.rs`.
-   Evaluated-model/cache preparation still relies on `paint_evaluated_scene`;
-   removing that dependency is the next host-separation milestone.
+   Evaluated-model preparation is now shared through `prepare_render_model`,
+   so XR source refresh no longer relies on `paint_evaluated_scene`. Scoped XR
+   snapshots propagate editing context; stage and eye rendering share one frame
+   source rather than preparing the scene again outside the UI pass.
 3. `desktop.rs` owns the normal taskbar window on the main thread. XR runs on a
    worker. Physical keyboard/text/IME and Windows clipboard are bridged; desktop
    mouse/focus do not replace headset pointing/focus. Close/Alt+F4 and shared
@@ -88,8 +94,9 @@ Git history retains the earlier milestones and historical handoff revisions.
 1. Follow the numbered spatial parity inventory in `OPENXR_PLAN.md`. Audit concrete
    desktop consumers and immersive input routes: editing context/context actions,
    remaining handles, precision/locks, joinery/fastener targeting and display modes.
-2. Extract evaluated-model/render-cache preparation from `paint_evaluated_scene`
-   before removing the 2D view. Then close its remaining workflow dependencies. Known limits include
+2. Evaluated-model preparation has been extracted from `paint_evaluated_scene`.
+   Close the remaining UI/input dependencies: camera/view commands, desktop-only
+   selection gestures and any remaining handle/tool routes identified by the audit. Known limits include
    broader off-face/global references, fast erase-sweep interpolation, evaluated-only paint/edit
    guards and cap-only picking/occlusion. Original-face occlusion queries do not
    fully represent rendered section caps. Guide intersections are locally bounded
@@ -121,10 +128,12 @@ Git history retains the earlier milestones and historical handoff revisions.
 3. Launch only the intended already-built executable using the clean-scene helper:
 
    ```powershell
-   ./scripts/openxr_preview.ps1 -Binary .local/openxr/preview-builds/404a8f8/openxr_editor.exe
+   ./scripts/openxr_preview.ps1 -Binary ".local/openxr/preview-builds/<checked-commit>/openxr_editor.exe"
    ```
 
-   Run via host PowerShell 7. The helper never compiles and refuses an existing
+   Replace `<checked-commit>` with the milestone whose executable was actually
+   built; do not assume the newest Git commit is a built executable. Run via
+   host PowerShell 7. The helper never compiles and refuses an existing
    preview instead of stopping it. It seeds a unique directory under
    `.local/openxr/preview-sessions/` with the exact `assets/examples/Example.bup`
    as `model.json`. Only `preferences.ron` is carried forward from the last session;
@@ -149,16 +158,17 @@ Git history retains the earlier milestones and historical handoff revisions.
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-2. The latest native build log is `.local/openxr/erase-stroke-final-build.log`.
-   `.local/openxr/erase-stroke-final-tests.log` passes the two targeted application
-   regressions: one-undo release and cancellation/loss/keyboard cancellation.
-   These use an isolated test data directory, not the user workspace.
-   `.local/openxr/selection-preference-checks.log` passes a focused legacy-default/
-   saved-mode round trip. The shared immediate-save preference test was extended;
-   the full application suite was not run.
-   `.local/openxr/reference-projection-checks.log` records 15 isolated spatial/
-   reference checks. `.local/openxr/grid-hit-checks.log` records one focused grid
-   regression against the exact pure snapping source. These are not a full suite.
+2. Latest native build: `.local/openxr/shared-scene-preparation-final-build.log`.
+   `.local/openxr/scene-source-tests.log` passes two focused application cases
+   without desktop painting: edit refresh and editing-scope propagation with
+   stable snapshots. `.local/openxr/shared-scene-preparation-eye.png` was rendered
+   on the RTX 4090 Vulkan path from a fresh bundled-example fixture (404 faces)
+   and inspected. `.local/openxr/erase-stroke-final-tests.log` passes the two erase
+   release/undo/cancellation cases. `.local/openxr/selection-immediate-preference-test.log`
+   passes the shared immediate-save/default/restoration case. Earlier isolated
+   spatial/reference and grid checks are in `reference-projection-checks.log` and
+   `grid-hit-checks.log` under `.local/openxr/`. The full suite was not run.
+
 3. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
    `openxr_editor --desktop-snapshot <png>` and `--immersive-snapshot <png>` support
    narrow hardware rendering checks without a headset session. They do not prove

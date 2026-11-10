@@ -335,7 +335,7 @@ impl BenchUpApp {
         ctx: &egui::Context,
     ) -> std::sync::Arc<Overlays> {
         let key = ReferenceKey {
-            revision: self.render_model.revision(),
+            revision: self.xr_scene_model.revision(),
             display: self.doc.display.clone(),
             dark: ctx.global_style().visuals.dark_mode,
             history: self.history_preview.is_some(),
@@ -350,7 +350,7 @@ impl BenchUpApp {
         };
         if self.spatial_references.key.as_ref() != Some(&key) {
             let mut output = Overlays::default();
-            let model = self.render_model.shared();
+            let model = self.xr_scene_model.shared();
             self.append_spatial_fasteners(&model, key.fastener_draft.as_ref(), &mut output);
             self.append_spatial_joinery(key.dark, &mut output);
             self.spatial_references = ReferenceCache {

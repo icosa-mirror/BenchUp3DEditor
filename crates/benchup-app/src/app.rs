@@ -421,6 +421,8 @@ pub struct BenchUpApp {
     xr_panel: crate::app_host::XrPanelPreferences,
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     xr_erasing: BTreeSet<u64>,
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    xr_scene_model: renderer::ModelSnapshot,
     about: bool,
     release_notes: crate::release_notes::ReleaseNotes,
     shortcut_filter: String,
@@ -517,9 +519,12 @@ impl BenchUpApp {
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn xr_scene_source(&mut self, ctx: &egui::Context) -> crate::xr::immersive::Source {
-        if self.render_model.revision() == 0 { self.render_model.update(&self.doc.model); }
+        self.prepare_render_model(ctx);
+        self.prepare_picking();
+        let context=self.history_preview.as_ref().map_or(self.doc.model.edit_context,|model|model.edit_context);
+        self.xr_scene_model.update_scoped_source(self.render_model.shared(),self.render_model.revision(),context);
         crate::xr::immersive::Source {
-            model: self.render_model.shared(), revision: self.render_model.revision(),
+            model: self.xr_scene_model.shared(), revision: self.xr_scene_model.revision(),
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
@@ -661,6 +666,8 @@ impl BenchUpApp {
             xr_panel: Default::default(),
             #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
             xr_erasing: BTreeSet::new(),
+            #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+            xr_scene_model: Default::default(),
             about: false,
             release_notes: crate::release_notes::ReleaseNotes::default(),
             shortcut_filter: String::new(),
@@ -5001,15 +5008,12 @@ impl BenchUpApp {
         }
     }
 
-    fn paint_evaluated_scene(&mut self, ui: &egui::Ui, rect: Rect, background: bool) {
-        #[cfg(not(target_arch = "wasm32"))]
-        let _profile = viewport_benchmark::scope("scene");
-        let colors = Palette::for_ui(ui);
-        let faces = FacePalette::for_ui(ui);
+    /// Prepare the evaluated snapshot independently of any viewport paint.
+    fn prepare_render_model(&mut self, ctx: &egui::Context) -> (Option<u64>, u64) {
         let source_revision = (self.history_preview.is_none()
             && self.modeling.as_ref().is_none_or(|edit| edit.preview.is_none())
             && self.doc.model.connections.is_empty())
-            .then(|| self.document_revision(ui.ctx()));
+            .then(|| self.document_revision(ctx));
         // History previews affect rendering only; editing, saving and picking
         // continue to use the committed document.
         let model = self.history_preview.as_ref().unwrap_or_else(|| {
@@ -5023,13 +5027,11 @@ impl BenchUpApp {
             let _profile = viewport_benchmark::scope("geometry_update");
             self.joinery_geometry.update_render(model,
                 self.history_preview.is_none() && self.modeling.as_ref().is_some_and(|edit| edit.preview.is_some()),
-                ui.ctx(), &self.doc.display, &self.shadow_cache);
+                ctx, &self.doc.display, &self.shadow_cache);
         } else {
             self.joinery_geometry.clear_removed_connections();
         }
         let joint_preview = self.joint_highlight_preview_key();
-        let prepared_shadows = self.joinery_geometry.prepared_shadows.take()
-            .filter(|_| joint_preview.is_none() && !model.connections.is_empty());
         let model = joint_preview
             .as_ref()
             .and_then(|_| self.joinery_dialog.preview_model())
@@ -5047,6 +5049,24 @@ impl BenchUpApp {
             } else {
                 self.render_model.update(model)
             };
+        (source_revision, model_revision)
+    }
+
+    fn paint_evaluated_scene(&mut self, ui: &egui::Ui, rect: Rect, background: bool) {
+        #[cfg(not(target_arch = "wasm32"))]
+        let _profile = viewport_benchmark::scope("scene");
+        let colors = Palette::for_ui(ui);
+        let faces = FacePalette::for_ui(ui);
+        let (source_revision, model_revision) = self.prepare_render_model(ui.ctx());
+        let joint_preview = self.joint_highlight_preview_key();
+        let model = self.history_preview.as_ref().unwrap_or_else(|| {
+            self.modeling.as_ref().and_then(|edit|edit.preview.as_ref()).unwrap_or(&self.doc.model)
+        });
+        let prepared_shadows = self.joinery_geometry.prepared_shadows.take()
+            .filter(|_| joint_preview.is_none() && !model.connections.is_empty());
+        let model = joint_preview.as_ref().and_then(|_|self.joinery_dialog.preview_model())
+            .unwrap_or_else(||if model.connections.is_empty() {model}
+                else {&self.joinery_geometry.result.as_ref().unwrap().model});
         let empty_selection = BTreeSet::new();
         let selected = if self.history_preview.is_some() {
             &empty_selection

@@ -1433,3 +1433,57 @@ mod erase_stroke_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod scene_source_tests {
+    use super::*;
+
+    fn source(app:&mut BenchUpApp, ctx:&egui::Context) -> crate::xr::immersive::Source {
+        let mut result=None;
+        let mut output=ctx.run_ui(Default::default(),|_|result=Some(app.xr_scene_source(ctx)));
+        output.textures_delta.clear();
+        result.unwrap()
+    }
+
+    #[test]
+    fn source_refreshes_after_edits_without_painting_a_desktop_viewport() {
+        let mut doc=Document::default();
+        doc.model.add_edge(DVec3::ZERO,DVec3::X).unwrap();
+        let mut app=BenchUpApp::with_document(doc,None,true);
+        let ctx=egui::Context::default();
+        let initial=source(&mut app,&ctx);
+        let before=app.doc.model.clone();
+        let edge=app.doc.model.add_edge(DVec3::Y,DVec3::X+DVec3::Y).unwrap();
+        app.finish_edit("Add test edge",before,&ctx);
+        let changed=source(&mut app,&ctx);
+        assert!(changed.model.edges.contains_key(&edge));
+        assert_ne!(changed.revision,initial.revision);
+        let stable=source(&mut app,&ctx);
+        assert!(Arc::ptr_eq(&changed.model,&stable.model));
+        assert_eq!(changed.revision,stable.revision);
+    }
+
+    #[test]
+    fn source_tracks_editing_context_without_revising_geometry_every_frame() {
+        let mut doc=Document::default();
+        let edge=doc.model.add_edge(DVec3::ZERO,DVec3::X).unwrap();
+        let group=doc.model.make_object(&BTreeSet::from([edge]),false,"Test group").unwrap();
+        let edge=*doc.model.objects[&group].entities.iter().find(|id|doc.model.edges.contains_key(id)).unwrap();
+        let mut app=BenchUpApp::with_document(doc,None,true);
+        let ctx=egui::Context::default();
+        let root=source(&mut app,&ctx);
+        let geometry_revision=app.render_model.revision();
+        assert_eq!(root.model.entity_in_context(edge),Some(group));
+        app.enter_object(group,&ctx);
+        let scoped=source(&mut app,&ctx);
+        assert_eq!(scoped.model.edit_context,Some(group));
+        assert_eq!(scoped.model.entity_in_context(edge),Some(edge));
+        assert_eq!(app.render_model.revision(),geometry_revision);
+        let stable=source(&mut app,&ctx);
+        assert!(Arc::ptr_eq(&scoped.model,&stable.model));
+        app.close_edit_context(&ctx);
+        let closed=source(&mut app,&ctx);
+        assert_eq!(closed.model.edit_context,None);
+        assert_eq!(closed.model.entity_in_context(edge),Some(group));
+    }
+}

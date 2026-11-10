@@ -181,6 +181,23 @@ impl ModelSnapshot {
         }
         self.revision
     }
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn update_scoped_source(&mut self, model: Arc<Model>, source_revision: u64, context: Option<u64>) -> u64 {
+        if self.source_revision != Some(source_revision)
+            || self.model.as_ref().is_none_or(|model|model.edit_context != context)
+        {
+            self.model = Some(if model.edit_context == context {
+                model
+            } else {
+                let mut scoped=(*model).clone();
+                scoped.edit_context=context;
+                Arc::new(scoped)
+            });
+            self.revision=self.revision.wrapping_add(1);
+            self.source_revision=Some(source_revision);
+        }
+        self.revision
+    }
     pub fn update(&mut self, model: &Model) -> u64 {
         self.source_revision = None;
         if self.model.as_deref() != Some(model) {
