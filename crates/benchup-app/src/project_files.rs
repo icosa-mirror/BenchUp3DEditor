@@ -117,12 +117,13 @@ pub fn decode(bytes: &[u8]) -> Result<Document, String> {
 #[cfg(not(target_arch = "wasm32"))]
 fn run(
     ctx: &eframe::egui::Context,
-    action: impl FnOnce() -> Result<Outcome, String> + Send + 'static,
+    action: impl FnOnce(crate::native_dialog::Host) -> Result<Outcome, String> + Send + 'static,
 ) -> Pending {
     let (sender, receiver) = mpsc::channel();
+    let host = crate::native_dialog::Host::from_context(ctx);
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let _ = sender.send(action());
+        let _ = sender.send(action(host));
         ctx.request_repaint();
     });
     receiver
@@ -130,8 +131,8 @@ fn run(
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn open(ctx: &eframe::egui::Context) -> Pending {
-    run(ctx, || {
-        let Some(path) = rfd::FileDialog::new()
+    run(ctx, |_dialogs| {
+        let Some(path) = _dialogs.dialog()
             .set_title(tr!("project_files.open_benchup_project"))
             .add_filter(tr!("project_files.benchup_project"), PROJECT_EXTENSIONS)
             .pick_file()
@@ -160,7 +161,7 @@ fn read_project(path: PathBuf) -> Result<Outcome, String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn open_path(ctx: &eframe::egui::Context, path: PathBuf) -> Pending {
-    run(ctx, move || read_project(path))
+    run(ctx, move |_dialogs| read_project(path))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -186,11 +187,11 @@ pub fn save(
     name: String,
     contents: String,
 ) -> Pending {
-    run(ctx, move || {
+    run(ctx, move |_dialogs| {
         let path = if let Some(path) = path {
             path
         } else {
-            let Some(path) = rfd::FileDialog::new()
+            let Some(path) = _dialogs.dialog()
                 .set_title(tr!("project_files.save_benchup_project_as"))
                 .add_filter(tr!("project_files.benchup_project"), PROJECT_EXTENSIONS)
                 .set_file_name(file_name(&name))
@@ -452,8 +453,8 @@ pub fn import(
     model: benchup_core::Model,
     extension: String,
 ) -> Pending {
-    run(ctx, move || {
-        let Some(path) = rfd::FileDialog::new()
+    run(ctx, move |_dialogs| {
+        let Some(path) = _dialogs.dialog()
             .set_title(tr!("project_files.import_geometry_stl_mm_obj_metres_dxf_declared"))
             .add_filter(tr!("project_files.geometry"), &[extension.as_str()])
             .pick_file()
@@ -533,9 +534,9 @@ pub fn import(
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn export(ctx: &eframe::egui::Context, name: String, contents: Vec<u8>, stl: bool) -> Pending {
-    run(ctx, move || {
+    run(ctx, move |_dialogs| {
         let extension = if stl { "stl" } else { "obj" };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = _dialogs.dialog()
             .set_title(tr!("project_files.export_geometry"))
             .add_filter(tr!("project_files.geometry"), &[extension])
             .set_file_name(exchange_name(&name, extension))
@@ -608,13 +609,13 @@ pub fn export_cut_report(
     selected: std::collections::BTreeSet<u64>,
     layout_settings: crate::cutting_layout::Settings,
 ) -> Pending {
-    run(ctx, move || {
+    run(ctx, move |_dialogs| {
         let contents = render_cut_report(report, &name, &model, &selected, layout_settings)?;
         let (title, suffix) = match report {
             CutReport::CuttingPlan => (tr!("project_files.export_woodworking_cutting_plan"), tr!("project_files.cutting_plan")),
             CutReport::WorkshopLabels => (tr!("project_files.export_workshop_labels"), tr!("project_files.workshop_labels")),
         };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = _dialogs.dialog()
             .set_title(title)
             .add_filter(tr!("project_files.pdf_document"), &["pdf"])
             .set_file_name(exchange_name(&tr!("project_files.report_name", name = name, suffix = suffix), "pdf"))
@@ -666,9 +667,9 @@ pub fn export_screenshots(
     settings: crate::screenshots::Settings,
     pages: Vec<image::RgbaImage>,
 ) -> Pending {
-    run(ctx, move || {
+    run(ctx, move |_dialogs| {
         let export = crate::screenshots::encode_with_title(&settings, &pages, &name)?;
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = _dialogs.dialog()
             .set_title(tr!("project_files.export_screenshot"))
             .add_filter(tr!("project_files.screenshot"), &[export.extension])
             .set_file_name(exchange_name(
@@ -715,8 +716,8 @@ pub fn export_estimate_pdf(
     name: String,
     contents: Vec<u8>,
 ) -> Pending {
-    run(ctx, move || {
-        let Some(path) = rfd::FileDialog::new()
+    run(ctx, move |_dialogs| {
+        let Some(path) = _dialogs.dialog()
             .set_title(tr!("project_files.export_time_and_cost_estimates"))
             .add_filter(tr!("project_files.pdf_document"), &["pdf"])
             .set_file_name(exchange_name(&tr!("project_files.estimates", name = name), "pdf"))

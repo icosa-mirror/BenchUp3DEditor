@@ -1,6 +1,14 @@
 //! Services needed by the shared editor UI, independent of its rendering host.
 use eframe::Frame;
 
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct XrFilePreferences {
+    pub directory: Option<std::path::PathBuf>,
+    pub show_hidden: bool,
+    pub show_all_files: bool,
+}
+
 /// Tracking-relative XR preferences are retained by every host, including builds
 /// without OpenXR. Never store absolute runtime tracking-space coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

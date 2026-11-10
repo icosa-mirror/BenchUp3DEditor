@@ -105,6 +105,7 @@ pub(super) struct Editor {
     keyboard_modifiers: egui::Modifiers,
     staged_source: Option<super::immersive::Source>,
     keyboard: super::keyboard::Keyboard,
+    file_dialogs: super::file_dialog::Dialogs,
 }
 
 impl Editor {
@@ -133,6 +134,7 @@ impl Editor {
             Some((device.clone(), queue.clone())),
         );
         ctx.set_zoom_factor(app.xr_panel_preferences().ui_scale);
+        let file_dialogs = super::file_dialog::Dialogs::new(&ctx);
         let depth = device
             .create_texture(&wgpu::TextureDescriptor {
                 label: Some("BenchUpXR editor depth"),
@@ -163,6 +165,7 @@ impl Editor {
             keyboard_modifiers: Default::default(),
             staged_source: None,
             keyboard: Default::default(),
+            file_dialogs,
         })
     }
 
@@ -238,6 +241,7 @@ impl Editor {
             ..Default::default()
         };
         let mut preferences = self.app.xr_panel_preferences();
+        let mut file_preferences = self.app.xr_file_preferences();
         let mut recenter = false;
         let mut fit_scene = None;
         let pointer = self
@@ -341,6 +345,7 @@ impl Editor {
             }
             self.app
                 .ui_with_host(ui, &mut UiHost::OpenXr(&mut self.preferences));
+            self.file_dialogs.show(&self.ctx, &mut file_preferences);
             self.keyboard.remember_target(&self.ctx);
             self.keyboard.show(&self.ctx, &mut preferences);
             self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx, &mut self.preferences);
@@ -355,6 +360,9 @@ impl Editor {
             }
         });
         preferences = preferences.sanitized();
+        if file_preferences != self.app.xr_file_preferences() {
+            self.app.update_xr_file_preferences(&self.ctx, &mut self.preferences, file_preferences);
+        }
         if preferences != self.app.xr_panel_preferences() {
             self.app
                 .update_xr_panel_preferences(&self.ctx, &mut self.preferences, preferences);

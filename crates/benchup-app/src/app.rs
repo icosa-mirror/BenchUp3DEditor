@@ -419,6 +419,7 @@ pub struct BenchUpApp {
     material_removal: Option<benchup_core::MaterialId>,
     general_settings: settings::GeneralSettings,
     xr_panel: crate::app_host::XrPanelPreferences,
+    xr_files: crate::app_host::XrFilePreferences,
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     xr_erasing: BTreeSet<u64>,
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
@@ -516,6 +517,15 @@ impl BenchUpApp {
     }
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn xr_panel_preferences(&self) -> crate::app_host::XrPanelPreferences { self.xr_panel }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn xr_file_preferences(&self) -> crate::app_host::XrFilePreferences { self.xr_files.clone() }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn update_xr_file_preferences(&mut self, ctx: &egui::Context, storage: &mut dyn eframe::Storage, preferences: crate::app_host::XrFilePreferences) {
+        self.xr_files = preferences;
+        self.persist_inspector_changes(ctx, Some(storage), false);
+    }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn xr_has_selection(&self) -> bool { !self.selected.is_empty() }
@@ -667,6 +677,7 @@ impl BenchUpApp {
             material_removal: None,
             general_settings: Default::default(),
             xr_panel: Default::default(),
+            xr_files: Default::default(),
             #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
             xr_erasing: BTreeSet::new(),
             #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]

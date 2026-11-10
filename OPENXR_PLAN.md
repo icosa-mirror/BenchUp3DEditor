@@ -14,7 +14,8 @@ a clean Example scene. Do not replace a running preview during development.
 Precise line/shape/measurement input now retains the world target while aiming
 at the panel, invalidating it on loss or operation/document changes. Immersive
 Enter no longer refreshes from the desktop camera. Explicit numeric modeling
-and an in-panel file chooser are the next input/workflow gaps. Complete tool/visual parity and
+remains an input gap. An in-panel file chooser now routes Open, Save As, imports
+and exports through the existing workers; headset workflow acceptance remains open. Complete tool/visual parity and
 phase acceptance remain open.
 
 ## Outcome and working rules
@@ -51,7 +52,7 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 1A: panel/input foundation | Metric panel geometry; ray mapping; OpenXR actions; capture and focus/tracking cancellation | Complete drag/loss/restart coverage on the headset |
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
 | 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
-| 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; native lifetime window; shared Close/Quit path; saved preferences | Headset keyboard acceptance; native file-dialog access, other window commands and end-to-end project workflow verification |
+| 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; in-panel file chooser; native lifetime window; shared Close/Quit path; saved preferences | Headset keyboard/file-chooser acceptance, other window commands and end-to-end project workflow verification |
 | 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
 | 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and remaining workflow/gesture parity; immersive mode no longer duplicates the 2D model view |
@@ -178,7 +179,7 @@ or complete-parity claims.
    headset confirmation of all recent interactions; broad validation is deferred.
 
 3. Phase 1 acceptance remains open: complete open/edit/undo/save/reopen workflow,
-   usable text and file-dialog access, capture/loss/restart/disconnect recovery,
+   controller text/file workflow acceptance, capture/loss/restart/disconnect recovery,
    immediate preference restoration and clean graphics validation. Historical
    validation findings are in `OPENXR_WINDOWS.md`; they have not been cleared by
    the current validation-disabled previews.

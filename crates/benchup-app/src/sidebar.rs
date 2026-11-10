@@ -34,6 +34,7 @@ pub(super) struct InspectorPreferences {
     account_menu_open: bool,
     general: settings::GeneralSettings,
     xr_panel: crate::app_host::XrPanelPreferences,
+    xr_files: crate::app_host::XrFilePreferences,
     visible: bool,
     width: f32,
     docking: Option<docking::DockLayout>,
@@ -74,6 +75,7 @@ impl Default for InspectorPreferences {
             account_menu_open: false,
             general: Default::default(),
             xr_panel: Default::default(),
+            xr_files: Default::default(),
             visible: true,
             width: 300.,
             docking: None,
@@ -176,10 +178,12 @@ mod guide_preference_tests {
         assert!(!old.xr_panel.keyboard_visible);
         assert!(!old.xr_panel.keyboard_caps);
         assert!(!old.xr_panel.keyboard_symbols);
+        assert_eq!(old.xr_files, crate::app_host::XrFilePreferences::default());
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
         app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, keep_upright:false, extend_selection:true, keyboard_visible:true, keyboard_caps:true, keyboard_symbols:true, ..Default::default() };
+        app.xr_files = crate::app_host::XrFilePreferences { directory: Some(std::path::PathBuf::from("F:/BenchUp Documents")), show_hidden: true, show_all_files: true };
         app.persist_inspector_changes(&ctx, Some(&mut storage), false);
         assert!(storage.flushed);
         assert!(!app.project.modified);
@@ -187,6 +191,7 @@ mod guide_preference_tests {
         let mut restored = BenchUpApp::with_document(Document::default(), None, true);
         restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
         assert_eq!(restored.xr_panel, app.xr_panel);
+        assert_eq!(restored.xr_files, app.xr_files);
         let invalid = crate::app_host::XrPanelPreferences { distance_metres: f32::NAN, width_metres: -2.0, ui_scale: 99.0, ..Default::default() }.sanitized();
         assert_eq!(invalid.distance_metres, 1.0);
         assert_eq!(invalid.width_metres, 0.6);
@@ -631,6 +636,7 @@ impl BenchUpApp {
         self.general_settings = preferences.general.clone();
         self.general_settings.normalize();
         self.xr_panel = preferences.xr_panel.sanitized();
+        self.xr_files = preferences.xr_files.clone();
         preferences.tools.restore(self);
         self.project.recent = preferences.recent_projects.clone();
         self.project.recent.truncate(10);
@@ -732,6 +738,7 @@ impl BenchUpApp {
             account_menu_open: self.account.menu_open,
             general: self.general_settings.clone(),
             xr_panel: self.xr_panel,
+            xr_files: self.xr_files.clone(),
             visible: self.inspector,
             width: self.inspector_width,
             // Capture the effective layout even before the inspector first renders.

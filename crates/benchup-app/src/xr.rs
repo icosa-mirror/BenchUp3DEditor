@@ -18,6 +18,9 @@ mod editor;
 mod keyboard;
 
 #[cfg(feature = "openxr")]
+mod file_dialog;
+
+#[cfg(feature = "openxr")]
 mod input;
 
 #[cfg(feature = "openxr")]

@@ -19,6 +19,8 @@ mod modal;
 mod natural_text;
 mod picking;
 mod project_files;
+#[cfg(not(target_arch = "wasm32"))]
+mod native_dialog;
 mod release_notes;
 mod renderer;
 mod screenshots;

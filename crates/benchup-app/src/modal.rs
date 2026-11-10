@@ -8,6 +8,7 @@ const RESIZE_OUTSET: f32 = 6.;
 
 // Hosts can reserve space for input UI. Frame-local state keeps normal desktop
 // and web dialog bounds unchanged, including after a host stops reserving space.
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
 pub(crate) fn set_bottom_inset(ctx: &egui::Context, height: f32) {
     let frame = ctx.cumulative_frame_nr();
     ctx.data_mut(|data| data.insert_temp(egui::Id::unique("modal.bottom_inset"), (frame, height)));

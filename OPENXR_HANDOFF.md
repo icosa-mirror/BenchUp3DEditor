@@ -15,8 +15,8 @@ in `.local/openxr/preview-builds/8008118/openxr_editor.exe` (built 2026-11-10
 launch, with stereo and quad frames and VISIBLE state. Inspect current ownership
 and liveness before any later requested replacement; leave it alone while coding.
 No human keyboard feedback or complete visual parity confirmation is recorded.
-Current work connects world-target retention and precise numeric input; in-panel
-file choosing is the next end-to-end workflow gap.
+The numeric-input build `56f7149` is also preserved. Current work adds the
+in-panel chooser for the existing open/save/import/export workers.
 
 ## User direction
 
@@ -129,7 +129,28 @@ file choosing is the next end-to-end workflow gap.
 4. The status field routes immersive Enter through the supplied world snap/value,
    without desktop pointer refresh. This covers line/shape and measurement input;
    an explicit precise-modeling workflow remains open because ordinary held grabs
-   cancel on leaving the scene. Native Windows file-dialog control remains open.
+   cancel on leaving the scene. XR now uses an in-panel chooser as described below.
+
+## In-panel file choosing
+
+1. `native_dialog.rs` supplies the host chooser used by the existing native file
+   workers in `project_files.rs`. The XR host installs a request/response channel;
+   ordinary desktop hosts continue using rfd dialogs with the same titles,
+   filters and filenames. Web file dialogs are unchanged. Project codecs, atomic
+   writes, import/export logic, results and error handling remain shared.
+2. `xr/file_dialog.rs` uses the shared Modal shell for Folder and File entry,
+   Up/Home/Refresh navigation, a virtualized folder/file list, hidden-file and
+   file-type filters, Open/Save/Cancel, and replacement confirmation. Folder
+   enumeration runs on a worker. Relative folder input resolves against the
+   displayed folder and is retained as an absolute path. The keyboard remains
+   above the modal backdrop and the footer stays above its reserved space.
+3. Default extensions are applied before checking for an existing file. Confirm
+   replacement against that final path; Cancel preserves the file. The last
+   successfully read directory and both filters use `XrFilePreferences` in the
+   shared immediate-save capture/restore path, without requiring a model edit.
+4. Full controller open/edit/save/reopen acceptance remains open. Creating folders
+   from the chooser and previewing exported PDFs inside the headset are not yet
+   implemented; existing PDF exports still invoke the desktop PDF viewer.
 
 ## Next implementation work
 
@@ -201,18 +222,30 @@ file choosing is the next end-to-end workflow gap.
 
 ## Evidence and limits
 
-1. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
+1. File chooser: `.local/openxr/file-dialog-tests.log` passes three cases covering
+   footer placement above the keyboard, folder/type/hidden filtering plus relative
+   folder navigation, and final-extension replacement confirmation with Cancel
+   preserving the original file. `file-dialog-project-roundtrip.log` exercises the
+   existing save/open/cancel workers through the XR host channel and decodes the
+   saved project. `file-dialog-preference-tests.log` verifies immediate folder and
+   filter persistence, restoration and legacy defaults without model edits.
+   The native build passes without warnings in `file-dialog-build.log`; its exact
+   executable is preserved under this milestone commit in `preview-builds/`.
+   These checks do not prove a full controller open/edit/save/reopen workflow.
+
+
+2. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
    line direction plus numeric length/undo and post-commit invalidation; rectangle
    dimensions without desktop projection; and clearing targets after tracking,
    tool, editing-scope, operation-stage or geometry changes. The latest test binary
    also passes the two existing erase regressions and two virtual-keyboard cases
    (`precision-erase-regressions.log`, `precision-keyboard-regressions.log`).
    The native build passes without warnings in `precision-panel-build.log` and
-   is preserved under this milestone commit in `.local/openxr/preview-builds/`.
+   is preserved under commit `56f7149` in `.local/openxr/preview-builds/`.
    This is narrow software coverage, not full tool or headset acceptance.
 
 
-2. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
+3. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
    actual rendered-key clicks update a shared text field in both editor and modal
    contexts (including Backspace), and focus loss discards queued input.
    `.local/openxr/keyboard-preference-tests.log` passes immediate persistence,
@@ -222,11 +255,11 @@ file choosing is the next end-to-end workflow gap.
    below the inspector. These are software/GPU checks, not headset confirmation.
 
 
-3. Human feedback confirmed the quad's visibility/readability/upright orientation
+4. Human feedback confirmed the quad's visibility/readability/upright orientation
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-4. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+5. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
    `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
    inspected: shared inspector/controls without the duplicate model, and the clean
    404-face example in the independent eye renderer. A subsequent requested
@@ -244,14 +277,14 @@ file choosing is the next end-to-end workflow gap.
    spatial/reference and grid checks are in `reference-projection-checks.log` and
    `grid-hit-checks.log` under `.local/openxr/`. The full suite was not run.
 
-5. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
+6. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
    `openxr_editor --desktop-snapshot <png>` and `--immersive-snapshot <png>` support
    narrow hardware rendering checks without a headset session. They do not prove
    human visual equivalence or all recent controller interactions.
-6. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
+7. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
    restart coverage, large-scene timings and current desktop/browser compatibility
    remain open. `OPENXR_WINDOWS.md` retains historical runtime/wgpu validation
    findings; validation-disabled preview success does not resolve those findings.
-7. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
+8. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
    across geometry, visibility, overlays and text with a two-pass fallback. No
    multiview, validation-layer or benchmark detour during this functionality pass.
