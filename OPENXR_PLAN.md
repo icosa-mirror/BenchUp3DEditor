@@ -5,19 +5,20 @@ completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
-## Current continuation
+## Paused for a requested headset test
 
-The user resumed the full goal. Continue implementation autonomously; do not
-stop at local milestones or request headset verification unless asked. The
-controller-keyboard build `8008118` is preserved and was launched on request with
-a clean Example scene. Do not replace a running preview during development.
-Precise line/shape/measurement input now retains the world target while aiming
-at the panel, invalidating it on loss or operation/document changes. Immersive
-Enter no longer refreshes from the desktop camera. Move, Rotate, Scale, Push/Pull
-and Offset now have a persistent Exact value mode: choose anchor and target,
-then type into the automatically focused shared value field. An in-panel file chooser now routes Open, Save As, imports
-and exports through the existing workers; headset workflow acceptance remains open. Complete tool/visual parity and
-phase acceptance remain open.
+The user paused the goal and requested a prepared build with explicit checks.
+The checked executable is `ceae626`, built 2026-11-10 14:15:19 local time, preserved
+in `.local/openxr/preview-builds/ceae626/openxr_editor.exe`. The working source has
+no later implementation changes. Section-cap picking was only being investigated
+and is not implemented in this build. Keep development paused until the user
+resumes the goal; a requested launch is a test handoff, not a development resume.
+
+The test profile `.local/openxr/test-ceae626/preferences.ron` copies the last
+session's comfort settings, starts Select with group names visible, hides the
+keyboard, disables additive selection/Exact value initially, and disables cuts.
+Use the clean-scene helper with this profile when the user requests launch.
+Specific verification steps are in the handoff. Full parity remains unaccepted.
 
 ## Outcome and working rules
 

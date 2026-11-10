@@ -5,19 +5,43 @@ Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continui
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
-## Active continuation
+## Paused, ready for the requested test
 
-The user resumed the full goal after the bounded keyboard milestone. Continue
-implementation and keep these documents current; do not pause at local milestones
-or request human verification unless the user asks. Build `8008118` is preserved
-in `.local/openxr/preview-builds/8008118/openxr_editor.exe` (built 2026-11-10
-12:16:03). Its requested clean-scene preview launched at 12:56, PID 67972 at
-launch, with stereo and quad frames and VISIBLE state. Inspect current ownership
-and liveness before any later requested replacement; leave it alone while coding.
-No human keyboard feedback or complete visual parity confirmation is recorded.
-The numeric-input build `56f7149` and file-chooser build `5c99aac` are also
-preserved, along with the precise-modeling build `468f1f7`. Latest work fixes
-world-text cutouts caused by the extra final-scene depth comparison.
+The user paused the goal and asked for another build with specific checks.
+Build `ceae626` is ready: `.local/openxr/preview-builds/ceae626/openxr_editor.exe`,
+built 2026-11-10 14:15:19 local time. Its SHA-256 matches the checked target binary.
+No implementation changes followed this build. Cap picking was being investigated
+only; the cap-interaction work is not in this executable. Keep development paused
+until the user resumes the goal. Do not interpret a test launch as goal resumption.
+
+The test profile copies the last session's comfort/readability preferences and
+starts Select, group names on, keyboard hidden, additive selection/Exact value off
+and section cuts off. It is separate from the prior session and preserves its
+preferences and edited recovery document. The launcher still copies the exact
+bundled Example and never carries forward an edited model.
+
+Launch only when requested, through host PowerShell 7:
+
+```powershell
+./scripts/openxr_preview.ps1 -Binary ".local/openxr/preview-builds/ceae626/openxr_editor.exe" -PreferencesFrom ".local/openxr/test-ceae626/preferences.ron"
+```
+
+Ask for these results explicitly after launch; earlier builds received no feedback
+because the user was not asked. Keep instructions concrete and let the app run
+until the user closes its normal taskbar window:
+
+1. Look at Frame and Desk labels in the immersive scene, including while moving
+   the head. Are the letters complete and readable without holes or flicker?
+2. File > Save As should open a chooser inside the headset. Select the File box,
+   open Keyboard and type a few characters. Do they appear in that field? Cancel
+   the chooser (no file needs saving), then Hide keyboard.
+3. In the Tool dropdown choose Move, enable Exact value, trigger on the stairs,
+   aim a little to the right within the 3D scene and trigger again. Does the
+   keyboard open automatically? Enter 20cm and press Enter. Do the stairs move?
+   Hide keyboard, then Undo: does the original position return?
+
+Ask the user to report 1-3 as pass/fail with any unexpected behavior. Do not claim
+full phase or visual acceptance from these three checks.
 
 ## User direction
 
