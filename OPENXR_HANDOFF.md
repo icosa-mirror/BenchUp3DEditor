@@ -600,3 +600,24 @@ plane intersections and rejection of far, behind or incompatible reference axes.
 The native OpenXR editor build passes for reference acquisition. The user asked
 to try the preview; the earlier frozen annotation build was closed normally,
 and this completed reference build is being committed and relaunched for them.
+
+## Interactive test-launch policy
+
+Keep the application's existing autosave and session restoration unchanged.
+The user wants each test launch to start from the clean bundled example, while
+readability/controller preferences persist. Use host PowerShell 7 with:
+
+```powershell
+./scripts/openxr_preview.ps1 -Binary .local/openxr/preview-builds/<commit>/openxr_editor.exe
+```
+
+The launcher never compiles. Pass the executable built for the intended milestone.
+It refuses an existing preview, seeds a unique ignored workspace with the exact
+`assets/examples/Example.bup`, copies only `preferences.ron` from the previous
+session (initially the old parity-data preferences), and records the executable,
+mtime, PID and data path. It does not reuse model/history/selection autosaves.
+Normal app autosave continues inside that session directory; explicit Save/Save
+As remain available. The default preview has no deadline. The current manually
+launched reference preview has not been stopped or replaced by this change.
+PowerShell syntax parsing passes; the new launch path awaits the next requested
+preview launch.
