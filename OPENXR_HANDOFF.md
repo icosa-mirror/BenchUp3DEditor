@@ -230,7 +230,7 @@ on-guide inference. Dense clusters beyond these local limits may omit a target;
 there is no full-scene pairwise intersection scan. Seven isolated checks pass.
 
 Remaining: off-face nearby geometry; desktop reference-acquisition parity; controller paths for
-annotation leader/extension-line picking. Legacy desktop-only navigation modes
+world reference acquisition. Legacy desktop-only navigation modes
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;
@@ -572,3 +572,13 @@ The native OpenXR editor build and ten isolated spatial checks pass. The two
 annotation checks cover off-centre hits, visibility, basis rotation, scene scale
 and shader distance clamps. Headset confirmation remains deferred. Leader and
 extension-line picking is the next annotation step.
+
+
+Saved text leaders and dimension extension/baseline segments now also accept
+controller hits, mapped to the same context entity as their labels. A retained
+segment hierarchy is updated from the exact GPU annotation-line source and
+reused across colour/head changes. Queries use the existing angular tolerance,
+section segment clipping and exact-point face occlusion. Labels take priority
+over their strokes. The native build and eleven isolated spatial checks pass,
+including segment owner mapping, clipping and occlusion filtering. Headset
+confirmation and broad graphics/performance validation remain deferred.

@@ -10,9 +10,73 @@ pub(super) struct Label {
     pub bounds: [f64; 4],
 }
 
+#[derive(Clone, PartialEq)]
+pub(super) struct Line {
+    pub id: u64,
+    pub a: DVec3,
+    pub b: DVec3,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn annotation_strokes_resolve_owners_and_filter_clipped_or_occluded_segments() {
+        let mut labels = Labels::default();
+        labels.update_lines(vec![
+            Line {
+                id: 7,
+                a: DVec3::new(0.006, -1., 1.),
+                b: DVec3::new(0.006, 1., 1.),
+            },
+            Line {
+                id: 9,
+                a: DVec3::new(0.004, -1., 2.),
+                b: DVec3::new(0.004, 1., 2.),
+            },
+        ]);
+        assert_eq!(
+            labels
+                .pick_line(ray(0., 0.), |_, a, b| Some((a, b)), |_, _| true)
+                .unwrap()
+                .0,
+            9
+        );
+        assert_eq!(
+            labels
+                .pick_line(
+                    ray(0., 0.),
+                    |id, a, b| (id != 9).then_some((a, b)),
+                    |_, _| true
+                )
+                .unwrap()
+                .0,
+            7
+        );
+        assert_eq!(
+            labels
+                .pick_line(ray(0., 0.), |_, a, b| Some((a, b)), |id, _| id != 9)
+                .unwrap()
+                .0,
+            7
+        );
+        assert!(
+            labels
+                .pick_line(
+                    ray(0., 0.),
+                    |_, a, b| Some((a.lerp(b, 0.8), b)),
+                    |_, _| true
+                )
+                .is_none()
+        );
+        labels.update_lines(vec![]);
+        assert!(
+            labels
+                .pick_line(ray(0., 0.), |_, a, b| Some((a, b)), |_, _| true)
+                .is_none()
+        );
+    }
+
     fn view() -> View {
         View {
             head: DVec3::ZERO,
@@ -109,6 +173,8 @@ pub(super) struct Labels {
     labels: Vec<Label>,
     index: Index,
     radius_points: f64,
+    lines: Vec<Line>,
+    line_index: Index,
 }
 
 /// The billboard basis in model coordinates; units is tracking metres per model unit.
@@ -121,6 +187,34 @@ pub(super) struct View {
 }
 
 impl Labels {
+    pub fn update_lines(&mut self, lines: Vec<Line>) {
+        if self.lines == lines {
+            return;
+        }
+        self.line_index.replace_segments(
+            lines
+                .iter()
+                .enumerate()
+                .map(|(i, line)| (i as u64, line.a, line.b)),
+        );
+        self.lines = lines;
+    }
+
+    pub fn pick_line(
+        &self,
+        ray: Ray,
+        clip: impl Fn(u64, DVec3, DVec3) -> Option<(DVec3, DVec3)>,
+        visible: impl Fn(u64, DVec3) -> bool,
+    ) -> Option<(u64, DVec3)> {
+        let hit = self.line_index.query(
+            ray,
+            0.01,
+            |i, a, b| clip(self.lines[i as usize].id, a, b),
+            |i, point| visible(self.lines[i as usize].id, point),
+        )?;
+        Some((self.lines[hit.id as usize].id, hit.point))
+    }
+
     pub fn update(&mut self, labels: Vec<Label>) {
         if self.labels == labels {
             return;

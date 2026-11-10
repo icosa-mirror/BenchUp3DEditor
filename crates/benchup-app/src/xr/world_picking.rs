@@ -105,14 +105,14 @@ pub(super) struct Index {
 
 impl Index {
     pub fn replace_points(&mut self, points: impl IntoIterator<Item = (u64, DVec3)>) {
+        self.replace_segments(points.into_iter().map(|(id, point)| (id, point, point)));
+    }
+
+    pub fn replace_segments(&mut self, segments: impl IntoIterator<Item = (u64, DVec3, DVec3)>) {
         self.edges.clear();
         self.edges
-            .extend(points.into_iter().filter_map(|(id, point)| {
-                point.is_finite().then_some(Edge {
-                    id,
-                    a: point,
-                    b: point,
-                })
+            .extend(segments.into_iter().filter_map(|(id, a, b)| {
+                (a.is_finite() && b.is_finite()).then_some(Edge { id, a, b })
             }));
         self.nodes.clear();
         if !self.edges.is_empty() {

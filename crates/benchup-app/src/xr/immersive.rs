@@ -340,12 +340,18 @@ impl Scene {
                 up:inverse.transform_vector3(self.head.y_axis.truncate()).normalize(),
                 units, font_scale:(preferences.ui_scale / 1.3) as f64,
             };
-            if let Some((id,point)) = self.text.pick_ray(model_ray, view, |id,anchor,point| {
+            let allowed = |id| {
                 let state = self.entities.get(id);
                 !state.hidden && state.context.is_some()
                     && (!source.pick_text || state.context == Some(id) && source.model.texts.contains_key(&id))
-                    && source.display.section_contains(anchor) && self.unoccluded(model_ray.origin,point)
-            }) {
+            };
+            let annotation = self.text.pick_ray(model_ray, view, |id,anchor,point| {
+                allowed(id) && source.display.section_contains(anchor) && self.unoccluded(model_ray.origin,point)
+            }).or_else(||self.text.pick_line(model_ray, |id,a,b| {
+                if !allowed(id) { return None; }
+                source.display.section_segment(a,b)
+            }, |_,point|self.unoccluded(model_ray.origin,point)));
+            if let Some((id,point)) = annotation {
                 return Some(super::input::SceneHit {
                     entity:self.entities.get(id).context?, annotation:Some(id),
                     face:None, edge:None, guide:None, guide_points:[None;8], flip:None, point,

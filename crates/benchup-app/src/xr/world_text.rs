@@ -168,6 +168,7 @@ impl Text {
         let mut labels = Vec::new();
         let mut label_ids = std::collections::BTreeMap::new();
         let mut hit_labels = Vec::new();
+        let mut hit_lines = Vec::new();
         let mut owners = std::collections::BTreeMap::<usize, Vec<u64>>::new();
         let mut backgrounds = std::collections::BTreeMap::new();
         for label in source
@@ -223,6 +224,9 @@ impl Text {
                 let ink = color(dimension.id);
                 for (a, b) in [(0, 2), (1, 3), (2, 3)] {
                     lines.push((points[a], points[b], ink.to_normalized_gamma_f32()));
+                    hit_lines.push(super::world_labels::Line {
+                        id:dimension.id, a:points[a], b:points[b],
+                    });
                 }
                 for (a, b) in [(2, 3), (3, 2)] {
                     ticks.push((points[a], points[b], ink.to_normalized_gamma_f32()));
@@ -243,6 +247,7 @@ impl Text {
             let points = text.layout(model);
             let ink = color(text.id);
             lines.push((points[0], points[1], ink.to_normalized_gamma_f32()));
+            hit_lines.push(super::world_labels::Line { id:text.id, a:points[0], b:points[1] });
             label_ids.insert(labels.len(), text.id);
             labels.push((
                 points[1],
@@ -286,6 +291,7 @@ impl Text {
             })
             .collect();
         self.picking.update(hit_labels);
+        self.picking.update_lines(hit_lines);
         for billboard in source
             .overlays
             .billboards
@@ -581,6 +587,14 @@ impl Text {
         visible: impl Fn(u64, DVec3, DVec3) -> bool,
     ) -> Option<(u64, DVec3)> {
         self.picking.pick(ray, view, visible)
+    }
+
+    pub fn pick_line(
+        &self, ray: benchup_core::Ray,
+        clip: impl Fn(u64,DVec3,DVec3)->Option<(DVec3,DVec3)>,
+        visible: impl Fn(u64,DVec3)->bool,
+    ) -> Option<(u64,DVec3)> {
+        self.picking.pick_line(ray,clip,visible)
     }
 
     pub fn clear(&mut self) {
