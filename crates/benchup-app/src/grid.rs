@@ -314,68 +314,92 @@ pub(super) fn snap_with_geometry(
     model: &benchup_core::Model,
     excluded: Option<&BTreeSet<u64>>,
 ) -> Snap {
+    snap_with_geometry_hint(target, spacing, plane, axis, model, excluded, None)
+}
+
+pub(super) fn snap_with_geometry_hint(
+    target: Snap,
+    spacing: f64,
+    plane: Option<DVec3>,
+    axis: Option<Axis>,
+    model: &benchup_core::Model,
+    excluded: Option<&BTreeSet<u64>>,
+    hit: Option<(Option<u64>, Option<u64>)>,
+) -> Snap {
     let allowed = |id| !excluded.is_some_and(|ids| ids.contains(&id)) && !model.is_hidden(id);
     let line_allowed = |direction: DVec3| {
         plane.is_none_or(|normal| normal.dot(direction).abs() < 1e-7)
             && axis.is_none_or(|axis| direction.cross(axis.vector()).length() < 1e-7)
     };
     let point = match target.kind {
-        Inference::OnEdge => model.edges.values().find_map(|edge| {
-            let (a, b) = model.points(edge);
-            let delta = b - a;
-            let t = (target.point - a).dot(delta) / delta.length_squared();
-            if !(0.0..=1.0).contains(&t)
-                || (a + delta * t).distance(target.point) > 1e-6
-                || !allowed(edge.id)
-            {
-                return None;
-            }
-            let direction = delta.normalize();
-            if !line_allowed(direction) {
-                return Some(target.point);
-            }
-            let point = snap_line(target.point, direction, spacing);
-            let t = (point - a).dot(delta) / delta.length_squared();
-            Some(if (0.0..=1.0).contains(&t) {
-                point
-            } else {
-                target.point
-            })
-        }),
-        Inference::OnFace => model.faces.values().find_map(|face| {
-            if !model.face_contains(face, target.point, true) || !allowed(face.id) {
-                return None;
-            }
-            let normal = benchup_core::faces::plane(model, &face.vertices)?.normal;
-            let point = if let Some(axis) = axis {
-                let direction = axis.vector();
-                if normal.dot(direction).abs() >= 1e-7 || !line_allowed(direction) {
+        Inference::OnEdge => {
+            let refine = |edge: &benchup_core::Edge| {
+                let (a, b) = model.points(edge);
+                let delta = b - a;
+                let t = (target.point - a).dot(delta) / delta.length_squared();
+                if !(0.0..=1.0).contains(&t)
+                    || (a + delta * t).distance(target.point) > 1e-6
+                    || !allowed(edge.id)
+                {
+                    return None;
+                }
+                let direction = delta.normalize();
+                if !line_allowed(direction) {
                     return Some(target.point);
                 }
-                snap_line(target.point, direction, spacing)
-            } else if let Some(direction) = plane
-                .map(|plane| normal.cross(plane))
-                .filter(|direction| direction.length() > 1e-7)
-                .and_then(DVec3::try_normalize)
-            {
-                snap_line(target.point, direction, spacing)
-            } else {
-                snap(
-                    Snap {
-                        kind: Inference::Plane,
-                        ..target
-                    },
-                    spacing,
-                    Some(normal),
-                )
-                .point
+                let point = snap_line(target.point, direction, spacing);
+                let t = (point - a).dot(delta) / delta.length_squared();
+                Some(if (0.0..=1.0).contains(&t) {
+                    point
+                } else {
+                    target.point
+                })
             };
-            Some(if model.face_contains(face, point, true) {
-                point
-            } else {
-                target.point
-            })
-        }),
+            match hit {
+                Some((edge, _)) => edge.and_then(|id|model.edges.get(&id)).and_then(refine),
+                None => model.edges.values().find_map(refine),
+            }
+        },
+        Inference::OnFace => {
+            let refine = |face: &benchup_core::Face| {
+                if !model.face_contains(face, target.point, true) || !allowed(face.id) {
+                    return None;
+                }
+                let normal = benchup_core::faces::plane(model, &face.vertices)?.normal;
+                let point = if let Some(axis) = axis {
+                    let direction = axis.vector();
+                    if normal.dot(direction).abs() >= 1e-7 || !line_allowed(direction) {
+                        return Some(target.point);
+                    }
+                    snap_line(target.point, direction, spacing)
+                } else if let Some(direction) = plane
+                    .map(|plane| normal.cross(plane))
+                    .filter(|direction| direction.length() > 1e-7)
+                    .and_then(DVec3::try_normalize)
+                {
+                    snap_line(target.point, direction, spacing)
+                } else {
+                    snap(
+                        Snap {
+                            kind: Inference::Plane,
+                            ..target
+                        },
+                        spacing,
+                        Some(normal),
+                    )
+                    .point
+                };
+                Some(if model.face_contains(face, point, true) {
+                    point
+                } else {
+                    target.point
+                })
+            };
+            match hit {
+                Some((_, face)) => face.and_then(|id|model.faces.get(&id)).and_then(refine),
+                None => model.faces.values().find_map(refine),
+            }
+        },
         Inference::Plane if axis.is_some() => Some(
             snap(
                 Snap {
@@ -405,12 +429,32 @@ impl BenchUpApp {
         self.apply_grid_snap_in_plane(None);
     }
     pub(super) fn apply_grid_snap_in_plane(&mut self, plane_override: Option<DVec3>) {
+        self.apply_grid_snap_candidates(plane_override, None, None);
+    }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(super) fn apply_world_grid_snap(
+        &mut self,
+        plane: DVec3,
+        model: &Model,
+        edge: Option<u64>,
+        face: Option<u64>,
+    ) {
+        self.apply_grid_snap_candidates(Some(plane), Some(model), Some((edge, face)));
+    }
+
+    fn apply_grid_snap_candidates(
+        &mut self,
+        plane_override: Option<DVec3>,
+        world_model: Option<&Model>,
+        hit: Option<(Option<u64>, Option<u64>)>,
+    ) {
         if self.snap_to_grid {
-            let model = if self.tool == Tool::GrainDirection && self.grain_uses_evaluated_geometry() {
+            let model = world_model.unwrap_or_else(|| if self.tool == Tool::GrainDirection && self.grain_uses_evaluated_geometry() {
                 self.joinery_geometry.result.as_ref().map_or(&self.doc.model, |result| &result.model)
             } else {
                 &self.doc.model
-            };
+            });
             let plane = plane_override.or_else(|| self
                 .drawing
                 .as_ref()
@@ -430,7 +474,7 @@ impl BenchUpApp {
                     (start.is_some() && self.drawing.is_none() && self.tool != Tool::Dimensions)
                         .then(|| self.axis_constraint())
                         .flatten();
-                snap_with_geometry(
+                snap_with_geometry_hint(
                     target,
                     configured_spacing(&self.doc.camera, &self.doc.display),
                     plane.or_else(|| {
@@ -441,9 +485,48 @@ impl BenchUpApp {
                     movement_axis(target.point, start, constraint, self.doc.snap_to_axes),
                     model,
                     None,
+                    hit,
                 )
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod geometry_hit_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_ray_hit_refines_only_that_edge_or_face() {
+        let mut model = benchup_core::Model::default();
+        let positions = [
+            DVec3::new(-1.,0.3,0.), DVec3::new(1.,0.3,0.),
+            DVec3::new(0.3,-1.,0.), DVec3::new(0.3,1.,0.),
+            DVec3::new(-1.,-1.,0.), DVec3::new(1.,-1.,0.),
+            DVec3::new(1.,1.,0.), DVec3::new(-1.,1.,0.),
+            DVec3::new(0.3,-1.,-1.), DVec3::new(0.3,1.,-1.),
+            DVec3::new(0.3,1.,1.), DVec3::new(0.3,-1.,1.),
+        ];
+        for (i,position) in positions.into_iter().enumerate() {
+            let id=i as u64+1;
+            model.vertices.insert(id,benchup_core::Vertex {id,position});
+        }
+        for (id,a,b) in [(20,1,2),(21,3,4)] {
+            model.edges.insert(id,benchup_core::Edge {id,a,b});
+        }
+        for (id,vertices) in [(30,vec![5,6,7,8]),(31,vec![9,10,11,12])] {
+            model.faces.insert(id,benchup_core::Face {id,vertices,holes:vec![]});
+        }
+        let target=Snap {point:DVec3::new(0.3,0.3,0.),kind:Inference::OnEdge};
+        let hinted=|target,hit|snap_with_geometry_hint(target,1.,None,None,&model,None,Some(hit));
+        assert_eq!(hinted(target,(Some(21),None)).point,DVec3::new(0.3,0.,0.));
+        assert_eq!(hinted(target,(None,None)).point,target.point);
+        assert_eq!(hinted(target,(Some(999),None)).point,target.point);
+        assert_eq!(snap_with_geometry(target,1.,None,None,&model,None).point,DVec3::new(0.,0.3,0.));
+        let target=Snap {kind:Inference::OnFace,..target};
+        assert_eq!(hinted(target,(None,Some(31))).point,DVec3::new(0.3,0.,0.));
+        assert_eq!(hinted(target,(None,Some(999))).point,target.point);
+        assert_eq!(snap_with_geometry(target,1.,None,None,&model,None).point,DVec3::ZERO);
     }
 }
 

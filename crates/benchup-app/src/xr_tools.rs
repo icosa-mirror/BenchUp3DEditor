@@ -410,7 +410,7 @@ impl BenchUpApp {
             self.drawing_reference = None;
             let normal = self.plane_lock().map_or(DVec3::Z, Axis::vector);
             self.snap = self.xr_ray_snap(pointer, None, normal);
-            self.apply_grid_snap_in_plane(Some(normal));
+            self.apply_world_grid_snap(normal,&pointer.model,pointer.hit.and_then(|hit|hit.edge),pointer.hit.and_then(|hit|hit.face));
             if let Some(snap) = self.snap {
                 self.paste_preview.as_mut().unwrap().point = snap.point;
                 if clicked {
@@ -599,7 +599,7 @@ impl BenchUpApp {
                     .flatten()
             })
             .unwrap_or(normal);
-        self.apply_grid_snap_in_plane(Some(plane));
+        self.apply_world_grid_snap(plane,&pointer.model,pointer.hit.and_then(|hit|hit.edge),pointer.hit.and_then(|hit|hit.face));
         if self.tool == Tool::Text
             && let (Some(m), Some(snap)) = (&mut self.measurement, self.snap)
         {
@@ -1062,9 +1062,16 @@ impl BenchUpApp {
             && pointer.visible_reference.is_some_and(|point|point.distance(reference.point)<1e-7));
         let mut acquired = false;
         if eligible && let Some(hit) = pointer.hit.filter(|hit|hit.edge.is_some()) {
-            let point = self.snap.filter(|snap|hit.contains(&pointer.model,snap.point))
-                .map_or(hit.point,|snap|snap.point);
-            let reference = drawing_inference::DrawingReference {edge:hit.edge.unwrap(),point};
+            let source = self.snap.filter(|snap| matches!(snap.kind,Inference::Endpoint
+                | Inference::Midpoint | Inference::FaceCenter | Inference::Origin | Inference::OnEdge)
+                && hit.contains(&pointer.model,snap.point))
+                .unwrap_or(Snap {point:hit.point,kind:Inference::OnEdge});
+            let source = if self.snap_to_grid {
+                grid::snap_with_geometry_hint(source,
+                    grid::configured_spacing(&self.doc.camera,&self.doc.display),
+                    None,None,&self.doc.model,None,Some((hit.edge,None)))
+            } else { source };
+            let reference = drawing_inference::DrawingReference {edge:hit.edge.unwrap(),point:source.point};
             if contains(reference) { state.reference=Some(reference); acquired=true; }
         }
         self.drawing_reference=state.reference;

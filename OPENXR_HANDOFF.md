@@ -630,3 +630,21 @@ incompatible-plane projections are rejected. The shared drawing_projection state
 renders the same GPU projection guide. Dimensions retain unconstrained endpoint
 acquisition. Fifteen isolated checks and the native editor build pass. The running
 preview has not been replaced; interactive confirmation remains deferred.
+
+XR grid refinement now receives the ray's exact edge/face IDs and evaluated
+model snapshot. On-edge/on-face quantization looks up only those candidates;
+missing hits keep their coordinates instead of falling back to a model-wide
+search. Paste and drawing/measurement paths use this handoff. The original
+non-XR callers retain their existing unhinted lookup behavior. A focused exact-
+source regression check passes for intersecting edges and overlapping faces,
+including missing IDs and the original unhinted outputs. Retained drawing
+references use the same bounded edge refinement before acquiring a coordinate,
+so grid snapping does not leave the reference at the raw off-grid hit.
+
+This removes a model-wide scan from XR per-frame grid refinement; it does not
+establish a measured performance improvement. Face containment still tests the
+picked face's topology. Large-scene hardware timing and broad suites remain
+deferred. The current headset preview remains on its existing executable.
+The final native OpenXR editor build passes with both direct-hit refinement and
+quantized reference acquisition. The executable is frozen with its milestone
+commit for the next requested clean-scene launch.
