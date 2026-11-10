@@ -1060,11 +1060,12 @@ impl BenchUpApp {
         };
         state.reference = state.reference.filter(|reference|eligible && contains(*reference)
             && pointer.visible_reference.is_some_and(|point|point.distance(reference.point)<1e-7));
+        let mut acquired = false;
         if eligible && let Some(hit) = pointer.hit.filter(|hit|hit.edge.is_some()) {
             let point = self.snap.filter(|snap|hit.contains(&pointer.model,snap.point))
                 .map_or(hit.point,|snap|snap.point);
             let reference = drawing_inference::DrawingReference {edge:hit.edge.unwrap(),point};
-            if contains(reference) { state.reference=Some(reference); }
+            if contains(reference) { state.reference=Some(reference); acquired=true; }
         }
         self.drawing_reference=state.reference;
         let (Some(reference),Some(base)) = (state.reference,self.snap) else { return; };
@@ -1078,6 +1079,15 @@ impl BenchUpApp {
         }));
         let plane = pointer.hit.filter(|hit|base.kind == Inference::OnFace && hit.face.is_some())
             .map_or((start.unwrap_or(DVec3::ZERO),normal),|hit|(hit.point,hit.normal));
+        if self.tool != Tool::Dimensions
+            && let Some((start,axis)) = start.zip(self.single_axis_lock())
+            && let Some(snap) = crate::xr::world_inference::reference_projection(
+                pointer.ray,reference.point,start,axis,Some(plane),acquired)
+        {
+            self.snap=Some(snap);
+            self.drawing_projection=Some((reference.point,snap.point));
+            return;
+        }
         if let Some((snap,guide)) = crate::xr::world_inference::reference_axis(pointer.ray,reference.point,constraint,Some(plane)) {
             self.snap=Some(snap);
             self.drawing_guide=Some(guide);

@@ -621,3 +621,12 @@ As remain available. The default preview has no deadline. The current manually
 launched reference preview has not been stopped or replaced by this change.
 PowerShell syntax parsing passes; the new launch path awaits the next requested
 preview launch.
+
+Locked-axis XR reference inference now also transfers the acquired reference's
+coordinate onto the locked axis, matching desktop's coordinate-projection path.
+A currently hovered reference may select an endpoint away from the ray; a retained
+reference requires aiming near that endpoint. Degenerate, behind-ray and
+incompatible-plane projections are rejected. The shared drawing_projection state
+renders the same GPU projection guide. Dimensions retain unconstrained endpoint
+acquisition. Fifteen isolated checks and the native editor build pass. The running
+preview has not been replaced; interactive confirmation remains deferred.

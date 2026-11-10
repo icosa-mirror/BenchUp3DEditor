@@ -1,6 +1,37 @@
 //! Bounded model-space reference inference, independent of a desktop camera.
 use benchup_core::{Axis, AxisGuide, DVec3, Inference, Ray, Snap, inference::AxisConstraint};
 
+/// A hovered reference supplies a coordinate even if the locked endpoint is
+/// away from the ray. After acquisition, the ray must approach that endpoint.
+pub(crate) fn reference_projection(
+    ray: Ray,
+    reference: DVec3,
+    start: DVec3,
+    axis: Axis,
+    plane: Option<(DVec3, DVec3)>,
+    acquiring: bool,
+) -> Option<Snap> {
+    let direction = axis.vector();
+    let point = start + direction * (reference - start).dot(direction);
+    if point.distance(start) < 1e-7
+        || plane.is_some_and(|(origin, normal)| (point - origin).dot(normal).abs() > 1e-6)
+    {
+        return None;
+    }
+    let delta = point - ray.origin;
+    let depth = delta.dot(ray.direction);
+    if depth <= 0. || !depth.is_finite() {
+        return None;
+    }
+    if !acquiring && (delta - ray.direction * depth).length() / depth > 0.01 {
+        return None;
+    }
+    Some(Snap {
+        point,
+        kind: Inference::Aligned,
+    })
+}
+
 pub(crate) fn reference_axis(
     ray: Ray,
     reference: DVec3,
@@ -66,6 +97,61 @@ pub(crate) fn reference_axis(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn locked_projection_follows_acquired_coordinate_then_requires_nearby_aim() {
+        let ray = Ray {
+            origin: DVec3::new(2., 3., 2.),
+            direction: -DVec3::Z,
+        };
+        let reference = DVec3::new(2., 3., 0.);
+        let plane = Some((DVec3::ZERO, DVec3::Z));
+        assert_eq!(
+            reference_projection(ray, reference, DVec3::ZERO, Axis::X, plane, true)
+                .unwrap()
+                .point,
+            DVec3::new(2., 0., 0.)
+        );
+        assert!(reference_projection(ray, reference, DVec3::ZERO, Axis::X, plane, false).is_none());
+        let ray = Ray {
+            origin: DVec3::new(2., 0.005, 2.),
+            ..ray
+        };
+        assert!(reference_projection(ray, reference, DVec3::ZERO, Axis::X, plane, false).is_some());
+    }
+    #[test]
+    fn locked_projection_rejects_zero_extent_behind_and_off_plane_targets() {
+        let ray = Ray {
+            origin: DVec3::new(2., 3., 2.),
+            direction: -DVec3::Z,
+        };
+        let reference = DVec3::new(2., 3., 0.);
+        assert!(reference_projection(ray, reference, DVec3::ZERO, Axis::Z, None, true).is_none());
+        assert!(
+            reference_projection(
+                Ray {
+                    direction: DVec3::Z,
+                    ..ray
+                },
+                reference,
+                DVec3::ZERO,
+                Axis::X,
+                None,
+                true
+            )
+            .is_none()
+        );
+        assert!(
+            reference_projection(
+                ray,
+                reference,
+                DVec3::ZERO,
+                Axis::X,
+                Some((DVec3::Y, DVec3::Y)),
+                true
+            )
+            .is_none()
+        );
+    }
     #[test]
     fn reference_axes_intersect_working_planes_and_locked_axes() {
         let ray = Ray {
