@@ -42,6 +42,7 @@ pub(super) struct Text {
     key: Option<Key>,
     markers: renderer::GroupMarkerCache,
     entities: renderer::EntityCache,
+    picking: super::world_labels::Labels,
     meshes: Vec<(
         DVec3,
         egui::epaint::Mesh,
@@ -101,6 +102,7 @@ impl Text {
             key: None,
             markers: Default::default(),
             entities: Default::default(),
+            picking: Default::default(),
             meshes: Vec::new(),
             owner_slots: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("BenchUpXR label owners"),
@@ -164,6 +166,8 @@ impl Text {
             }
         };
         let mut labels = Vec::new();
+        let mut label_ids = std::collections::BTreeMap::new();
+        let mut hit_labels = Vec::new();
         let mut owners = std::collections::BTreeMap::<usize, Vec<u64>>::new();
         let mut backgrounds = std::collections::BTreeMap::new();
         for label in source
@@ -223,6 +227,7 @@ impl Text {
                 for (a, b) in [(2, 3), (3, 2)] {
                     ticks.push((points[a], points[b], ink.to_normalized_gamma_f32()));
                 }
+                label_ids.insert(labels.len(), dimension.id);
                 labels.push((
                     (points[2] + points[3]) * 0.5,
                     source.display.units.format_length(dimension.length(model)),
@@ -238,6 +243,7 @@ impl Text {
             let points = text.layout(model);
             let ink = color(text.id);
             lines.push((points[0], points[1], ink.to_normalized_gamma_f32()));
+            label_ids.insert(labels.len(), text.id);
             labels.push((
                 points[1],
                 text.text.clone(),
@@ -257,6 +263,13 @@ impl Text {
                     egui::Pos2::ZERO,
                     galley.size() + egui::vec2(12.0, 8.0),
                 );
+                if let Some(id) = label_ids.remove(&index) {
+                    hit_labels.push(super::world_labels::Label {
+                        id, anchor,
+                        bounds:[bounds.min.x as f64,bounds.min.y as f64,
+                            bounds.max.x as f64,bounds.max.y as f64],
+                    });
+                }
                 (
                     anchor,
                     vec![
@@ -272,6 +285,7 @@ impl Text {
                 )
             })
             .collect();
+        self.picking.update(hit_labels);
         for billboard in source
             .overlays
             .billboards
@@ -562,6 +576,13 @@ impl Text {
         queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&data));
     }
 
+    pub fn pick_ray(
+        &self, ray: benchup_core::Ray, view: super::world_labels::View,
+        visible: impl Fn(u64, DVec3, DVec3) -> bool,
+    ) -> Option<(u64, DVec3)> {
+        self.picking.pick(ray, view, visible)
+    }
+
     pub fn clear(&mut self) {
         if self.key.take().is_some() {
             self.meshes.clear();
@@ -571,6 +592,7 @@ impl Text {
             self.vertices = None;
             self.indices = None;
             self.entities = Default::default();
+            self.picking = Default::default();
             self.markers = Default::default();
             self.dirty = true;
         }

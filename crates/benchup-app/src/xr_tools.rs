@@ -11,6 +11,7 @@ pub(crate) struct Hit {
     pub guide: Option<(DVec3, DVec3)>,
     pub guide_points: [Option<DVec3>; 8],
     pub flip: Option<Axis>,
+    pub annotation: Option<u64>,
     pub edge_targets: [Option<DVec3>; 3],
     pub point: DVec3,
     pub normal: DVec3,
@@ -479,6 +480,17 @@ impl BenchUpApp {
                     .into_iter()
                     .collect();
                 ctx.request_repaint();
+            }
+            return;
+        }
+        if self.tool == Tool::Text && self.measurement.is_none()
+            && let Some(id) = pointer.hit.and_then(|hit|hit.annotation)
+                .filter(|id|self.doc.model.texts.contains_key(id))
+        {
+            self.snap = None;
+            if clicked {
+                self.selected = BTreeSet::from([id]);
+                self.begin_text_edit(id, ctx);
             }
             return;
         }

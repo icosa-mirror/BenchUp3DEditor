@@ -230,7 +230,7 @@ on-guide inference. Dense clusters beyond these local limits may omit a target;
 there is no full-scene pairwise intersection scan. Seven isolated checks pass.
 
 Remaining: off-face nearby geometry; desktop reference-acquisition parity; controller paths for
-direct annotation picking. Legacy desktop-only navigation modes
+annotation leader/extension-line picking. Legacy desktop-only navigation modes
 remain available through the panel and no longer silently switch to Select.
 The native OpenXR example build passes. Desktop-panel and immersive-eye startup
 snapshots pass on the RTX 4090 Vulkan backend without starting an OpenXR session;
@@ -551,3 +551,24 @@ control inference. Flip handles do not capture paste rays. This uses the same
 shared paste preview, cancellation and atomic document operation as before.
 The native editor build passes for this routing change. No preview process is
 running; interactive guide, flip and paste checks await the user's next launch.
+
+
+Saved text and dimension label rectangles now accept controller hits. Their
+rectangles come from the same font layout as the retained GPU labels. A retained
+anchor hierarchy culls candidates; only nearby rectangles are intersected using
+the shader's shared head basis, font scale and 0.3–8 metre size clamp. The tree
+is reused when only head motion or label colour changes. Input and rendering
+share one predicted head-space sample per frame.
+
+Select, Erase, Move, Rotate and Scale use the existing context entity and shared
+operations. Text opens an existing editable text in the shared modal, using the
+native keyboard/clipboard bridge. New-text placement, active modeling and paste
+retain their input ownership. Hidden/out-of-scope annotations, dimensions hidden
+by the display option, clipped anchors and face-occluded label portions are
+excluded. Picking still uses the original face hierarchy for occlusion; cap-only
+occlusion remains part of the existing cap-picking limitation.
+
+The native OpenXR editor build and ten isolated spatial checks pass. The two
+annotation checks cover off-centre hits, visibility, basis rotation, scene scale
+and shader distance clamps. Headset confirmation remains deferred. Leader and
+extension-line picking is the next annotation step.

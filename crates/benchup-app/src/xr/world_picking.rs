@@ -55,6 +55,9 @@ impl Bounds {
             .max((self.hi - ray.origin).abs())
             .length();
         let radius = (far.min(limit) * slope).max(1e-12);
+        self.padded_entry(ray, radius, limit)
+    }
+    fn padded_entry(self, ray: Ray, radius: f64, limit: f64) -> Option<f64> {
         let lo = self.lo - DVec3::splat(radius);
         let hi = self.hi + DVec3::splat(radius);
         let (mut enter, mut exit) = (0_f64, limit);
@@ -101,6 +104,78 @@ pub(super) struct Index {
 }
 
 impl Index {
+    pub fn replace_points(&mut self, points: impl IntoIterator<Item = (u64, DVec3)>) {
+        self.edges.clear();
+        self.edges
+            .extend(points.into_iter().filter_map(|(id, point)| {
+                point.is_finite().then_some(Edge {
+                    id,
+                    a: point,
+                    b: point,
+                })
+            }));
+        self.nodes.clear();
+        if !self.edges.is_empty() {
+            self.build(0, self.edges.len());
+        }
+        self.source = None;
+        self.guide_frame = None;
+    }
+
+    /// Query retained point anchors with a conservative radius for their geometry.
+    /// The callback tests the exact displayed shape only in intersected leaves.
+    pub fn query_padded(
+        &self,
+        ray: Ray,
+        radius: f64,
+        point: impl Fn(u64) -> Option<DVec3>,
+    ) -> Option<Hit> {
+        self.nodes.first()?;
+        if !radius.is_finite() || radius < 0. || !ray.origin.is_finite() {
+            return None;
+        }
+        let ray = Ray {
+            direction: ray.direction.try_normalize()?,
+            ..ray
+        };
+        let mut best: Option<Hit> = None;
+        let mut pending = [0_usize; usize::BITS as usize + 1];
+        let mut len = 1;
+        while len > 0 {
+            len -= 1;
+            let node = &self.nodes[pending[len]];
+            let limit = best.as_ref().map_or(f64::INFINITY, |hit| hit.depth);
+            if node.bounds.padded_entry(ray, radius, limit).is_none() {
+                continue;
+            }
+            if let Some((a, b)) = node.children {
+                pending[len] = a;
+                pending[len + 1] = b;
+                len += 2;
+            } else {
+                for edge in &self.edges[node.start..node.end] {
+                    let Some(point) = point(edge.id).filter(|p| p.is_finite()) else {
+                        continue;
+                    };
+                    let depth = (point - ray.origin).dot(ray.direction);
+                    if depth > 0.
+                        && best.as_ref().is_none_or(|hit| {
+                            depth < hit.depth || depth == hit.depth && edge.id < hit.id
+                        })
+                    {
+                        best = Some(Hit {
+                            id: edge.id,
+                            point,
+                            depth,
+                            score: 0.,
+                        });
+                    }
+                }
+            }
+        }
+        best
+    }
+
     /// Find precise guide targets near the ray without testing every guide pair.
     /// Only the nearest 16 local candidates participate (at most 120 pairs).
     pub fn guide_query(

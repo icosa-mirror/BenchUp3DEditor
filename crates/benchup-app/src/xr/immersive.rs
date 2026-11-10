@@ -20,6 +20,7 @@ pub(crate) struct Source {
     pub modeling: bool,
     pub snap_edges: bool,
     pub snap_geometry: bool,
+    pub pick_text: bool,
     pub guide_preview: Option<benchup_core::ConstructionGuide>,
     pub hover: Option<u64>,
     pub outliner_hover: BTreeSet<u64>,
@@ -302,11 +303,13 @@ impl Scene {
         }
     }
 
-    pub fn pick_ray(&mut self, ray: benchup_core::Ray, scale: f32) -> Option<super::input::SceneHit> {
+    pub fn input_head(&mut self, pose: xr::Posef) { self.head = pose_matrix(pose); }
+
+    pub fn pick_ray(&mut self, ray: benchup_core::Ray, preferences: XrPanelPreferences) -> Option<super::input::SceneHit> {
         let (Some(source), Some(placement)) = (&self.source, &self.placement) else {
             return None;
         };
-        let transform = self.navigation.matrix() * placement.model_to_tracking(scale as f64);
+        let transform = self.navigation.matrix() * placement.model_to_tracking(preferences.scene_scale as f64);
         let inverse = transform.inverse();
         let model_ray = benchup_core::Ray {
             origin: inverse.transform_point3(ray.origin),
@@ -322,9 +325,33 @@ impl Scene {
         {
             return Some(super::input::SceneHit {
                 entity, face:None, edge:None, guide:None, guide_points:[None;8],
-                flip:Some(axis), point,
+                flip:Some(axis), annotation:None, point,
                 distance:transform.transform_point3(point).distance(ray.origin),
             });
+        }
+        let annotation_tool = matches!(source.tool, benchup_core::Tool::Select
+            | benchup_core::Tool::Erase | benchup_core::Tool::Move
+            | benchup_core::Tool::Rotate | benchup_core::Tool::Scale) || source.pick_text;
+        if annotation_tool && !placing_copy && !source.modeling {
+            let units = transform.x_axis.truncate().length();
+            let view = super::world_labels::View {
+                head:inverse.transform_point3(self.head.w_axis.truncate()),
+                right:inverse.transform_vector3(self.head.x_axis.truncate()).normalize(),
+                up:inverse.transform_vector3(self.head.y_axis.truncate()).normalize(),
+                units, font_scale:(preferences.ui_scale / 1.3) as f64,
+            };
+            if let Some((id,point)) = self.text.pick_ray(model_ray, view, |id,anchor,point| {
+                let state = self.entities.get(id);
+                !state.hidden && state.context.is_some()
+                    && (!source.pick_text || state.context == Some(id) && source.model.texts.contains_key(&id))
+                    && source.display.section_contains(anchor) && self.unoccluded(model_ray.origin,point)
+            }) {
+                return Some(super::input::SceneHit {
+                    entity:self.entities.get(id).context?, annotation:Some(id),
+                    face:None, edge:None, guide:None, guide_points:[None;8], flip:None, point,
+                    distance:transform.transform_point3(point).distance(ray.origin),
+                });
+            }
         }
         let face_hit = self.picking.nearest(&self.faces, &self.entities, model_ray, false);
         let face_tool = !placing_copy && matches!(source.tool,benchup_core::Tool::Paint | benchup_core::Tool::PushPull | benchup_core::Tool::Offset);
@@ -387,6 +414,7 @@ impl Scene {
             guide,
             guide_points,
             flip: None,
+            annotation: None,
             point,
             distance: tracking_point.distance(ray.origin),
         })
@@ -395,6 +423,10 @@ impl Scene {
     fn point_visible(&self, origin: DVec3, point: DVec3) -> bool {
         let Some(source) = &self.source else {return false;};
         if !source.display.section_contains(point) {return false;}
+        self.unoccluded(origin,point)
+    }
+
+    fn unoccluded(&self, origin: DVec3, point: DVec3) -> bool {
         let distance = point.distance(origin);
         if distance < 1e-12 {return false;}
         let ray = benchup_core::Ray {origin,direction:(point-origin)/distance};
@@ -419,6 +451,7 @@ impl Scene {
                     guide:hit.guide.map(|id|placement.guide_frame().segment(&source.model.guides[&id])),
                     guide_points:hit.guide_points,
                     flip:hit.flip,
+                    annotation:hit.annotation,
                     normal:hit.flip.map(|axis|axis.vector()).unwrap_or_else(||hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal)),
                     center:snapping.then(||hit.face.and_then(|face|self.faces.snap_center(&source.model,face)).filter(|&point|self.point_visible(ray.origin,point))).flatten(),
                     edge_targets:snapping.then_some(hit.edge).flatten().map_or([None;3],|id| {

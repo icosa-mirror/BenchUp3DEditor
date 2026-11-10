@@ -784,6 +784,9 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                 height: preferences.width_metres * size.height as f32 / size.width as f32,
             };
         }
+        let head_location = if frame.should_render && editor.is_some() {
+            Some(view_space.locate(&space, frame.predicted_display_time)?)
+        } else { None };
         if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
             let logical = editor.logical_size();
             let panel = super::EditorPanel::new(
@@ -793,6 +796,9 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             .ok_or("Invalid editor panel dimensions")?;
             let now = Instant::now();
             if frame.should_render {
+                if let Some(head) = &head_location {
+                    editor.scene_input_head(upright_anchor(head.pose).unwrap_or(anchor));
+                }
                 let input = controllers.sample(
                     &session,
                     &space,
@@ -841,7 +847,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                         xr::ViewStateFlags::POSITION_VALID | xr::ViewStateFlags::ORIENTATION_VALID,
                     )
                 {
-                    let head = view_space.locate(&space, frame.predicted_display_time)?;
+                    let head = head_location.as_ref().ok_or("Missing XR frame head pose")?;
                     let scene_anchor = upright_anchor(head.pose).unwrap_or(anchor);
                     editor.begin_immersive_frame(scene_anchor);
                     for (eye_index, eye) in views.iter().enumerate() {

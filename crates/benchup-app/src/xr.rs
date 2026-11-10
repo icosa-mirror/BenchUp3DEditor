@@ -30,6 +30,9 @@ mod world_lines;
 mod world_text;
 
 #[cfg(feature = "openxr")]
+mod world_labels;
+
+#[cfg(feature = "openxr")]
 mod world_surfaces;
 
 #[cfg(feature = "openxr")]

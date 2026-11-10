@@ -415,8 +415,10 @@ impl Editor {
 
     pub(super) fn pick_scene_ray(&mut self, ray: benchup_core::Ray) -> Option<super::input::SceneHit> {
         self.scene
-            .pick_ray(ray, self.app.xr_panel_preferences().scene_scale)
+            .pick_ray(ray, self.app.xr_panel_preferences())
     }
+
+    pub(super) fn scene_input_head(&mut self, pose: openxr::Posef) { self.scene.input_head(pose); }
 
     pub(super) fn take_recenter_request(&mut self) -> bool {
         std::mem::take(&mut self.recenter_requested)

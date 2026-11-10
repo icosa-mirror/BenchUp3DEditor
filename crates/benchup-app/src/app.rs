@@ -525,6 +525,7 @@ impl BenchUpApp {
             modeling: self.modeling.is_some(),
             snap_edges: self.snap_to_edge,
             snap_geometry: self.doc.snap_to_geometry,
+            pick_text: self.tool == Tool::Text && self.measurement.is_none(),
             guide_preview: (self.history_preview.is_none() && self.create_guides
                 && self.measurement.as_ref().is_some_and(|m| !m.complete || !self.length_input.is_empty()))
                 .then(|| self.measurement_guide()).flatten(),
