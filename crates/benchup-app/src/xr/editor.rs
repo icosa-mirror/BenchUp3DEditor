@@ -99,7 +99,7 @@ pub(super) struct Editor {
     cursor: super::cursor::Cursor,
     recenter_requested: bool,
     scene: super::immersive::Scene,
-    fit_scene_requested: bool,
+    fit_scene_requested: Option<super::immersive::FitTarget>,
     world_tools: crate::app::xr_tools::State,
     native_output: Option<super::desktop::NativeOutput>,
     keyboard_modifiers: egui::Modifiers,
@@ -156,7 +156,7 @@ impl Editor {
             cursor: super::cursor::Cursor::new(device, format),
             recenter_requested: false,
             scene: super::immersive::Scene::new(device, format),
-            fit_scene_requested: true,
+            fit_scene_requested: Some(super::immersive::FitTarget::Scene),
             world_tools: Default::default(),
             native_output: None,
             keyboard_modifiers: Default::default(),
@@ -236,7 +236,7 @@ impl Editor {
         };
         let mut preferences = self.app.xr_panel_preferences();
         let mut recenter = false;
-        let mut fit_scene = false;
+        let mut fit_scene = None;
         let pointer = self
             .input
             .scene
@@ -304,7 +304,7 @@ impl Editor {
                                     .clicked()
                                 };
                                 if button("Fit 3D") {
-                                    fit_scene = true;
+                                    fit_scene = Some(super::immersive::FitTarget::Scene);
                                     preferences.scene_scale = 1.0;
                                 }
                                 if button("3D -") {
@@ -312,6 +312,12 @@ impl Editor {
                                 }
                                 if button("3D +") {
                                     preferences.scene_scale *= 1.25;
+                                }
+                                if ui.add_enabled(self.app.xr_has_selection(),
+                                    egui::Button::new(egui::RichText::new("Fit selection").size(18.0))
+                                        .min_size(egui::vec2(132.0,42.0))).clicked() {
+                                    fit_scene = Some(super::immersive::FitTarget::Selection);
+                                    preferences.scene_scale = 1.0;
                                 }
                             });
                             self.app.xr_tool_controls(ui, &mut self.preferences, &mut self.world_tools, &mut preferences);
@@ -337,7 +343,7 @@ impl Editor {
             self.ctx.set_zoom_factor(preferences.ui_scale);
         }
         self.recenter_requested |= recenter;
-        self.fit_scene_requested |= fit_scene;
+        self.fit_scene_requested = fit_scene.or(self.fit_scene_requested);
         // Immediate preference persistence uses the same shared capture/restore
         // path as desktop, even without document edits or framework autosave.
         self.preferences.flush();

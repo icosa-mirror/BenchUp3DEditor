@@ -45,6 +45,9 @@ struct Placement {
     anchor: xr::Posef,
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum FitTarget { Scene, Selection }
+
 pub(super) struct Scene {
     ctx: egui::Context,
     cache: renderer::SceneCache,
@@ -112,8 +115,8 @@ impl Scene {
         }
     }
 
-    pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: bool) {
-        if fit {
+    pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: Option<FitTarget>) {
+        if fit.is_some() {
             self.navigation.reset();
         }
         self.head = pose_matrix(anchor);
@@ -149,8 +152,10 @@ impl Scene {
             self.paste_entities = Default::default();
         }
         self.picking.update(&self.faces);
-        if self.placement.is_none() || fit {
-            let bounds = source.model.bounds().or_else(|| {
+        if self.placement.is_none() || fit.is_some() {
+            let selected = matches!(fit,Some(FitTarget::Selection))
+                .then(||source.model.selection_bounds(&source.selected)).flatten();
+            let bounds = selected.or_else(||source.model.bounds()).or_else(|| {
                 source
                     .paste
                     .as_ref()

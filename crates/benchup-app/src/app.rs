@@ -518,6 +518,9 @@ impl BenchUpApp {
     pub(crate) fn xr_panel_preferences(&self) -> crate::app_host::XrPanelPreferences { self.xr_panel }
 
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    pub(crate) fn xr_has_selection(&self) -> bool { !self.selected.is_empty() }
+
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     pub(crate) fn xr_scene_source(&mut self, ctx: &egui::Context) -> crate::xr::immersive::Source {
         self.prepare_render_model(ctx);
         self.prepare_picking();

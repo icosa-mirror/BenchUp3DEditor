@@ -78,6 +78,8 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
    translate, rotate and scale the scene; Keep upright defaults on and restricts
    rotation to yaw while retaining vertical translation and scaling. Navigation
    reserves pointing input and requires release-to-rearm after loss/cancellation.
+   Fit 3D and Fit selection reframe the immersive placement from scene/selected
+   rendered bounds; they do not move the desktop camera.
 
 ## Spatial parity inventory
 
@@ -103,7 +105,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 
 | # | Interaction | Current behavior and limits |
 |---|---|---|
-| 1 | Selection and navigation | World hover/replace/toggle select; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D and recenter; UI/modal/grip ownership and cancellation |
+| 1 | Selection and navigation | World hover/replace/toggle select; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
 | 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate trigger grabs use shared modeling state and commits; original-document guards reject unsupported evaluated-only targets |
@@ -149,8 +151,9 @@ or complete-parity claims.
    under head movement; controller cursor/clicks and scrolling work; Closer/Text +
    and Recenter work. Basic immersive viewing and two-grip navigation received
    positive feedback. This is not a complete overlay/tool/display comparison.
-2. The latest native build passes for shared scene preparation and scoped XR
-   snapshots. Two focused application tests prove edit refresh without 2D painting
+2. The latest native build passes for immersive Fit selection and shared scene
+   preparation/scoped snapshots. Its new control fits in the isolated GPU panel
+   snapshot; headset framing confirmation is not recorded. Two focused application tests prove edit refresh without 2D painting
    and group-scope propagation with stable geometry snapshots. An isolated clean-
    example eye snapshot renders 404 faces on the RTX 4090 Vulkan path and was
    inspected. Two erase regressions and the immediate-save preference regression

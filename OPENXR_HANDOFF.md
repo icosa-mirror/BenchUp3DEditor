@@ -59,6 +59,9 @@ Git history retains the earlier milestones and historical handoff revisions.
    so XR source refresh no longer relies on `paint_evaluated_scene`. Scoped XR
    snapshots propagate editing context; stage and eye rendering share one frame
    source rather than preparing the scene again outside the UI pass.
+   Fit selection now frames the selected rendered bounds in immersive space,
+   reusing placement/navigation reset and saved zoom handling; empty/degenerate
+   bounds retain the existing fallback. The desktop camera is not changed.
 3. `desktop.rs` owns the normal taskbar window on the main thread. XR runs on a
    worker. Physical keyboard/text/IME and Windows clipboard are bridged; desktop
    mouse/focus do not replace headset pointing/focus. Close/Alt+F4 and shared
@@ -158,7 +161,10 @@ Git history retains the earlier milestones and historical handoff revisions.
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-2. Latest native build: `.local/openxr/shared-scene-preparation-final-build.log`.
+2. Latest native build: `.local/openxr/fit-selection-build.log`.
+   `.local/openxr/fit-selection-controls.png` was checked for control fit in the
+   GPU-rendered panel using a fresh example and carried-forward preferences.
+   This verifies layout, not live selected-target framing in the headset.
    `.local/openxr/scene-source-tests.log` passes two focused application cases
    without desktop painting: edit refresh and editing-scope propagation with
    stable snapshots. `.local/openxr/shared-scene-preparation-eye.png` was rendered
