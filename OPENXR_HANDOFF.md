@@ -1,6 +1,6 @@
 # BenchUp OpenXR development handoff
 
-Updated: 2026-11-10. Current implementation baseline: `404a8f8`.
+Updated: 2026-11-10. Status follows the current `feat/openxr-phase1` worktree.
 Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continuing.
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
@@ -34,7 +34,12 @@ Git history retains the earlier milestones and historical handoff revisions.
 5. `d1b2335`: clean-example preview launcher, preserving preferences and app autosave.
 6. `c535cad`: reference-coordinate projection onto locked axes.
 7. `404a8f8`: direct-hit XR grid refinement and quantized reference acquisition.
-8. Frozen executables are under `.local/openxr/preview-builds/<commit>/`.
+8. XR multi-selection now has a saved Add/remove selection control and honors
+   native Shift using desktop toggle semantics. Empty misses retain selection in
+   that mode. The shared Edit menu already exposes context entry/exit and entity
+   actions without requiring the 2D model view. Selection/gesture parity beyond
+   ray toggle still needs auditing.
+9. Frozen executables are under `.local/openxr/preview-builds/<commit>/`.
    The last requested manual launch used `27ae6c1`; it must not be confused with
    the latest built executable. Inspect current process ownership/path before
    closing, replacing or claiming that a preview runs the newest code.
@@ -137,7 +142,10 @@ Git history retains the earlier milestones and historical handoff revisions.
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-2. The latest native build log is `.local/openxr/world-grid-hit-final-build.log`.
+2. The latest native build log is `.local/openxr/multi-selection-build.log`.
+   `.local/openxr/selection-preference-checks.log` passes a focused legacy-default/
+   saved-mode round trip. The shared immediate-save preference test was extended;
+   the full application suite was not run.
    `.local/openxr/reference-projection-checks.log` records 15 isolated spatial/
    reference checks. `.local/openxr/grid-hit-checks.log` records one focused grid
    regression against the exact pure snapping source. These are not a full suite.

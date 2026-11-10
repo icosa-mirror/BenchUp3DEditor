@@ -1,6 +1,7 @@
 # BenchUp OpenXR implementation plan
 
-Updated: 2026-11-10. Implementation baseline: `404a8f8` on `feat/openxr-phase1`.
+Updated: 2026-11-10. Status follows the current `feat/openxr-phase1` worktree;
+completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
@@ -83,7 +84,7 @@ The numbered rows are the checklist for the replacement milestone.
 
 | # | Area | Implemented | Remaining audit/gap |
 |---|---|---|---|
-| 1 | Selection and context | Shared selection/hover, eraser/outliner/joinery colors, context bounds, endpoint/edge cues; world entity picking | Audit editing-context entry/exit, context actions and all remaining selection gestures without the 2D viewport |
+| 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation |
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired edge references and locked-axis projection | Broader off-face/global alignment; references to evaluated-only edges; prove every desktop lock/precision workflow has an XR route |
 | 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Audit every desktop handle/preview and precision/cancel path against its XR route |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
@@ -99,7 +100,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 
 | # | Interaction | Current behavior and limits |
 |---|---|---|
-| 1 | Selection and navigation | World hover/select; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D and recenter; UI/modal/grip ownership and cancellation |
+| 1 | Selection and navigation | World hover/replace/toggle select; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
 | 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate trigger grabs use shared modeling state and commits; original-document guards reject unsupported evaluated-only targets |
@@ -144,7 +145,9 @@ or complete-parity claims.
    and Recenter work. Basic immersive viewing and two-grip navigation received
    positive feedback. This is not a complete overlay/tool/display comparison.
 2. Native builds and previous RTX 4090 Vulkan panel/eye snapshots establish working
-   rendering paths. The latest native OpenXR editor build passes for `404a8f8`.
+   rendering paths. The native OpenXR editor build passes for the selection milestone. A focused
+   preference check passes for legacy defaults and saved-mode restoration; shared
+   immediate-save coverage is extended but the full application suite is deferred.
    Fifteen isolated picking/reference checks and a separate focused grid regression
    pass. These do not constitute a full application suite or headset validation
    of recent annotations, references, sections, flip and grid changes.

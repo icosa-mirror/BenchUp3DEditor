@@ -130,6 +130,7 @@ impl BenchUpApp {
         ui: &mut egui::Ui,
         storage: &mut dyn eframe::Storage,
         state: &mut State,
+        preferences: &mut crate::app_host::XrPanelPreferences,
     ) {
         let ctx = ui.ctx().clone();
         ui.add_enabled_ui(self.xr_scene_interaction_enabled(&ctx), |ui| {
@@ -235,6 +236,13 @@ impl BenchUpApp {
             });
             let mut changed = false;
             match self.tool {
+                Tool::Select => {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut preferences.extend_selection,
+                            egui::RichText::new("Add/remove selection").size(18.));
+                        ui.label(egui::RichText::new(format!("{} selected",self.selected.len())).size(18.));
+                    });
+                }
                 Tool::TapeMeasure | Tool::Protractor => {
                     changed |= ui
                         .checkbox(
@@ -482,12 +490,17 @@ impl BenchUpApp {
         }
         if self.tool == Tool::Select {
             if clicked {
-                self.selected = pointer
+                let hit = pointer
                     .hit
                     .map(|hit| hit.entity)
-                    .filter(|id| self.doc.model.contains_entity(id))
-                    .into_iter()
-                    .collect();
+                    .filter(|id| self.doc.model.contains_entity(id));
+                if self.xr_panel.extend_selection || ctx.input(|input|input.modifiers.shift) {
+                    if let Some(id) = hit && !self.selected.remove(&id) {
+                        self.selected.insert(id);
+                    }
+                } else {
+                    self.selected = hit.into_iter().collect();
+                }
                 ctx.request_repaint();
             }
             return;

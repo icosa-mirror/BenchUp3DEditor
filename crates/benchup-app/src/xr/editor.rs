@@ -307,7 +307,7 @@ impl Editor {
                                     preferences.scene_scale *= 1.25;
                                 }
                             });
-                            self.app.xr_tool_controls(ui, &mut self.preferences, &mut self.world_tools);
+                            self.app.xr_tool_controls(ui, &mut self.preferences, &mut self.world_tools, &mut preferences);
                 });
             }
             self.app
