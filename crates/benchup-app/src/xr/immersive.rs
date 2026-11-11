@@ -867,24 +867,13 @@ impl Scene {
                             (egui::Color32::from_rgb(0, 174, 214), 1.5)
                         };
                         let color = color.to_normalized_gamma_f32();
-                        if guide.direction.is_some() {
-                            let (a,b) = placement.guide_frame().segment(guide);
-                            lines.push(Line::dashed(
-                                a - origin,
-                                b - origin,
-                                color,
-                                width,
-                            ));
-                        } else {
-                            lines.push(Line::marker(guide.origin - origin, color, 4.0).stroke_width(width).overlay());
-                        }
+                        lines.push(Line::guide(guide, origin, color, width));
                     }
                 }
                 if source.display.guides && let Some(guide) = &source.guide_preview {
-                    let (a, b) = placement.guide_frame().segment(guide);
-                    lines.push(Line::dashed(
-                        a - origin,
-                        b - origin,
+                    lines.push(Line::guide(
+                        guide,
+                        origin,
                         egui::Color32::from_rgb(0, 174, 214).to_normalized_gamma_f32(),
                         1.5,
                     ));
@@ -1043,6 +1032,7 @@ impl Scene {
                         for &(point, toward, color) in &self.paste_text.leader_arrows {
                             lines.push(Line::leader_arrow(point - paste_origin, toward - paste_origin, color));
                         }
+                        super::world_lines::append_clipboard_guides(&mut lines, &paste.model, source.display.guides, paste_origin);
                         lines
                     },
                 );
@@ -1054,6 +1044,7 @@ impl Scene {
                     &[],
                     limits,
                     paste_origin,
+                    placement.guide_frame().translated(-paste.offset),
                 );
             }
             let mut pointer = Vec::new();
@@ -1087,6 +1078,7 @@ impl Scene {
                 &pointer,
                 source.display.section_limits(),
                 origin,
+                placement.guide_frame(),
             );
         }
         // Eye output contains only a GPU callback. Its private egui context must

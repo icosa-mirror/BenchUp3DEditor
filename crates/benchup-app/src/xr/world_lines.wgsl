@@ -1,4 +1,4 @@
-struct View { matrix: mat4x4<f32>, viewport: vec4<f32>,limits:vec4<f32> }
+struct View { matrix: mat4x4<f32>, viewport: vec4<f32>,limits:vec4<f32>,guides:vec4<f32> }
 @group(0) @binding(0) var<uniform> view: View;
 @group(1) @binding(0) var<storage,read> owner_slots:array<u32>;
 @group(1) @binding(1) var visibility:texture_2d<u32>;
@@ -21,6 +21,11 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     var out: Output;
     out.position = vec4(2.0, 2.0, 0.0, 1.0);
     var world_a=start;var world_b=end;
+    if style.x==7.0 {
+        let center=start+end*dot(view.guides.xyz-start,end);
+        world_a=center-end*view.guides.w;
+        world_b=center+end*view.guides.w;
+    }
     if view.viewport.z>0.0 && style.w==0.0 {
         for(var axis=0u;axis<3u;axis++) {
             let limit=view.limits[axis];
@@ -84,7 +89,7 @@ fn fragment(input: Output) -> @location(0) vec4<f32> {
         loop {if lo>=hi {break;}let mid=lo+(hi-lo)/2u;if owner_slots[mid]<face.x {lo=mid+1u;} else {hi=mid;}}
         if lo>=input.owners.y || owner_slots[lo]!=face.x {discard;}
     }
-    if input.style.x == 0.0 && input.style.y > 0.0 && input.local.x % input.style.y > input.style.z { discard; }
+    if (input.style.x == 0.0 || input.style.x == 7.0) && input.style.y > 0.0 && input.local.x % input.style.y > input.style.z { discard; }
     var amount=clamp(input.width*0.5+0.5-abs(input.local.y),0.0,1.0);
     if input.style.x==1.0 {let distance=min(abs(input.local.x-input.local.y),abs(input.local.x+input.local.y))*0.70710678;amount=clamp(input.width*0.5+0.5-distance,0.0,1.0);}
     if input.style.x==5.0 {amount=clamp(input.style.y+0.5-length(input.local),0.0,1.0);}

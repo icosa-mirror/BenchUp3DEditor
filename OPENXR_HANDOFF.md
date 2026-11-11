@@ -36,8 +36,9 @@ creation landed in `25b514f`; shared immersive View controls landed in `25fd106`
 Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
 guards landed in `466b9f4`; controller joint icons landed in `d7c05f3`. Current work
 has completed C13, controller enclosing-window selection, and C14's direct
-selection/context gestures. C15 coding is implemented; C16's broader tool,
-overlay and command parity audit is next. The plan has stable coding
+selection/context gestures. C15 coding is implemented; C16's fourteen confirmed
+source gaps are implemented and the final route reconciliation is active.
+The plan has stable coding
 milestone IDs and checkboxes, separate from verification. Do not derive an effort
 percentage by counting unequal checklist rows; keep audit-discovered work visible.
 Generated caps remain read-only surfaces with optional editable group ownership.
@@ -490,8 +491,8 @@ retained instances per axis and a distinct GPU style which fades premultiplied
 gamma colour before linear conversion, following the desktop colour route.
 Perspective clip W supplies live-eye forward depth after clipping. The origin
 depth ratio includes navigation scale; an absolute-depth/minimum convention
-matches the native grid when the origin crosses the eye. The existing 96-byte
-line uniform uses its final spare component for this reference depth; no new
+matches the native grid when the origin crosses the eye. The line uniform uses
+the limits vector's W component for this reference depth; no new
 CPU-projected axis meshes or saved settings are added. Shader/math evidence is
 recorded in `axis-display-tests.log`: both the complete world-line shader
 parser/validator and the shared-opacity comparison pass. The latter covers three
@@ -528,14 +529,29 @@ both dashed lines and point crosses. Native guides currently change colour but
 retained a fixed 1.5-point stroke. A13 now matches these states while preserving
 the native erasing colour and retained line/point instances. The existing 6-on/4-off native
 guide dash pattern already matches the desktop construction-guide pattern.
-Combined native guide build evidence is pending; this bounded width correction
+The combined native guide build passes; this bounded width correction
 does not add a new setting or regression test.
 
-A14 is a confirmed clipboard-preview omission: the native paste reference buffer
-contains text leaders/ticks/arrowheads but not the clipboard's construction guides.
-Desktop `paint_construction_guides` explicitly draws both copied line guides and
-copied point crosses. Add them to the retained native paste instances under the
-existing Guides setting and hidden-guide rule, using the same paste transform.
+A14 closes a confirmed clipboard-preview omission: the native paste reference
+buffer previously contained text leaders/ticks/arrowheads but not construction
+guides. It now includes copied lines and point crosses under the existing Guides
+setting and hidden-guide rule, using the same paste transform. Lines retain an
+anchor/direction instance; each anchor is rebased near the buffer origin once in
+f64, preserving small perpendicular offsets on remote diagonal guides. A new
+guide-frame vector in the 112-byte line uniform
+supplies the current finite displayed span. The clipboard frame is translated
+back by the paste offset, keeping its world span consistent with the main scene
+as the ghost moves. Point crosses retain their source-relative coordinates.
+Main-scene and live-preview guides use this same GPU factory; existing colours,
+selection/hover widths, dash pattern and overlay visibility are retained.
+`clipboard-guides-tests.log` passes three focused cases: complete world-line WGSL
+validation, inherited axis fade math, and copied-guide visibility/toggle/rebasing/
+live-span checks including a remote diagonal anchor with a small perpendicular
+offset. `clipboard-guides-build.log` passes the combined native editor build
+without warnings. Its executable, including A13 and A14, is frozen under this
+milestone's commit in `.local/openxr/preview-builds/`; no headset session was
+launched. No headset or broad backend/performance acceptance is inferred from
+these source/math checks. C16 remains open for final route reconciliation.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid

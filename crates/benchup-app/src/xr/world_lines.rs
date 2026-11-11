@@ -34,6 +34,21 @@ impl Line {
     pub fn axis(a: glam::DVec3, b: glam::DVec3, color: [f32; 4], width: f32) -> Self {
         Self { style: [6.0, 0.0, 0.0, 0.0], ..Self::new(a, b, color, width) }
     }
+    pub fn guide(guide: &benchup_core::ConstructionGuide, origin: glam::DVec3, color: [f32; 4], width: f32) -> Self {
+        match guide.direction {
+            Some(direction) => {
+                // Rebase once in f64 so a remote origin along an infinite line
+                // cannot cause large f32 cancellation in the live GPU span.
+                let relative = guide.origin - origin;
+                let anchor = relative - direction * relative.dot(direction);
+                Self {
+                    style: [7.0, 10.0, 6.0, 1.0],
+                    ..Self::new(anchor, direction, color, width)
+                }
+            },
+            None => Self::marker(guide.origin - origin, color, 4.0).stroke_width(width).overlay(),
+        }
+    }
 
     pub fn marker(point: glam::DVec3, color: [f32; 4], radius: f32) -> Self {
         Self {
@@ -99,6 +114,13 @@ pub(super) struct Lines {
     bindings: [wgpu::BindGroup; 2],
 }
 
+pub(super) fn append_clipboard_guides(lines: &mut Vec<Line>, model: &benchup_core::Model, enabled: bool, origin: glam::DVec3) {
+    if !enabled { return; }
+    let color = eframe::egui::Color32::from_rgb(0, 174, 214).to_normalized_gamma_f32();
+    lines.extend(model.guides.iter().filter(|(id, _)| !model.is_hidden(**id))
+        .map(|(_, guide)| Line::guide(guide, origin, color, 1.5)));
+}
+
 fn reference_origin_depth(matrix: glam::DMat4, origin: glam::DVec3) -> f32 {
     // Perspective clip W is forward depth. Both numerator and fragment depth
     // include navigation scale, so their ratio remains in model units. Use the
@@ -126,7 +148,7 @@ impl Lines {
         let uniform = || {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("BenchUpXR overlay view"),
-                size: 96,
+                size: 112,
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
@@ -201,9 +223,10 @@ impl Lines {
         pointer: &[Line],
         limits: [Option<f64>; 3],
         origin: glam::DVec3,
+        guides: super::world_picking::GuideFrame,
     ) {
         for (index, matrix) in [model_matrix, tracking_matrix].into_iter().enumerate() {
-            let mut data = [0.0f32; 24];
+            let mut data = [0.0f32; 28];
             data[..16].copy_from_slice(&matrix.as_mat4().to_cols_array());
             data[16] = size[0] as f32;
             data[17] = size[1] as f32;
@@ -212,6 +235,7 @@ impl Lines {
                 data[20 + axis] = limits[axis].map_or(f32::MAX, |v| (v - origin[axis]) as f32);
             }
             data[23] = reference_origin_depth(matrix, origin);
+            data[24..28].copy_from_slice(&(guides.center - origin).extend(guides.extent).as_vec4().to_array());
             queue.write_buffer(&self.uniforms[index], 0, bytemuck::cast_slice(&data));
         }
         self.pointer_count = pointer.len().min(32) as u32;
@@ -327,7 +351,7 @@ impl Lines {
 
 #[cfg(test)]
 mod tests {
-    use super::reference_origin_depth;
+    use super::{append_clipboard_guides, reference_origin_depth, Line};
     use glam::{DMat4, DVec3};
 
     #[test]
@@ -335,6 +359,46 @@ mod tests {
         let module = eframe::wgpu::naga::front::wgsl::parse_str(include_str!("world_lines.wgsl")).unwrap();
         eframe::wgpu::naga::valid::Validator::new(Default::default(), Default::default())
             .validate(&module).unwrap();
+    }
+
+    #[test]
+    fn world_clipboard_guides_preserve_hidden_toggle_rebasing_and_live_span() {
+        let origin = DVec3::new(1e8, -1e8, 3e7);
+        let mut model = benchup_core::Model::default();
+        let line = model.add_guide(origin + DVec3::X, Some(DVec3::Y)).unwrap();
+        model.add_guide(origin + DVec3::X * 2., None).unwrap();
+        let hidden_line = model.add_guide(origin + DVec3::X * 3., Some(DVec3::Z)).unwrap();
+        let hidden_point = model.add_guide(origin + DVec3::X * 4., None).unwrap();
+        model.hidden.extend([hidden_line, hidden_point]);
+        let mut instances = vec![Line::dot(DVec3::ZERO, [1.; 4], 2.5)];
+        append_clipboard_guides(&mut instances, &model, false, origin);
+        assert_eq!(instances.len(), 1, "Guides off must retain the other paste primitives");
+        append_clipboard_guides(&mut instances, &model, true, origin);
+        assert_eq!(instances.len(), 3, "one visible line and one visible point");
+        assert_eq!(instances[1].a, [1., 0., 0.]);
+        assert_eq!(instances[1].b, [0., 1., 0.]);
+        assert_eq!(instances[1].style[0], 7.);
+        assert_eq!(instances[2].a, [2., 0., 0.]);
+        assert_eq!(instances[2].style[0], 1.);
+        let direction = DVec3::new(1., 2., 3.).normalize();
+        let side = direction.cross(DVec3::X).normalize();
+        let remote = benchup_core::ConstructionGuide {
+            origin: origin + direction * 1e9 + side * 0.125, direction: Some(direction),
+        };
+        let remote = Line::guide(&remote, origin, [1.; 4], 1.5);
+        let anchor = glam::Vec3::from_array(remote.a).as_dvec3();
+        assert!(anchor.distance(side * 0.125) < 1e-5, "retain the small perpendicular offset");
+        let frame = super::super::world_picking::GuideFrame { center: DVec3::new(3., 4., 5.), extent: 100. };
+        let guide = &model.guides[&line];
+        for target in [frame.center, frame.center + DVec3::splat(7.)] {
+            let offset = target - guide.origin;
+            let local = frame.translated(-offset).segment(guide);
+            let mut placed = guide.clone();
+            placed.origin += offset;
+            let world = frame.segment(&placed);
+            assert!((local.0 + offset).abs_diff_eq(world.0, 1e-7));
+            assert!((local.1 + offset).abs_diff_eq(world.1, 1e-7));
+        }
     }
 
     #[test]

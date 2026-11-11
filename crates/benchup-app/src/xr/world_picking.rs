@@ -10,6 +10,10 @@ pub(super) struct GuideFrame {
 }
 
 impl GuideFrame {
+    pub fn translated(self, offset: DVec3) -> Self {
+        Self { center: self.center + offset, ..self }
+    }
+
     pub fn segment(self, guide: &ConstructionGuide) -> (DVec3, DVec3) {
         guide
             .direction
