@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory)]
     [string]$Binary,
     [string]$PreferencesFrom,
-    [string]$LoaderDirectory
+    [string]$LoaderDirectory,
+    [switch]$PreserveViewMode
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,7 +56,16 @@ New-Item -ItemType Directory -Path $sessionDirectory -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $repository 'assets/examples/Example.bup') -Destination (Join-Path $sessionDirectory 'model.json')
 if ($PreferencesFrom) {
     Copy-Item -LiteralPath $PreferencesFrom -Destination (Join-Path $sessionDirectory 'preferences.ron')
+    if (-not $PreserveViewMode) {
+        # This is the immersive test launcher. Carry readability/preferences,
+        # but do not silently restore an older panel-only test session.
+        $preferencesPath = Join-Path $sessionDirectory 'preferences.ron'
+        $preferencesText = Get-Content -LiteralPath $preferencesPath -Raw
+        $preferencesText = [regex]::Replace($preferencesText, '\bimmersive_scene:false\b', 'immersive_scene:true')
+        Set-Content -LiteralPath $preferencesPath -Value $preferencesText -Encoding utf8NoBOM -NoNewline
+    }
 }
+Write-Output $(if ($PreserveViewMode) { '[BenchUpXR] Restoring the saved view mode.' } else { '[BenchUpXR] Starting in immersive 3D mode.' })
 
 $variables = @('PATH', 'BENCHUP_DATA_DIR', 'BENCHUP_XR_VALIDATION', 'VK_INSTANCE_LAYERS')
 $saved = @{}

@@ -9,7 +9,7 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 Latest user direction: fix actual bugs and missing functionality; stop speculative
 edge-case work and do not prolong development once the core implementation is
-ready. C01-C23 coding is implemented. There is no currently confirmed unfixed
+ready. C01-C24 coding is implemented. There is no currently confirmed unfixed
 defect queued. Keep the remaining acceptance gates open, but do not manufacture
 new coding milestones or expand validation to keep the goal busy. Resume fixes
 when normal use, a requested test or existing evidence demonstrates a concrete
@@ -18,9 +18,21 @@ problem. Do not launch VR or request hardware checks until the user asks to test
 The latest prepared executable is source `591c117`, at
 `.local/openxr/preview-builds/591c117/openxr_editor.exe`; its `build.json` records
 the full source commit, binary hash and passing build/GUI-check artifacts. Later
-documentation-only commits do not require replacing that executable. It has not
-been launched in the headset. The last human-tested executable remains `dfab0e6`;
-do not confuse that older acceptance evidence with the current prepared build.
+documentation-only commits do not require replacing that executable. The user
+requested a launch on 2026-11-11. The first `591c117` session restored panel-only
+mode from carried preferences; the user correctly reported no immersive view.
+That process was closed normally and relaunched with `immersive_scene:true` in
+clean session `20261111-231824-475-24e64e45`, PID 71308 at launch. Its log confirms
+404 faces and the first head-tracked stereoscopic frame. Human confirmation of
+the corrected view is pending. Earlier accepted keyboard feedback is from
+`dfab0e6`; do not apply it to the newer controller-panel features.
+
+The launch helper now normalizes copied preferences to immersive mode by default.
+Use `-PreserveViewMode` only for an intentional saved panel-only test. This changes
+fresh test-session seeding, not ordinary app preference persistence. The guard's
+parser and normalization check pass against the actual failing profile; the
+corrected live session used explicitly normalized preferences before that guard
+was added. Do not restart it merely to exercise the updated helper.
 
 When the user requests testing, inspect process ownership and launch this frozen
 binary through `scripts/openxr_preview.ps1` with no duration limit. The helper

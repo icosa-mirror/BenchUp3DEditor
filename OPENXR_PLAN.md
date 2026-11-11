@@ -8,7 +8,7 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 ## Active continuation
 
 Latest user direction: prioritize actual bugs and missing functionality, not
-speculative edge cases. The core coding checklist C01-C23 is implemented and
+speculative edge cases. The core coding checklist C01-C24 is implemented and
 build `591c117` is prepared. No confirmed unfixed defect is currently queued.
 Remaining acceptance is not complete; continue implementation only for concrete
 gaps demonstrated by normal use, requested testing or existing evidence. Do not
@@ -52,7 +52,8 @@ markers, axes styling/fade, mode/target instructions, native paste seeds and cop
 guide previews. C16's eight-row coding audit is complete. Subsequent C17-C23
 milestones implement reference-space recovery, compact controls, optional
 controller attachment/recall and modal/keyboard cancellation fixes. The latest
-prepared executable is `591c117`; it has not been launched in the headset.
+prepared executable is `591c117`; its corrected immersive launch has submitted
+a head-tracked stereo frame, with human confirmation pending.
 The acceptance gates below remain open.
 Full phase/visual acceptance remains open.
 
@@ -157,6 +158,12 @@ record scope changes rather than silently changing an estimate.
     focused/head-tracked; keep clearing them on actual focus/tracking loss. The
     editor/modal field regression and locked native build pass. Physical
     placement/recall keyboard-focus acceptance remains open.
+24. [x] C24: Correct the immersive preview launch after a real test restored
+    `immersive_scene:false`. The clean-scene helper now starts in 3D while keeping
+    readability preferences; `-PreserveViewMode` explicitly retains panel-only
+    test settings when needed. Parser and actual-profile normalization checks pass.
+    The corrected `591c117` session has submitted a stereo scene; human
+    confirmation of that relaunch is pending.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
