@@ -478,7 +478,7 @@ impl BenchUpApp {
                         a: quad[i],
                         b: quad[(i + 1) % 4],
                         color,
-                        width: 1.5,
+                        width: if self.flip_hover == Some(axis) { 2.0 } else { 1.0 },
                         dashed: false,
                     });
                 }

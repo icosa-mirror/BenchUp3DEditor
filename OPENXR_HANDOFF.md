@@ -533,9 +533,13 @@ sixth diagnostic absent from the global four-error summary, warning-free joint
 identity, multiline action de-duplication and removal of the prior target block.
 `joint-target-hud-build.log` passes the native preview build without warnings.
 The executable is frozen under this milestone's commit in
-`.local/openxr/preview-builds/`; no headset session was launched. A07 remains a small
-confirmed Flip outline discrepancy: XR uses 1.5 points for both states, while
-desktop uses 1 point idle and 2 points on hover.
+`.local/openxr/preview-builds/`; no headset session was launched. A07 now uses
+the desktop Flip outline widths in the retained XR segments: 1 point idle and
+2 points on hover. The fill/label/picking routes remain shared with the existing
+native Flip planes. `flip-outline-build.log` passes the native editor build
+without warnings. The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched. No new regression
+test was added for this bounded stroke-width correction.
 
 C16 section source reconciliation: the native scene uses the shared effective
 display and `SectionCache` geometry, and feeds that cache's exact triangles and

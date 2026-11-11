@@ -128,7 +128,7 @@ reconciled. Coding status remains separate from headset/graphics acceptance.
 | A04 | Measurements/text only advertised their full sequence; section handles had no action-specific prompts | Measurement/text phase prompts shared by HUD and XR controls; section hover/drag instructions implemented; controller acceptance open |
 | A05 | Desktop attached text has an open arrowhead at its attachment; XR retained text previously drew only the leader | Retained GPU arrowheads implemented for saved, edited/new and clipboard text; shader validation and native build passed; visual acceptance open |
 | A06 | Desktop joint marker tooltips identify the joint and its warning; XR only advertised editing, and its global error list is limited to four | Target-specific joint identity/error prompt implemented independently of that limit; multiline HUD composition updated; six focused checks and native build passed; controller acceptance open |
-| A07 | Desktop Flip planes use a 1-point idle / 2-point hover outline; XR currently uses a fixed 1.5-point outline | Active small overlay-style parity gap |
+| A07 | Desktop Flip planes use a 1-point idle / 2-point hover outline; XR previously used a fixed 1.5-point outline | XR retained segments now use the desktop idle/hover widths; native build passed; visual acceptance open |
 
 ## Current architecture and boundaries
 
