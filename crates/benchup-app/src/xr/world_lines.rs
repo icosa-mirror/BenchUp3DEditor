@@ -45,6 +45,12 @@ impl Line {
             ..Self::new(point, toward, color, 1.5)
         }
     }
+    pub fn dot(point: glam::DVec3, color: [f32; 4], radius: f32) -> Self {
+        Self {
+            style: [5.0, radius, 0.0, 0.0],
+            ..Self::new(point, point, color, 1.0)
+        }
+    }
     pub fn leader_arrow(point: glam::DVec3, toward: glam::DVec3, color: [f32; 4]) -> Self {
         Self {
             // Eight-pixel open head at the attachment, matching desktop text.

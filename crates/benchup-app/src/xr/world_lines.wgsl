@@ -48,9 +48,9 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     let side = select(-1.0, 1.0, positive);
     let radius=(width+1.0)*0.5;
     var offset = normal * radius * side;
-    if style.x == 1.0 {
+    if style.x == 1.0 || style.x == 5.0 {
         clip = a;
-        offset = vec2(along, side) * style.y;
+        offset = vec2(along, side) * (style.y+select(0.0,1.0,style.x==5.0));
     } else if style.x == 2.0 {
         clip = a;
         let tick = direction * 3.0 + normal * 4.0;
@@ -64,7 +64,7 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     out.position = vec4(clip.xy + offset * 2.0 * clip.w / view.viewport.xy, clip.zw);
     out.color = color;
     out.local = vec2(select(0.0,length(delta),at_end),side*radius);
-    if style.x == 1.0 { out.local = vec2(along, side) * style.y; }
+    if style.x == 1.0 || style.x == 5.0 { out.local = offset; }
     if style.x==3.0 || style.x==4.0 {out.local=vec2(select(-style.y,0.0,at_end),side*style.y*select(0.5,0.375,style.x==4.0));}
     out.style = style;
     out.owners=owners;out.depth=clip.z/clip.w;
@@ -85,6 +85,7 @@ fn fragment(input: Output) -> @location(0) vec4<f32> {
     if input.style.x == 0.0 && input.style.y > 0.0 && input.local.x % input.style.y > input.style.z { discard; }
     var amount=clamp(input.width*0.5+0.5-abs(input.local.y),0.0,1.0);
     if input.style.x==1.0 {let distance=min(abs(input.local.x-input.local.y),abs(input.local.x+input.local.y))*0.70710678;amount=clamp(input.width*0.5+0.5-distance,0.0,1.0);}
+    if input.style.x==5.0 {amount=clamp(input.style.y+0.5-length(input.local),0.0,1.0);}
     if input.style.x==3.0 || input.style.x==4.0 {
         let slope=select(0.5,0.375,input.style.x==4.0);
         let distance=abs(abs(input.local.y)+input.local.x*slope)/sqrt(1.0+slope*slope);

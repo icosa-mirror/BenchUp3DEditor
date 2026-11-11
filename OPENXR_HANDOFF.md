@@ -468,9 +468,26 @@ The drawing-feedback comparison found two further source gaps. A09 now restores
 projection/Move/Scale guide-source circles through the existing retained
 billboards and uses the wider modeling-start hint offset before a grab. It
 inherits the same guide visibility and exact-value suppression as its guide line.
-A10, the axes' small depth-tested origin dot, remains active. Combined native
-marker build evidence will be recorded after these related feedback corrections;
-C16 remains unchecked and headset acceptance stays open.
+A10 now adds the axes' small depth-tested origin dot as one retained GPU line
+instance with a filled-circle shader style. It uses the existing axes setting,
+muted palette colour, 2.5-point radius and scene depth/section clipping; pose
+changes update the normal uniforms rather than rebuilding a CPU-projected circle.
+The combined native build includes A09 and A10; C16 remains unchecked and
+headset acceptance stays open.
+
+`reference-markers-shader-tests.log` passes the parser/validator for the shared
+world-line shader, including the new filled-circle style.
+`reference-markers-build.log` passes the combined native editor build without
+warnings. Its executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched. These checks
+establish shader validity/compilation, not the dot's rendered visibility or
+guide-marker comfort.
+
+Further row-2 source comparison found A11: desktop axes use separate negative
+(0.85 points, colour multiplied by 0.35) and positive (1.1 points, multiplied by
+0.8) halves, with `ReferenceFade` forward-depth opacity. XR currently uses one
+full-colour 2-point line per axis. Implement the directional styling and native
+view depth fade on the GPU; do not add per-frame CPU-projected axis meshes.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid

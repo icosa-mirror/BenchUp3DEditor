@@ -824,6 +824,7 @@ impl Scene {
             ];
             self.lines.references(device, reference_key, || {
                 let mut lines = Vec::new();
+                let colors = crate::theme::Palette::for_painter(&self.ctx.debug_painter());
 
                 if source.display.axes {
                     for (axis, rgb) in [DVec3::X, DVec3::Y, DVec3::Z]
@@ -839,8 +840,8 @@ impl Scene {
                             2.0,
                         ));
                     }
+                    lines.push(Line::dot(-origin, colors.muted.to_normalized_gamma_f32(), 2.5));
                 }
-                let colors = crate::theme::Palette::for_painter(&self.ctx.debug_painter());
                 if source.display.guides {
                     for (id, guide) in source
                         .model
