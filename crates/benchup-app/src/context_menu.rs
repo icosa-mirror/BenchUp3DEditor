@@ -104,17 +104,21 @@ impl BenchUpApp {
                 if matches!(action, PasteInPlace) {
                     self.paste_at(ctx, &clipboard, DVec3::ZERO);
                 } else {
-                    let pos = self
-                        .context_position
-                        .take()
-                        .or_else(|| ctx.input(|i| i.pointer.hover_pos()))
-                        .filter(|p| self.viewport.contains(*p))
-                        .unwrap_or(self.viewport.center());
-                    self.prepare_picking();
-                    let point = self
-                        .infer_snap(pos, None, None, self.doc.snap_to_axes)
-                        .map(|s| s.point)
-                        .unwrap_or(clipboard.anchor);
+                    let context_position = self.context_position.take();
+                    let point = if crate::app_host::world_input(ctx) {
+                        // The controller supplies placement after leaving the panel.
+                        // Until then keep the ghost at its source, independent of
+                        // the legacy desktop camera and the panel cursor.
+                        clipboard.anchor
+                    } else {
+                        let pos = context_position
+                            .or_else(|| ctx.input(|i| i.pointer.hover_pos()))
+                            .filter(|p| self.viewport.contains(*p))
+                            .unwrap_or(self.viewport.center());
+                        self.prepare_picking();
+                        self.infer_snap(pos, None, None, self.doc.snap_to_axes)
+                            .map(|s| s.point).unwrap_or(clipboard.anchor)
+                    };
                     self.paste_preview = Some(PastePreview::new(clipboard, point));
                     self.say(ctx, tr!("context_menu.click_to_place_the_copy_escape_to_cancel"));
                 }

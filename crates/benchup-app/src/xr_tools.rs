@@ -2701,6 +2701,81 @@ mod input_revision_tests {
     }
 
     #[test]
+    fn immersive_placement_starts_at_source_then_commits_the_current_ray_with_one_undo() {
+        for library in [false, true] {
+            let ctx = egui::Context::default();
+            let mut doc = Document::default();
+            let edge = doc.model.add_edge(DVec3::new(10., 20., 0.), DVec3::new(12., 20., 0.)).unwrap();
+            let object = doc.model.make_object(&BTreeSet::from([edge]), library, "Source").unwrap();
+            doc.camera.target = DVec3::splat(500.);
+            doc.snap_to_geometry = false;
+            doc.snap_to_axes = false;
+            doc.display.section_planes = false;
+            let mut app = BenchUpApp::with_document(doc, None, true);
+            app.snap_to_grid = false;
+            app.selected = BTreeSet::from([object]);
+            let before = app.doc.model.clone();
+            crate::app_host::set_world_input(&ctx, true);
+            if library {
+                app.begin_component_placement(object, &ctx);
+            } else {
+                app.context_action(&ctx, super::super::context_menu::ContextAction::Copy);
+                app.context_position = Some(egui::Pos2::new(100., 100.));
+                app.context_action(&ctx, super::super::context_menu::ContextAction::Paste);
+                assert!(app.context_position.is_none());
+            }
+            let preview = app.paste_preview.as_ref().unwrap();
+            let anchor = preview.clipboard.anchor;
+            assert_eq!(preview.point, anchor);
+            assert_ne!(preview.point, app.doc.camera.target);
+            assert_eq!(app.doc.model, before);
+            assert!(app.doc.history.is_empty());
+            let target = DVec3::new(3., 4., 0.);
+            let mut pointer = Pointer {
+                stamp: None, handle: None, view: None, model: Arc::new(before.clone()),
+                ray: Ray { origin: target + DVec3::Z, direction: -DVec3::Z }, hit: None,
+                activate: false, cancel: false, primary_down: false, visible_reference: None,
+            };
+            let mut state = State::default();
+            app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut Storage);
+            assert_eq!(app.paste_preview.as_ref().unwrap().point, target);
+            assert_eq!(app.doc.model, before);
+            pointer.activate = true;
+            pointer.primary_down = true;
+            app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut Storage);
+            assert!(app.paste_preview.is_none());
+            let (lo, hi) = app.doc.model.selection_bounds(&app.selected).unwrap();
+            assert!(lo.abs_diff_eq(DVec3::new(10., 20., 0.) + target - anchor, 1e-8));
+            assert!(hi.abs_diff_eq(DVec3::new(12., 20., 0.) + target - anchor, 1e-8));
+            assert_eq!(app.doc.history.undo_label(), Some("Paste"));
+            app.undo(&ctx, false);
+            assert_eq!(app.doc.model, before);
+            assert!(app.doc.history.undo_label().is_none());
+        }
+    }
+
+    #[test]
+    fn immersive_placement_leaves_desktop_library_and_paste_in_place_routes_intact() {
+        let (mut app, ctx, _, group) = fixture();
+        app.doc.camera.target = DVec3::new(20., 30., 40.);
+        // A library component keeps its normal desktop camera-target seed.
+        let component = app.doc.model.make_object(&BTreeSet::from([group]), true, "Library").unwrap();
+        crate::app_host::set_world_input(&ctx, false);
+        app.begin_component_placement(component, &ctx);
+        assert_eq!(app.paste_preview.as_ref().unwrap().point, app.doc.camera.target);
+        app.paste_preview = None;
+        app.selected = BTreeSet::from([component]);
+        app.copy_selection(&ctx);
+        let before = app.doc.model.clone();
+        crate::app_host::set_world_input(&ctx, true);
+        app.context_action(&ctx, super::super::context_menu::ContextAction::PasteInPlace);
+        assert!(app.paste_preview.is_none());
+        assert_eq!(app.doc.model.selection_bounds(&app.selected), before.selection_bounds(&BTreeSet::from([component])));
+        app.undo(&ctx, false);
+        assert_eq!(app.doc.model, before);
+    }
+
+    #[test]
     fn world_hud_uses_window_mode_from_the_shared_scene_source() {
         use crate::test_ui::ContextExt as _;
         let mut app = BenchUpApp::with_document(Document::default(), None, true);

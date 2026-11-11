@@ -506,9 +506,28 @@ desktop `infer_snap` even when the panel has immersive input. The native ray
 corrects it after leaving the panel, but the initial ghost depends on the legacy
 camera/canvas. Remove that seed dependency while preserving the shared clipboard,
 current-ray placement, commit, Paste in place and desktop behavior. The component
-library's `PastePreview::new` call also seeds with `doc.camera.target`; include
-that insertion route in A12. Both should start from the clipboard's own anchor
-until the native ray supplies a current placement target.
+library's `PastePreview::new` call also seeded with `doc.camera.target`.
+A12 now starts both native routes at the clipboard's own anchor until the native
+ray supplies a current placement target. Native Paste consumes the old context
+position without invoking desktop picking/inference; desktop Paste keeps that
+inference route, and desktop library insertion keeps its camera-target seed.
+Paste in place still uses the original zero-offset shared commit. The host flag
+is frame-scoped, so switching back to the panel-only/desktop host restores its
+usual behavior. `immersive-placement-tests.log` passes two focused cases. Both
+native preview routes start at their clipboard anchor without editing the model,
+follow a current controller ray, commit at that target and undo in one step.
+The controls cover the desktop component seed and native Paste in place's
+zero-offset commit. These model/input checks do not prove rendered/controller
+acceptance. `immersive-placement-build.log` passes the native editor build without
+warnings. Its executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched.
+
+The construction-guide comparison found A13: desktop selected guides use a
+2.5-point stroke, hovered guides use 2 points and idle guides use 1.5 points, for
+both dashed lines and point crosses. Native guides currently change colour but
+retain a fixed 1.5-point stroke. Match these states while preserving the native
+erasing colour and retained line/point instances. The existing 6-on/4-off native
+guide dash pattern already matches the desktop construction-guide pattern.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
