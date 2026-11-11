@@ -182,7 +182,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 | 1 | Selection and navigation | World hover/replace/toggle and enclosing-window selection; double-trigger group/text editing and empty-click context exit; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
-| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; Move has stationary geometry/reference targets, exact points, constrained intersections and shared grid refinement; original-document guards reject unsupported evaluated-only targets. Remaining manipulation inference is still under C15 audit |
+| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; Move and Scale have stationary geometry/reference targets, exact points, constrained intersections and shared grid refinement, with Scale preserving visible-target and exact-ratio behavior; original-document guards reject unsupported evaluated-only targets. Remaining manipulation inference is still under C15 audit |
 | 5 | Paint and erase | Face/group paint; held-trigger erase interpolates bounded adjacent rays, previews accumulated targets and commits once on release; cancel/loss/keyboard commands discard it. Thin/near targets at the sample limit and evaluated-only paint remain open |
 | 6 | Text and annotations | Text anchor/leader placement and shared editor modal; saved text/dimension labels and strokes can be selected, erased or transformed; Text opens an editable saved text; section-clipped and face-occluded targets are filtered |
 | 7 | Solids and grain | Shared solid validation/operand order and boolean history; Flip uses the displayed quads for hover/click; Grain Direction uses shared part/reference validation and assignment |
@@ -198,6 +198,8 @@ it does not project the desktop camera or scan all references per frame. Remaini
 manipulation and geometry-constrained alignment routes are still part of C15.
 Move now uses the same immutable, exclusion-filtered target snapshot as desktop,
 with world indexes retained for the gesture rather than rebuilt for its preview.
+Scale shares those targets with visible-face/section-cap occlusion and the saved
+X-ray preference; exact snapped ratios are preserved with grid snapping enabled.
 XR grid refinement no longer scans all edges/faces; containment
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.

@@ -249,6 +249,29 @@ commit and single-undo routes remain authoritative. Target indexes persist for
 the gesture instead of following the changing preview. C15 still includes the
 remaining manipulation and geometry-constrained drawing inference audit.
 
+Scale now reuses that stationary target service with visible-target semantics:
+opaque faces and generated section caps block hidden edge/reference targets,
+unless the existing X-ray preference is enabled. Move keeps its desktop X-ray
+target behavior. Scale stores its snapped point and retained guides on the shared
+modeling state, applies shared grid refinement to the target, then computes the
+world-space ratio from the original centre/reference. An exact target is not
+rounded a second time as a grid radius. Free controller-depth scaling retains
+its existing radius/grid fallback. Axis/plane locks, exact-value entry and the
+existing preview/commit/undo routes remain authoritative. Remaining C15 work
+includes Rotate, Push/Pull, Offset and geometry-constrained drawing refinements.
+
+`scale-inference-final-tests.log` passes three focused cases: controller scaling
+to an exact target with grid enabled, in free and X-locked modes, with one undo;
+stationary opaque-face occlusion/X-ray preference; and filled-section-cap
+occlusion/X-ray preference. `scale-inference-final-modeling.log` passes all five
+current precise-modeling cases. `scale-inference-move-regressions.log` passes
+the three stationary Move target/constraint/guide cases. These are software
+checks; controller comfort, dense-scene performance and full visual parity remain
+unverified.
+`scale-inference-build.log` passes the native editor example build without
+warnings. The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched.
+
 `move-inference-final-tests.log` passes four focused cases: shared stationary
 snapshot/exclusion and exact targets, world-space edge/face constraint
 intersections, face centres/global-guide toggles, and controller endpoint snapping

@@ -1,4 +1,4 @@
-//! Stationary Move targets share the core gesture snapshot; previews never
+//! Stationary modeling targets share the core gesture snapshot; previews never
 //! become targets and the world indexes remain unchanged while dragging.
 use benchup_core::{Axis, AxisGuide, DVec3, DisplaySettings, Inference, Model, Ray, Snap, inference::AxisConstraint};
 use std::sync::Arc;
@@ -21,6 +21,8 @@ pub(crate) struct Targets {
     edges: super::world_picking::Index,
     references: super::world_inference::References,
     display: DisplaySettings,
+    sections: crate::app::display_scene::SectionCache,
+    caps: super::section_picking::Index,
 }
 
 impl Targets {
@@ -36,10 +38,19 @@ impl Targets {
         }
         self.display = display.clone();
         self.picking.set_display(display);
+        self.sections.geometry(&self.faces, &self.entities, display);
+        self.caps.prepare(self.sections.generation, &self.sections.triangles, &self.sections.triangle_owners);
     }
 
+    #[cfg(test)]
     pub fn infer(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,
         geometry: bool, edges: bool, axes: bool) -> Option<Target>
+    {
+        self.infer_with_visibility(ray, anchor, point, constraint, geometry, edges, axes, true)
+    }
+
+    pub fn infer_with_visibility(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,
+        geometry: bool, edges: bool, axes: bool, x_ray: bool) -> Option<Target>
     {
         let model = self.source.as_ref()?;
         let allowed = |point: DVec3| self.display.section_contains(point)
@@ -48,9 +59,9 @@ impl Targets {
             let delta = point - ray.origin;
             let depth = delta.dot(ray.direction);
             let score = (delta - ray.direction * depth).length() / depth;
-            (depth > 0. && score <= 0.01 && allowed(point)).then_some(score)
+            (depth > 0. && score <= 0.01 && allowed(point) && self.visible(ray.origin, point, x_ray)).then_some(score)
         };
-        // Desktop Move uses its stationary X-ray target set. Inherited hidden
+        // Desktop Move uses X-ray targets; Scale uses visible targets. Hidden
         // state and editing scope were resolved by MoveSnapCache, and section
         // clipping still applies; the moving preview is absent from this set.
         if geometry && edges && let Some(hit) = self.edges.query(ray, 0.01, |id, a, b| {
@@ -58,7 +69,7 @@ impl Targets {
             if state.hidden || state.context.is_none() { return None; }
             let (a, b) = self.display.section_segment(a, b)?;
             constrained_segment(a, b, anchor, constraint)
-        }, |_, point| allowed(point)) {
+        }, |_, point| allowed(point) && self.visible(ray.origin, point, x_ray)) {
             let (a, b) = model.points(&model.edges[&hit.id]);
             let exact = [(a, Inference::Endpoint), (b, Inference::Endpoint), ((a + b) * 0.5, Inference::Midpoint)]
                 .into_iter().filter_map(|(point, kind)| near(point).map(|score| (point, kind, score)))
@@ -91,12 +102,24 @@ impl Targets {
         if geometry && edges {
             guides.extend(self.references.alignment(ray, plane, constraint.map(|c| (anchor, c)), |id, reference| {
                 let state = self.entities.get(id);
-                !state.hidden && state.context.is_some() && self.display.section_contains(reference)
+                !state.hidden && state.context.is_some() && self.visible(ray.origin, reference, x_ray)
             }).into_iter().flatten());
         }
         if let Some((snap, guides)) = super::world_inference::align_guides(ray, plane, constraint.map(|c| (anchor, c)), &guides)
-            && allowed(snap.point) { return Some(Target { snap, guides, edge: None, face: None }); }
+            && allowed(snap.point) && self.visible(ray.origin, snap.point, x_ray) {
+            return Some(Target { snap, guides, edge: None, face: None });
+        }
         face_target
+    }
+
+    fn visible(&self, origin: DVec3, point: DVec3, x_ray: bool) -> bool {
+        if !self.display.section_contains(point) { return false; }
+        if x_ray { return true; }
+        let distance = point.distance(origin);
+        if distance < 1e-12 { return false; }
+        let ray = Ray { origin, direction: (point - origin) / distance };
+        self.caps.unoccluded(origin, point) && self.picking.nearest(&self.faces, &self.entities, ray, false)
+            .is_none_or(|(_, depth, _)| depth + 1e-5 >= distance)
     }
 }
 
@@ -139,6 +162,42 @@ fn constrained_face(ray: Ray, anchor: DVec3, constraint: Option<AxisConstraint>,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn world_scale_targets_respect_filled_section_caps() {
+        let mut model = Model::default();
+        model.draw_polyline(&[DVec3::ZERO, DVec3::X * 2., DVec3::new(2., 2., 0.), DVec3::Y * 2., DVec3::ZERO], false).unwrap();
+        let face = *model.faces.keys().next().unwrap();
+        model.push_pull(face, 2.).unwrap();
+        let edge = model.add_edge(DVec3::new(1., 1., 0.25), DVec3::new(1., 1.5, 0.25)).unwrap();
+        let display = DisplaySettings { section_cuts: true, section_fill: true, section_axes: [false, false, true],
+            section_height: 0.75, ..Default::default() };
+        let mut targets = Targets::default();
+        targets.prepare(Arc::new(model), &display);
+        let ray = Ray { origin: DVec3::new(1., 1., 3.), direction: -DVec3::Z };
+        assert!(targets.caps.nearest(ray, f64::INFINITY).is_some());
+        assert!(targets.infer_with_visibility(ray, DVec3::ZERO, DVec3::ONE, None, true, true, false, false).is_none());
+        let xray = targets.infer_with_visibility(ray, DVec3::ZERO, DVec3::ONE, None, true, true, false, true).unwrap();
+        assert_eq!(xray.edge, Some(edge));
+    }
+
+    #[test]
+    fn world_scale_targets_respect_stationary_face_occlusion_and_xray_preference() {
+        let mut model = Model::default();
+        let edge = model.add_edge(DVec3::new(1., 1., 0.), DVec3::new(1., 2., 0.)).unwrap();
+        model.draw_polyline(&[DVec3::Z, DVec3::new(3., 0., 1.), DVec3::new(3., 3., 1.),
+            DVec3::new(0., 3., 1.), DVec3::Z], false).unwrap();
+        let mut targets = Targets::default();
+        targets.prepare(Arc::new(model), &DisplaySettings::default());
+        let ray = Ray { origin: DVec3::new(1., 1., 2.), direction: -DVec3::Z };
+        let visible = targets.infer_with_visibility(ray, DVec3::ZERO, DVec3::new(1., 1., 0.), None, true, true, false, false).unwrap();
+        assert!(visible.edge.is_none());
+        assert!(visible.face.is_some());
+        assert!((visible.snap.point.z - 1.).abs() < 1e-8);
+        let xray = targets.infer_with_visibility(ray, DVec3::ZERO, DVec3::new(1., 1., 0.), None, true, true, false, true).unwrap();
+        assert_eq!(xray.edge, Some(edge));
+        assert_eq!(xray.snap.kind, Inference::Endpoint);
+        assert!(xray.snap.point.z.abs() < 1e-8);
+    }
     #[test]
     fn world_move_stationary_snapshot_excludes_preview_and_keeps_exact_targets() {
         let mut model = Model::default();

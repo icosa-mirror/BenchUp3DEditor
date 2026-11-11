@@ -1286,14 +1286,15 @@ impl BenchUpApp {
             edit.unlocked_direction
         };
         let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
-        let move_target = if self.tool == Tool::Move {
+        let model_target = if matches!(self.tool, Tool::Move | Tool::Scale) {
             let geometry = edit.move_snap.as_ref().map(|cache| cache.shared_geometry());
             geometry.and_then(|geometry| {
                 let targets = state.move_targets.get_or_insert_with(Default::default);
                 targets.prepare(Arc::clone(&geometry), &self.doc.display);
                 let point = edit.anchor + constraint.map_or(delta, |c| c.project(delta));
-                targets.infer(pointer.ray, edit.anchor, point, constraint,
-                    self.doc.snap_to_geometry, self.snap_to_edge, self.doc.snap_to_axes)
+                targets.infer_with_visibility(pointer.ray, edit.anchor, point, constraint,
+                    self.doc.snap_to_geometry, self.snap_to_edge, self.doc.snap_to_axes,
+                    self.tool == Tool::Move || self.doc.display.x_ray)
                     .map(|target| (target, geometry))
             })
         } else { None };
@@ -1301,7 +1302,7 @@ impl BenchUpApp {
         edit.snap = None;
         edit.guides.clear();
         if self.tool == Tool::Move {
-            if let Some((mut target, geometry)) = move_target {
+            if let Some((mut target, geometry)) = model_target {
                 if self.snap_to_grid {
                     let plane = constraint.and_then(|c| match c { AxisConstraint::Plane(axis) => Some(axis.vector()), _ => None });
                     let axis = constraint.and_then(|c| match c { AxisConstraint::Axis(axis) => Some(axis), _ => None });
@@ -1341,6 +1342,19 @@ impl BenchUpApp {
                 .to_degrees();
         } else if self.tool == Tool::Scale {
             edit.scale_constraint = constraint;
+            let snapped = if let Some((mut target, geometry)) = model_target {
+                if self.snap_to_grid {
+                    let plane = constraint.and_then(|c| match c { AxisConstraint::Plane(axis) => Some(axis.vector()), _ => None });
+                    let axis = grid::movement_axis(target.snap.point, Some(edit.anchor), constraint, self.doc.snap_to_axes);
+                    target.snap = grid::snap_with_geometry_hint(target.snap, spacing, plane, axis, &geometry,
+                        None, Some((target.edge, target.face)));
+                }
+                delta = target.snap.point - edit.anchor;
+                edit.snap = Some(target.snap);
+                edit.guides = target.guides;
+                true
+            } else { false };
+            edit.direction = delta;
             let reference = edit.anchor - edit.center;
             let target = edit.anchor + delta - edit.center;
             let (reference, target) = constraint.map_or((reference, target), |constraint| {
@@ -1353,7 +1367,7 @@ impl BenchUpApp {
                 return;
             }
             let mut radius = target.length();
-            if self.snap_to_grid {
+            if self.snap_to_grid && !snapped {
                 radius = (radius / spacing).round() * spacing;
             }
             edit.value = (radius / reference.length()).clamp(0.001, 1000.);
@@ -2034,6 +2048,36 @@ mod precise_modeling_tests {
         app.tool = tool;
         app.xr_panel.precise_modeling = precise;
         (app, State::default(), egui::Context::default(), face)
+    }
+
+    #[test]
+    fn world_scale_controller_preserves_exact_target_with_grid_and_one_undo() {
+        for lock in [None, Some(Axis::X)] {
+            let (mut app, mut state, ctx, face) = fixture(Tool::Scale, false);
+            let anchor = DVec3::new(2., 1., 0.);
+            let target = if lock.is_some() { DVec3::new(3., 1., 0.) } else { DVec3::new(3., 1.5, 0.) };
+            app.doc.model.add_edge(target, target + DVec3::Y).unwrap();
+            app.lock = lock;
+            app.doc.snap_to_geometry = true; app.snap_to_edge = true; app.doc.snap_to_axes = false;
+            app.snap_to_grid = true;
+            let original = app.doc.model.clone();
+            let start = point(&app, anchor, Some(face), true, true);
+            app.xr_world_pointer(Some(&start), &mut state, true, &ctx, &mut Storage);
+            let held = point(&app, target, None, false, true);
+            app.xr_world_pointer(Some(&held), &mut state, true, &ctx, &mut Storage);
+            let edit = app.modeling.as_ref().unwrap();
+            assert_eq!(edit.snap.unwrap().kind, Inference::Endpoint);
+            assert!(edit.snap.unwrap().point.distance(target) < 1e-8);
+            assert!((edit.value - 2.).abs() < 1e-8, "lock {lock:?}: {}", edit.value);
+            assert_eq!(app.doc.model, original);
+            let released = point(&app, target, None, false, false);
+            app.xr_world_pointer(Some(&released), &mut state, true, &ctx, &mut Storage);
+            assert!(app.modeling.is_none());
+            assert_ne!(app.doc.model, original);
+            app.undo(&ctx, false);
+            assert_eq!(app.doc.model, original);
+            assert!(app.doc.history.undo_label().is_none());
+        }
     }
 
     #[test]
