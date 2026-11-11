@@ -1300,6 +1300,16 @@ impl BenchUpApp {
             self.drawing_axis_guides.clear();
             self.drawing_projection = None;
         }
+        if crate::app_host::world_input(ctx) {
+            // The next controller ray acquires a target under the new lock.
+            // Panel pixels have no relationship to the immersive camera.
+            self.snap = None;
+            self.drawing_guide = None;
+            self.drawing_axis_guides.clear();
+            self.drawing_projection = None;
+            ctx.request_repaint();
+            return;
+        }
         if let Some(pos) = ctx
             .input(|i| i.pointer.hover_pos())
             .filter(|pos| self.viewport.contains(*pos))
@@ -1435,6 +1445,10 @@ impl BenchUpApp {
         }
     }
     fn commit_drawing(&mut self, ctx: &egui::Context) {
+        if crate::app_host::world_input(ctx) {
+            self.commit_drawing_at_snap(ctx, false);
+            return;
+        }
         if self.tool != Tool::Freehand {
             if let Some(pos) = ctx
                 .input(|i| i.pointer.hover_pos())
@@ -2143,6 +2157,10 @@ impl BenchUpApp {
     }
 
     fn commit_modeling(&mut self, ctx: &egui::Context) {
+        if crate::app_host::world_input(ctx) {
+            self.commit_modeling_at_value(ctx);
+            return;
+        }
         if let Some(pos) = ctx
             .input(|i| i.pointer.hover_pos())
             .filter(|p| self.viewport.contains(*p))
@@ -4304,6 +4322,7 @@ impl BenchUpApp {
         }
     }
     fn refresh_snap(&mut self, ctx: &egui::Context) {
+        if crate::app_host::world_input(ctx) { return; }
         if self.tool == Tool::Line {
             if let Some(pos) = ctx
                 .input(|i| i.pointer.hover_pos())
@@ -6062,11 +6081,14 @@ impl BenchUpApp {
             self.navigate_context(context, ui.ctx());
         }
     }
-    fn drawing_lock_buttons(&mut self, ui: &mut egui::Ui) {
-        let enabled = self.tool.is_drawing()
+    fn supports_axis_locks(&self) -> bool {
+        self.tool.is_drawing()
             || self.tool == Tool::GrainDirection
             || matches!(self.tool, Tool::Move | Tool::Rotate | Tool::Scale | Tool::PushPull | Tool::Offset)
-            || self.tool.is_measuring();
+            || self.tool.is_measuring()
+    }
+    fn drawing_lock_buttons(&mut self, ui: &mut egui::Ui) {
+        let enabled = self.supports_axis_locks();
         let colors = Palette::for_ui(ui);
         // The viewport toolbar flows right to left: show X, Y, then Z.
         for (axis, label) in [
@@ -6450,6 +6472,7 @@ impl BenchUpApp {
 impl BenchUpApp {
     pub(crate) fn ui_with_host(&mut self, ui: &mut egui::Ui, host: &mut crate::app_host::UiHost<'_>) {
         let ctx = ui.ctx().clone();
+        crate::app_host::set_world_input(&ctx, host.is_xr() && self.xr_panel.immersive_scene);
         self.ui_frame=Some(ctx.cumulative_frame_nr());
         #[cfg(target_arch = "wasm32")]
         web_viewport_benchmark::tick(self, &ctx);

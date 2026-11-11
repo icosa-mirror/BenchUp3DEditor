@@ -218,6 +218,7 @@ impl BenchUpApp {
         preferences: &mut crate::app_host::XrPanelPreferences,
     ) {
         let ctx = ui.ctx().clone();
+        crate::app_host::set_world_input(&ctx, preferences.immersive_scene);
         ui.add_enabled_ui(self.xr_scene_interaction_enabled(&ctx), |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().interact_size.y = 42.;
@@ -321,6 +322,29 @@ impl BenchUpApp {
                 });
             });
             let mut changed = false;
+            if self.supports_axis_locks() {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Locks").size(18.));
+                    for (axis, label) in [(Axis::X, "X"), (Axis::Y, "Y"), (Axis::Z, "Z")] {
+                        let active = self.lock == Some(axis) || self.second_lock == Some(axis);
+                        let available = active || self.second_lock.is_none();
+                        if ui.add_enabled(available, egui::Button::new(egui::RichText::new(label).size(18.))
+                            .min_size(egui::vec2(62., 42.)).selected(active))
+                            .on_hover_text("Select one axis or combine two for a plane lock.")
+                            .clicked()
+                        {
+                            self.toggle_axis_lock(axis, &ctx);
+                            changed = true;
+                        }
+                    }
+                    if ui.add_enabled(self.lock.is_some(), egui::Button::new(egui::RichText::new("Unlock").size(18.))
+                        .min_size(egui::vec2(90., 42.))).clicked()
+                    {
+                        self.set_axis_lock(None, &ctx);
+                        changed = true;
+                    }
+                });
+            }
             if matches!(self.tool, Tool::Move | Tool::Rotate | Tool::Scale | Tool::PushPull | Tool::Offset) {
                 if ui.checkbox(&mut preferences.precise_modeling, egui::RichText::new("Exact value").size(18.))
                     .on_hover_text("Choose an anchor, then a target with the trigger. The keyboard opens to enter a length, angle or scale factor. Leaving Exact value off uses held-trigger dragging.")
@@ -1500,6 +1524,82 @@ impl BenchUpApp {
 #[cfg(test)]
 mod precision_panel_tests {
     use super::*;
+    use crate::test_ui::ContextExt;
+
+    #[derive(Default)]
+    struct SavedStorage(std::collections::BTreeMap<String, String>, bool);
+    impl eframe::Storage for SavedStorage {
+        fn get_string(&self, key: &str) -> Option<String> { self.0.get(key).cloned() }
+        fn set_string(&mut self, key: &str, value: String) { self.0.insert(key.into(), value); }
+        fn remove_string(&mut self, key: &str) { self.0.remove(key); }
+        fn flush(&mut self) { self.1 = true; }
+    }
+
+    #[test]
+    fn xr_axis_lock_buttons_save_plane_and_unlock_without_model_edits() {
+        let (mut app, mut state, ctx) = fixture(false);
+        let mut storage = SavedStorage::default();
+        let mut preferences = app.xr_panel;
+        let mut frame = |events, storage: &mut SavedStorage| ctx.run_test_ui(egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000., 800.))),
+            focused: true, events, ..Default::default()
+        }, |ui| app.xr_tool_controls(ui, storage, &mut state, &mut preferences));
+        fn position(output: &egui::FullOutput, label: &str) -> egui::Pos2 {
+            fn find(shape: &egui::Shape, label: &str) -> Option<egui::Pos2> {
+                match shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => Some(text.pos + text.galley.rect.center().to_vec2()),
+                    egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| find(shape, label)),
+                    _ => None,
+                }
+            }
+            output.shapes.iter().find_map(|shape| find(&shape.shape, label)).expect("visible lock button")
+        }
+        let mut output = frame(Vec::new(), &mut storage);
+        // The third axis is unavailable while two axes define a plane.
+        for label in ["X", "Y", "Z", "Unlock"] {
+            let pos = position(&output, label);
+            for pressed in [true, false] {
+                output = frame(vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton {
+                    pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
+                }], &mut storage);
+            }
+            let mut restored = BenchUpApp::with_document(Document::default(), None, true);
+            restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
+            assert_eq!((restored.lock, restored.second_lock), match label {
+                "X" => (Some(Axis::X), None),
+                "Y" | "Z" => (Some(Axis::X), Some(Axis::Y)),
+                _ => (None, None),
+            });
+        }
+        assert!(storage.1);
+        assert!(!app.project.modified);
+        assert!(app.dirty_since.is_none());
+    }
+
+    #[test]
+    fn xr_axis_lock_refresh_and_legacy_enter_keep_world_targets() {
+        let (mut app, mut state, ctx) = fixture(false);
+        app.viewport = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000., 800.));
+        let _ = ctx.run_test_ui(egui::RawInput {
+            events: vec![egui::Event::PointerMoved(egui::pos2(400., 300.))], ..Default::default()
+        }, |_| {
+            crate::app_host::set_world_input(&ctx, true);
+            app.toggle_axis_lock(Axis::X, &ctx);
+            assert!(app.snap.is_none(), "panel cursor must not become a scene target");
+            let pointer = Pointer { ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
+                model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
+                primary_down: false, visible_reference: None };
+            state.set_panel_hover(false);
+            app.xr_world_pointer(Some(&pointer), &mut state, false, &ctx, &mut Storage);
+            assert!(app.snap.unwrap().point.distance(DVec3::new(2., 0., 0.)) < 1e-8);
+            app.length_input = "50cm".into();
+            app.commit_line(&ctx, true);
+            assert!(app.line_start.unwrap().distance(DVec3::new(0.5, 0., 0.)) < 1e-8);
+        });
+        assert!(!crate::app_host::world_input(&ctx), "host marker expires after its frame");
+        app.undo(&ctx, false);
+        assert!(app.doc.model.edges.is_empty());
+    }
 
     struct Storage;
     impl eframe::Storage for Storage {

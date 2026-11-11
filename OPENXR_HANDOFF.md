@@ -30,10 +30,30 @@ Recorded human feedback:
    hiding versus translucency behind geometry. Do not change that policy before
    discussion. Ask verification questions one at a time when testing resumes.
 
-Current code work is section-cap ownership and controller picking. Generated caps
-must not become document faces. Use the same retained cap geometry for rendering
-and ray queries; prefer group-level selection/transforms when ownership is known.
+Section-cap ownership and controller picking landed in `92b7f8a`. Current work
+adds controller-accessible axis/plane locks and host-aware shared precision input.
+Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
+
+The XR tool controls now expose X, Y, Z and Unlock for the same tools as the
+desktop lock toolbar. Selecting two axes locks their plane; selecting an active
+axis removes it, and a third axis is disabled. These use the existing persisted
+tool preferences and reset-after-action preference. Immersive lock refresh clears
+the old snap for the next controller ray instead of projecting panel pixels
+through the desktop camera. Shared line/shape/modeling Enter paths also honor
+the frame's world-input host. Panel-only and desktop input retain their routes.
+
+The focused `axis-lock-tests.log` passes both real-button preference restoration
+and constrained world-target/legacy-Enter cases. `axis-lock-precision-regressions.log`
+passes five cases (including those two); `axis-lock-desktop-regressions.log`
+passes eleven shared desktop lock cases. Human controller-lock acceptance remains
+pending, alongside the previously pending Exact value workflow.
+The native example build passes without warnings in `axis-lock-build.log`.
+`axis-lock-controls.png` was rendered on RTX 4090 Vulkan and inspected: the new
+large lock buttons fit alongside the existing controls, with the inspector and
+shared value field retained. This offscreen check started no OpenXR session.
+The executable is frozen under this milestone commit in
+`.local/openxr/preview-builds/`; it has not replaced the user's last preview.
 
 ## User direction
 
@@ -74,7 +94,7 @@ No full phase or visual acceptance has been recorded.
    geometry snapshots; connection overlays use that scope and labels/eyes share
    one staged frame source.
 10. Frozen executables are under `.local/openxr/preview-builds/<commit>/`.
-   The last requested manual launch used `27ae6c1`; it must not be confused with
+   The last requested manual launch used `dfab0e6`; it must not be confused with
    the latest built executable. Inspect current process ownership/path before
    closing, replacing or claiming that a preview runs the newest code.
 
@@ -329,7 +349,7 @@ No full phase or visual acceptance has been recorded.
    Vulkan images `section-cap-eye.png` and `section-cap-cut.png` match the prior
    checked normal/cut images pixel for pixel. The cap image was inspected. No
    replacement OpenXR session was launched; the checked executable is preserved
-   under this milestone commit in `.local/openxr/preview-builds/`.
+   under `92b7f8a` in `.local/openxr/preview-builds/`.
 
 
 2. World text: `text-surface-visibility-build.log` passes the native build without

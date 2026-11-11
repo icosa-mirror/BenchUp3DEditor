@@ -1,5 +1,5 @@
 //! Services needed by the shared editor UI, independent of its rendering host.
-use eframe::Frame;
+use eframe::{Frame, egui};
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -69,6 +69,18 @@ impl XrPanelPreferences {
             precise_modeling: self.precise_modeling,
         }
     }
+}
+
+// Frame-scoped because a context may later be reused by a different host.
+pub(crate) fn set_world_input(ctx: &egui::Context, enabled: bool) {
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data_mut(|data| data.insert_temp(egui::Id::unique("benchup.host.world_input"), (frame, enabled)));
+}
+
+pub(crate) fn world_input(ctx: &egui::Context) -> bool {
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data(|data| data.get_temp::<(u64, bool)>(egui::Id::unique("benchup.host.world_input")))
+        .is_some_and(|(saved_frame, enabled)| saved_frame == frame && enabled)
 }
 
 pub(crate) enum UiHost<'a> {
