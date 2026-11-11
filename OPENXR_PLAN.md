@@ -132,6 +132,10 @@ record scope changes rather than silently changing an estimate.
     panel-only controller help. Expose full truncated XR status text on hover.
     The locked native build and paired before/after hardware layout snapshots
     pass. Headset hover/readability acceptance remains open.
+21. [x] C21: Preserve open dialog drafts on controller capture loss. Distinguish
+    synthetic drag-cancel Escape from deliberate Escape, while still releasing
+    the pointer outside widgets. The reproducing shared-Modal regression and
+    locked native build pass. Hardware modal/loss acceptance remains open.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

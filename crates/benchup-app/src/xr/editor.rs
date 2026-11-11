@@ -458,6 +458,7 @@ impl Editor {
     }
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
+        input.preserve_modal_on_cancel(self.ctx.memory(|memory| memory.top_modal_layer().is_some()));
         // Input can keep updating while the runtime skips UI rendering. Do not
         // let a lost capture survive until a later release callback.
         if super::input::erase_capture_cancelled(self.input.scene, input.scene) {

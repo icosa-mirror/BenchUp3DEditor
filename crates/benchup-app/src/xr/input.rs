@@ -54,6 +54,18 @@ pub(super) struct FrameInput {
     pub focused: bool,
     pub scene: Option<SceneInput>,
     pub navigation: super::navigation::Input,
+    pub cancelled: bool,
+}
+
+impl FrameInput {
+    pub fn preserve_modal_on_cancel(&mut self, modal_active: bool) {
+        if self.cancelled && modal_active {
+            // Pointer cancellation emits Escape for a viewport drag. It is not
+            // a request to discard the open dialog's draft. Native keyboard
+            // Escape arrives separately and retains its normal close behavior.
+            self.events.retain(|event| !matches!(event, Event::Key { key: egui::Key::Escape, .. }));
+        }
+    }
 }
 
 #[derive(Default)]
@@ -67,6 +79,7 @@ struct Pointer {
 
 impl Pointer {
     fn cancel(&mut self, output: &mut FrameInput) {
+        output.cancelled = true;
         if self.position.is_some() {
             // Release outside every widget so focus/tracking loss cannot click
             // the control under the last ray. Escape cancels a captured tool drag.
@@ -592,6 +605,61 @@ fn rotation(value: xr::Quaternionf) -> Option<DQuat> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ui::ContextExt;
+
+    #[test]
+    fn capture_loss_preserves_modal_drafts_and_releases_widgets_but_explicit_escape_closes() {
+        fn frame(ctx: &egui::Context, events: Vec<Event>, draft: &mut String) -> (bool, egui::Rect, bool) {
+            let mut close = false;
+            let mut target = egui::Rect::NOTHING;
+            let mut activated = false;
+            let _ = ctx.run_test_ui(egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(800., 600.))),
+                focused: true,
+                events,
+                ..Default::default()
+            }, |_| {
+                close = crate::modal::Modal::new("xr_cancel_preserves_draft", 400.).show(ctx, |modal| {
+                    modal.body(|ui| {
+                        ui.text_edit_singleline(draft);
+                        let response = ui.button("Choose folder");
+                        target = response.rect;
+                        activated = response.clicked();
+                    });
+                }).should_close();
+            });
+            (close, target, activated)
+        }
+        for protect in [false, true] {
+            let ctx = egui::Context::default();
+            let mut draft = "Unsaved project name".to_owned();
+            frame(&ctx, vec![], &mut draft);
+            let (_, target, _) = frame(&ctx, vec![], &mut draft);
+            let mut pointer = Pointer::default();
+            let hand = Hand { position: Some(target.center()), hit_distance: Some(1.), ..Default::default() };
+            let hover = pointer.update([hand, Hand::default()], true, 0.01);
+            frame(&ctx, hover.events, &mut draft);
+            let press = pointer.update([Hand { buttons: [true, false], ..hand }, Hand::default()], true, 0.01);
+            assert!(!frame(&ctx, press.events, &mut draft).0);
+            let mut lost = pointer.update([Hand::default(); 2], true, 0.01);
+            assert!(lost.cancelled);
+            assert_eq!(clicks(&lost, false), 1);
+            if protect { lost.preserve_modal_on_cancel(true); }
+            let (close, _, activated) = frame(&ctx, lost.events, &mut draft);
+            assert_eq!(close, !protect, "unguarded capture loss reproduces Escape dismissal");
+            assert!(!activated, "tracking loss must not click the captured button");
+            assert_eq!(draft, "Unsaved project name");
+            if protect {
+                let mut explicit = FrameInput { events: vec![Event::Key {
+                    key: egui::Key::Escape, physical_key: None, pressed: true,
+                    repeat: false, modifiers: Modifiers::NONE,
+                }], ..Default::default() };
+                explicit.preserve_modal_on_cancel(true);
+                assert!(frame(&ctx, explicit.events, &mut draft).0);
+            }
+        }
+    }
+
     fn hand(x: f32, pressed: bool) -> Hand {
         Hand {
             position: Some(egui::pos2(x, 30.0)),

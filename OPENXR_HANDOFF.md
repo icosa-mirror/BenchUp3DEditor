@@ -7,6 +7,20 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+C21 addresses a capture-loss/modal interaction: the pointer emits Escape to
+cancel a captured viewport drag, but the same event could dismiss an open dialog
+and discard its draft when tracking/ownership changes. FrameInput now marks
+transport cancellation, and the editor suppresses only that synthetic Escape
+while a modal is active. Outside-widget release/PointerGone remain intact;
+deliberate Escape and ordinary non-modal drag cancellation retain their paths.
+A shared-Modal regression reproduces the unguarded dismissal and checks draft
+preservation, pointer release without a false button click and deliberate Escape.
+The focused regression passes, including the unguarded failure case, in
+`.local/openxr/modal-capture-loss-tests.log`. The locked native editor build
+passes without warnings (`modal-capture-loss-build.log`), and its executable is
+frozen under this milestone's source commit. No headset session was started;
+physical modal/loss/recovery acceptance remains open.
+
 C20 removes a demonstrated layout duplication: the default controller tool hint
 appeared in both the shared status bar and the XR controls, with the latter's
 tail clipped near the keyboard area. The immersive controls now omit a hint only
