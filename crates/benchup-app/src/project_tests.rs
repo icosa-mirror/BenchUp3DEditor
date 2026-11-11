@@ -209,6 +209,72 @@ fn opening_a_saved_project_restores_undo_and_redo_in_the_app() {
     }
 }
 
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[test]
+fn xr_file_roundtrip_uses_real_workers_and_restores_edited_annotation_history() {
+    let ctx = egui::Context::default();
+    let requests = crate::native_dialog::Host::install(&ctx);
+    crate::app_host::set_world_input(&ctx, true);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("XR roundtrip.bup");
+    let mut doc = Document::default();
+    let before = doc.model.clone();
+    doc.model.add_edge(DVec3::ZERO, DVec3::X).unwrap();
+    doc.history.record("Original edge", before, &doc.model);
+    let mut app = BenchUpApp::with_document(doc, None, true);
+    let before = app.doc.model.clone();
+    app.doc.model.add_guide(DVec3::Y, Some(DVec3::X)).unwrap();
+    app.doc.model.add_text(DVec3::ZERO, DVec3::Y * 0.25, "XR label").unwrap();
+    app.finish_edit("Add XR annotations", before, &ctx);
+    let saved_model = app.doc.model.clone();
+    let wait = |app: &mut BenchUpApp| {
+        let result = app.project.pending.take().unwrap()
+            .recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        deliver(app, result, &ctx);
+        assert!(app.project.error.is_none(), "{:?}", app.project.error);
+    };
+
+    app.save_project(&ctx, true);
+    let request = requests.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+    assert!(request.save);
+    request.respond(Some(path.clone()));
+    wait(&mut app);
+    assert_eq!(app.project.path.as_ref(), Some(&path));
+    assert!(!app.project.modified);
+    assert_eq!(crate::project_files::decode(&std::fs::read(&path).unwrap()).unwrap().model, saved_model);
+
+    let before = app.doc.model.clone();
+    app.doc.model.add_edge(DVec3::Z, DVec3::Z + DVec3::X).unwrap();
+    app.finish_edit("Temporary edit", before, &ctx);
+    app.undo(&ctx, false);
+    assert_eq!(app.doc.model, saved_model);
+    assert_eq!(app.doc.history.redo_label(), Some("Temporary edit"));
+    app.save_project(&ctx, false);
+    wait(&mut app);
+    assert!(requests.try_recv().is_err(), "Save to the existing path must not open another chooser");
+    assert!(!app.project.modified);
+
+    app.request_project(projects::Action::New, &ctx);
+    assert!(app.doc.model.edges.is_empty());
+    assert!(app.doc.model.guides.is_empty());
+    assert!(app.project.path.is_none());
+    app.request_project(projects::Action::Open, &ctx);
+    let request = requests.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+    assert!(!request.save);
+    request.respond(Some(path.clone()));
+    wait(&mut app);
+    assert_eq!(app.project.path.as_ref(), Some(&path));
+    assert_eq!(app.doc.model, saved_model);
+    assert_eq!(app.doc.history.undo_label(), Some("Add XR annotations"));
+    assert_eq!(app.doc.history.redo_label(), Some("Temporary edit"));
+    app.undo(&ctx, false);
+    assert!(app.doc.model.guides.is_empty() && app.doc.model.texts.is_empty());
+    app.undo(&ctx, true);
+    assert_eq!(app.doc.model, saved_model);
+    app.undo(&ctx, true);
+    assert_eq!(app.doc.model.edges.len(), 2);
+}
+
 #[test]
 fn opening_project_replaces_state_and_resets_history() {
     let ctx = egui::Context::default();

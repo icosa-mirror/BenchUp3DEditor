@@ -578,6 +578,17 @@ excluded; only corrected `v2` cases count. For fixture snapshots, verify the
 expected scene loaded as well as exit status: an empty recovery workspace can
 still produce a PNG successfully.
 
+Current software workflow evidence: `xr-file-workflow-tests.log` passes the
+real-worker XR-host round trip in isolated data: Save As to a compressed project,
+edit/undo, Save to the existing path without another chooser, New, Open through
+the same host, and restored annotation/guide model plus undo/redo history.
+The test responds through the dialog bridge's request channel; it does not click
+the controller chooser UI. `xr-immediate-preferences-current.log` passes the
+axis/plane/Unlock save/restore case, including the immediate storage flush,
+restoration into a new app, and no model edit/dirty state. Physical controller,
+keyboard/file-picker and process-restart acceptance remain open. These changes
+add test coverage only; the ready production executable remains `138d7f4`.
+
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
 selection and other tools. The inherited appearance regression initially failed

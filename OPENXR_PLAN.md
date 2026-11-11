@@ -322,6 +322,13 @@ or complete-parity claims.
    exercises the new GPU uniform/guide branch in the main scene. It does not prove
    OpenXR device/swapchain interoperability or controller clipboard placement.
 
+   A focused application/file-worker integration check also passes Save As,
+   edit/undo, save to the existing path, New and Open through the XR dialog host,
+   including guide/text persistence and restored undo/redo history. Immediate
+   axis/plane preference save/restore without a model edit passes against the
+   current test build. These are software workflow checks; controller chooser,
+   virtual typing and restart acceptance remain separate.
+
 3. Phase 1 acceptance remains open: complete open/edit/undo/save/reopen workflow,
    controller text/file workflow acceptance, capture/loss/restart/disconnect recovery,
    immediate preference restoration and clean graphics validation. Historical
