@@ -1292,9 +1292,11 @@ impl BenchUpApp {
                 let targets = state.move_targets.get_or_insert_with(Default::default);
                 targets.prepare(Arc::clone(&geometry), &self.doc.display);
                 let point = edit.anchor + constraint.map_or(delta, |c| c.project(delta));
-                targets.infer_with_visibility(pointer.ray, edit.anchor, point, constraint,
-                    self.doc.snap_to_geometry, self.snap_to_edge, self.doc.snap_to_axes,
-                    self.tool == Tool::Move || self.doc.display.x_ray)
+                targets.infer_with_options(pointer.ray, edit.anchor, point, constraint,
+                    crate::xr::world_move::Options { geometry: self.doc.snap_to_geometry,
+                        targets: benchup_core::inference::SnapTargets { edges: self.snap_to_edge,
+                            faces: self.snap_to_face, face_centers: self.snap_to_face_center },
+                        axes: self.doc.snap_to_axes, x_ray: self.tool == Tool::Move || self.doc.display.x_ray })
                     .map(|target| (target, geometry))
             })
         } else { None };

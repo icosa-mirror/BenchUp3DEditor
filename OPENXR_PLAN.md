@@ -200,6 +200,8 @@ Move now uses the same immutable, exclusion-filtered target snapshot as desktop,
 with world indexes retained for the gesture rather than rebuilt for its preview.
 Scale shares those targets with visible-face/section-cap occlusion and the saved
 X-ray preference; exact snapped ratios are preserved with grid snapping enabled.
+Stationary modeling targets independently honour the existing edge, face and
+face-centre snap preferences; disabling a face target does not disable centres.
 XR grid refinement no longer scans all edges/faces; containment
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.

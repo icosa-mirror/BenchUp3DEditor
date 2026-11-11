@@ -4,6 +4,13 @@ use benchup_core::{Axis, AxisGuide, DVec3, DisplaySettings, Inference, Model, Ra
 use std::sync::Arc;
 use crate::renderer;
 
+pub(crate) struct Options {
+    pub geometry: bool,
+    pub targets: benchup_core::inference::SnapTargets,
+    pub axes: bool,
+    pub x_ray: bool,
+}
+
 pub(crate) struct Target {
     pub snap: Snap,
     pub guides: Vec<AxisGuide>,
@@ -49,9 +56,19 @@ impl Targets {
         self.infer_with_visibility(ray, anchor, point, constraint, geometry, edges, axes, true)
     }
 
+    #[cfg(test)]
     pub fn infer_with_visibility(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,
         geometry: bool, edges: bool, axes: bool, x_ray: bool) -> Option<Target>
     {
+        self.infer_with_options(ray, anchor, point, constraint, Options { geometry, axes, x_ray,
+            targets: benchup_core::inference::SnapTargets { edges, faces: true, face_centers: true } })
+    }
+
+    pub fn infer_with_options(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,
+        options: Options) -> Option<Target>
+    {
+        let Options { geometry, targets, axes, x_ray } = options;
+        let edges = targets.edges;
         let model = self.source.as_ref()?;
         let allowed = |point: DVec3| self.display.section_contains(point)
             && constraint.is_none_or(|c| c.contains(point - anchor));
@@ -79,15 +96,17 @@ impl Targets {
             return Some(Target { snap, guides: vec![], edge: Some(hit.id), face: None });
         }
         let mut face_target = None;
-        if geometry && let Some((id, _, hit)) = self.picking.nearest(&self.faces, &self.entities, ray, true) {
+        if geometry && (targets.faces || targets.face_centers)
+            && let Some((id, _, hit)) = self.picking.nearest(&self.faces, &self.entities, ray, true) {
             let face = self.faces.get(id);
             if let Some(point) = constrained_face(ray, anchor, constraint, face.normal, hit)
                 && face.contains_point(point) && near(point).is_some() {
-                let center = self.faces.snap_center(model, id).filter(|&center| near(center).is_some());
+                let center = targets.face_centers.then(|| self.faces.snap_center(model, id)).flatten()
+                    .filter(|&center| near(center).is_some());
                 let target = Target { snap: center.map_or(Snap { point, kind: Inference::OnFace },
                     |point| Snap { point, kind: Inference::FaceCenter }), guides: vec![], edge: None, face: Some(id) };
                 if center.is_some() { return Some(target); }
-                face_target = Some(target);
+                if targets.faces { face_target = Some(target); }
             }
         }
         if !axes { return face_target; }
@@ -162,6 +181,25 @@ fn constrained_face(ray: Ray, anchor: DVec3, constraint: Option<AxisConstraint>,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn modeling_target_preferences_keep_faces_and_face_centres_independent() {
+        let mut model = Model::default();
+        model.draw_polyline(&[DVec3::ZERO, DVec3::X * 2., DVec3::new(2., 2., 0.), DVec3::Y * 2., DVec3::ZERO], false).unwrap();
+        let mut service = Targets::default();
+        service.prepare(Arc::new(model), &DisplaySettings::default());
+        let ray = Ray { origin: DVec3::new(1., 1., 2.), direction: -DVec3::Z };
+        for (faces, centres, expected) in [(false, false, None), (true, false, Some(Inference::OnFace)),
+            (false, true, Some(Inference::FaceCenter)), (true, true, Some(Inference::FaceCenter))] {
+            let options = Options { geometry: true, axes: false, x_ray: false,
+                targets: benchup_core::inference::SnapTargets { edges: false, faces, face_centers: centres } };
+            let result = service.infer_with_options(ray, DVec3::ZERO, DVec3::ONE, None, options);
+            assert_eq!(result.map(|target| target.snap.kind), expected);
+        }
+        let off_centre = Ray { origin: DVec3::new(0.4, 0.5, 2.), ..ray };
+        assert!(service.infer_with_options(off_centre, DVec3::ZERO, DVec3::ONE, None,
+            Options { geometry: true, axes: false, x_ray: false,
+                targets: benchup_core::inference::SnapTargets { edges: false, faces: false, face_centers: true } }).is_none());
+    }
     #[test]
     fn world_scale_targets_respect_filled_section_caps() {
         let mut model = Model::default();

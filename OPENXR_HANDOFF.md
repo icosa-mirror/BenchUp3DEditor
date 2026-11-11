@@ -260,6 +260,14 @@ its existing radius/grid fallback. Axis/plane locks, exact-value entry and the
 existing preview/commit/undo routes remain authoritative. Remaining C15 work
 includes Rotate, Push/Pull, Offset and geometry-constrained drawing refinements.
 
+The stationary service now carries all three existing target preferences
+independently: edges, faces and face centres. Previously its new Move/Scale
+callback carried only the edge toggle. Disabling faces still permits enabled
+face centres, while disabling both suppresses those targets. Visibility checks
+continue to use opaque faces even when face snapping itself is disabled.
+`modeling-snap-preferences-tests.log` passes the independent face/centre toggle
+combinations and rejects an off-centre hit when only centre snapping is enabled.
+
 `scale-inference-final-tests.log` passes three focused cases: controller scaling
 to an exact target with grid enabled, in free and X-locked modes, with one undo;
 stationary opaque-face occlusion/X-ray preference; and filled-section-cap
