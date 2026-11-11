@@ -35,7 +35,8 @@ locks and host-aware shared precision input landed in `1de74a5`. Destination-fol
 creation landed in `25b514f`; shared immersive View controls landed in `25fd106`.
 Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
 guards landed in `466b9f4`; controller joint icons landed in `d7c05f3`. Current work
-is C13, controller enclosing-window selection. The plan now has stable coding
+has completed C13, controller enclosing-window selection; C14 audits remaining
+desktop selection/context gestures. The plan now has stable coding
 milestone IDs and checkboxes, separate from verification. Do not derive an effort
 percentage by counting unequal checklist rows; keep audit-discovered work visible.
 Generated caps remain read-only surfaces with optional editable group ownership.
@@ -180,7 +181,28 @@ instruction hint. Typed handles do not become document faces or erase targets;
 active captured gestures retain their release transaction when crossing an icon.
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Keep that existing gate. Its entry-face XR route is conditional future work;
-controller window selection is the next active interaction gap.
+controller window selection now uses shared enclosing-window semantics.
+
+Controller Select has a persisted Window selection toggle (default off). Hold
+the trigger to place and drag a world-fixed window, then release to select fully
+enclosed entities/groups; Add/remove selection toggles the result. Only four GPU
+line segments update during dragging. The shared core selection query runs once
+on release, through a tracked-head projection without changing the document
+camera. Label bounds use the current head basis/scale; infinite guides are
+clipped against the window portal. A tiny gesture retains ordinary point picking.
+Cancel/Escape, missing input, focus/tracking/grip capture loss, tool/mode changes,
+document/project/context changes and scene-transform changes discard the pending
+window. Cancelling a pending window preserves the previous selection. Headset
+comfort, enclosure behavior and cancellation acceptance remain pending.
+
+`window-core-tests.log` passes the nine filtered core selection cases.
+`window-selection-tests.log` passes four focused XR cases covering shared group
+enclosure/toggle/history behavior, cancellation, tracked projection and infinite
+guide clipping. `window-preferences-tests.log` passes immediate preference
+saving/restoration and legacy defaults, including the new default-off mode.
+The native `openxr_editor` example build passes without warnings in
+`window-selection-build.log`. Its executable is frozen under this implementation
+commit in `.local/openxr/preview-builds/`; no replacement session was launched.
 
 `joint-handle-tests.log` contains passing controller scope/permission/preference,
 hit-rectangle/scaling/action-cache and face/cap visibility cases (plus unrelated

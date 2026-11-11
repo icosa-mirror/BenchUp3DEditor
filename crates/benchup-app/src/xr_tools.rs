@@ -63,6 +63,7 @@ pub(crate) struct Pointer {
     // when exercising model-space math independently of the rendering host.
     pub stamp: Option<InputStamp>,
     pub handle: Option<(super::viewport_overlays::HandleAction, DVec3)>,
+    pub view: Option<super::xr_window_selection::View>,
     pub ray: Ray,
     pub model: Arc<Model>,
     pub hit: Option<Hit>,
@@ -82,6 +83,7 @@ pub(crate) struct State {
     section: Option<SectionGrab>,
     pointer_target: Option<DVec3>,
     handle_hint: Option<&'static str>,
+    window: Option<WindowGesture>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
     erase_revision: Option<(u64, Option<u64>)>,
@@ -96,6 +98,13 @@ struct EraseTargets {
     revision: (u64, Option<u64>),
     ids: BTreeSet<u64>,
 }
+
+struct WindowGesture {
+    frame: super::xr_window_selection::Window,
+    revision: (u64, u64, Option<u64>),
+}
+
+const WINDOW_HINT: &str = "Hold trigger and drag a window. Release selects enclosed entities. Cancel discards the window.";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ModelPhase { Aiming, Typing }
@@ -134,9 +143,20 @@ struct SectionGrab {
 
 impl State {
     pub(crate) fn capturing(&self) -> bool {
-        self.erasing || self.stroke || self.grab_depth.is_some() || self.section.is_some()
+        self.erasing || self.stroke || self.grab_depth.is_some() || self.section.is_some() || self.window.is_some()
     }
     pub(crate) fn handle_hint(&self) -> Option<&'static str> { self.handle_hint }
+    pub(crate) fn cancel_window(&mut self) -> bool { self.window.take().is_some() }
+    pub(crate) fn append_window_overlay(&self, overlays: &mut super::viewport_overlays::Overlays) {
+        if let Some(window) = &self.window {
+            let quad = window.frame.quad();
+            for i in 0..4 {
+                overlays.overlay_segments.push(super::viewport_overlays::Segment {
+                    a: quad[i], b: quad[(i + 1) % 4], color: Color32::from_rgb(65, 160, 245), width: 2., dashed: true,
+                });
+            }
+        }
+    }
     pub(crate) fn take_precision_input_request(&mut self) -> bool {
         std::mem::take(&mut self.request_precision_input)
     }
@@ -213,6 +233,42 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 }
 
 impl BenchUpApp {
+    pub(super) fn xr_tool_hint(&self) -> &'static str {
+        if self.tool == Tool::Select && self.xr_panel.window_selection { WINDOW_HINT }
+        else { hint(self.tool, self.xr_panel.precise_modeling) }
+    }
+
+    fn xr_window_select(&mut self, pointer: &Pointer, state: &mut State, clicked: bool,
+        activate: bool, ctx: &egui::Context)
+    {
+        self.snap = None;
+        self.hover = None;
+        let revision = (self.document_revision(ctx), self.xr_project_epoch, self.doc.model.edit_context);
+        if clicked && pointer.primary_down && let Some(view) = pointer.view {
+            state.window = super::xr_window_selection::Window::new(pointer.ray, pointer.hit.map(|hit| hit.point), view)
+                .map(|frame| WindowGesture { frame, revision });
+        }
+        let Some(mut window) = state.window.take() else { return; };
+        if window.revision != revision { return; }
+        let Some(point) = pointer.view.and_then(|view| window.frame.update(pointer.ray, view)) else {
+            return;
+        };
+        state.pointer_target = Some(point);
+        state.handle_hint = Some(WINDOW_HINT);
+        if pointer.primary_down || !activate { state.window = Some(window); return; }
+        let hits = if window.frame.end.length() > 4. {
+            self.entity_cache.update_for_revision(&self.doc.model, revision.0);
+            selection::box_select_projected_with_state(&self.doc.model, &window.frame, glam::DVec2::ZERO,
+                window.frame.end, self.doc.display.guides, |id| {
+                    let state = self.entity_cache.get(id);
+                    (state.hidden, state.context)
+                })
+        } else { pointer.hit.and_then(|hit| hit.entity).filter(|id| self.doc.model.contains_entity(id)).into_iter().collect() };
+        if self.xr_panel.extend_selection || ctx.input(|input| input.modifiers.shift) {
+            for id in hits { if !self.selected.remove(&id) { self.selected.insert(id); } }
+        } else { self.selected = hits; }
+        ctx.request_repaint();
+    }
     pub(super) fn xr_input_stamp(&mut self, ctx: &egui::Context) -> InputStamp {
         InputStamp { document: self.document_revision(ctx), project: self.xr_project_epoch,
             context: self.doc.model.edit_context, tool: self.tool, display: self.doc.display.clone() }
@@ -356,7 +412,8 @@ impl BenchUpApp {
                         )
                         .clicked()
                     {
-                        self.xr_cancel_action(action == 0, &ctx, storage);
+                        let had_window = state.cancel_window();
+                        self.xr_cancel_action(action == 0 && !had_window, &ctx, storage);
                         state.reference = None;
                         state.erasing = false;
                         if action != 0 {
@@ -404,6 +461,9 @@ impl BenchUpApp {
             }
             match self.tool {
                 Tool::Select => {
+                    if ui.checkbox(&mut preferences.window_selection, egui::RichText::new("Window selection").size(18.)).changed() {
+                        state.cancel_window();
+                    }
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut preferences.extend_selection,
                             egui::RichText::new("Add/remove selection").size(18.));
@@ -483,6 +543,8 @@ impl BenchUpApp {
             }
             let hint = if self.paste_preview.is_some() {
                 "Trigger places the copy. Cancel discards the preview."
+            } else if self.tool == Tool::Select && preferences.window_selection {
+                WINDOW_HINT
             } else {
                 hint(self.tool, preferences.precise_modeling)
             };
@@ -532,6 +594,7 @@ impl BenchUpApp {
         }
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx))
             .filter(|pointer| self.xr_pointer_is_current(pointer, ctx)) else {
+            state.cancel_window();
             let retain_precision = state.panel_hover && self.xr_scene_interaction_enabled(ctx)
                 && state.precision_target.is_some()
                 && state.precision_target == self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
@@ -575,6 +638,7 @@ impl BenchUpApp {
                 self.persist_inspector_changes(ctx, Some(storage), false);
             }
             state.tool = Some(self.tool);
+            state.cancel_window();
             state.cancel_erasing(self);
             state.line_normal = None;
             state.stroke = false;
@@ -591,6 +655,7 @@ impl BenchUpApp {
             return;
         }
         if activate && pointer.cancel {
+            if state.cancel_window() { self.snap = None; self.hover = None; ctx.request_repaint(); return; }
             state.cancel_precision_modeling(self);
             self.xr_cancel_action(true, ctx, storage);
             state.line_normal = None;
@@ -741,6 +806,8 @@ impl BenchUpApp {
             return;
         }
         if self.tool == Tool::Select {
+            if self.xr_panel.window_selection { self.xr_window_select(pointer, state, clicked, activate, ctx); return; }
+            state.cancel_window();
             if clicked {
                 let hit = pointer
                     .hit
@@ -1668,7 +1735,7 @@ mod precision_panel_tests {
             crate::app_host::set_world_input(&ctx, true);
             app.toggle_axis_lock(Axis::X, &ctx);
             assert!(app.snap.is_none(), "panel cursor must not become a scene target");
-            let pointer = Pointer { stamp: None, handle: None, ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
+            let pointer = Pointer { stamp: None, handle: None, view: None, ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
                 model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
                 primary_down: false, visible_reference: None };
             state.set_panel_hover(false);
@@ -1701,7 +1768,7 @@ mod precision_panel_tests {
         } else {
             app.line_start = Some(DVec3::ZERO);
         }
-        let pointer = Pointer { stamp: None, handle: None, ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
+        let pointer = Pointer { stamp: None, handle: None, view: None, ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
             primary_down: false, visible_reference: None };
         let mut state = State::default();
@@ -1800,7 +1867,7 @@ mod section_cap_tests {
         let hit=index.nearest(ray,f64::INFINITY).unwrap();
         assert_eq!(hit.owner,owner);
         assert_eq!(hit.normal,normal);
-        let pointer=Pointer { stamp: None, handle: None, ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
+        let pointer=Pointer { stamp: None, handle: None, view: None, ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
             entity:hit.owner,section:true,face:None,edge:None,guide:None,guide_points:[None;8],
             flip:None,annotation:None,edge_targets:[None;3],point:hit.point,normal:hit.normal,center:None,
         }), activate:true,cancel:false,primary_down:true,visible_reference:None };
@@ -1883,7 +1950,7 @@ mod precise_modeling_tests {
     }
 
     fn point(app: &BenchUpApp, position: DVec3, face: Option<u64>, clicked: bool, down: bool) -> Pointer {
-        Pointer { stamp: None, handle: None, ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
+        Pointer { stamp: None, handle: None, view: None, ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: face.map(|face| Hit {
                 entity: Some(face), section: false, face: Some(face), edge: None, guide: None, guide_points: [None;8],
                 flip: None, annotation: None, edge_targets: [None;3], point: position,
@@ -2008,6 +2075,7 @@ mod erase_stroke_tests {
         Pointer {
             stamp: None,
             handle: None,
+            view: None,
             ray:Ray {origin:DVec3::new(0.5,0.,1.),direction:-DVec3::Z},
             model:Arc::clone(model),
             hit:entity.map(|entity|Hit {
@@ -2115,6 +2183,88 @@ mod erase_stroke_tests {
 }
 
 #[cfg(test)]
+mod window_selection_tests {
+    use super::*;
+    struct Storage;
+    impl eframe::Storage for Storage {
+        fn get_string(&self, _: &str) -> Option<String> { None }
+        fn set_string(&mut self, _: &str, _: String) {}
+        fn remove_string(&mut self, _: &str) {}
+        fn flush(&mut self) {}
+    }
+    fn fixture() -> (BenchUpApp, egui::Context, u64, u64) {
+        let mut doc = Document::default();
+        let edge = doc.model.add_edge(DVec3::new(0.1, 0.1, 1.), DVec3::new(0.2, 0.2, 1.)).unwrap();
+        let group = doc.model.make_object(&BTreeSet::from([edge]), false, "Inside").unwrap();
+        doc.model.add_edge(DVec3::new(0.3, 0.3, 1.), DVec3::new(0.6, 0.6, 1.)).unwrap();
+        let outside = doc.model.add_edge(DVec3::new(0.7, 0.7, 1.), DVec3::new(0.9, 0.9, 1.)).unwrap();
+        let mut app = BenchUpApp::with_document(doc, None, true);
+        app.xr_panel.window_selection = true;
+        app.project.modified = false;
+        app.selected = BTreeSet::from([outside]);
+        (app, egui::Context::default(), group, outside)
+    }
+    fn pointer(app: &BenchUpApp, end: bool, down: bool, clicked: bool) -> Pointer {
+        Pointer { stamp: None, handle: None, view: Some(super::super::xr_window_selection::View {
+            head: DVec3::ZERO, right: DVec3::X, up: DVec3::Y, units: 1., font_scale: 1., transform: glam::DMat4::IDENTITY,
+        }), model: Arc::new(app.doc.model.clone()), ray: Ray { origin: DVec3::ZERO,
+            direction: if end { DVec3::new(0.4, 0.4, 1.).normalize() } else { DVec3::Z } },
+            hit: None, activate: clicked, cancel: false, primary_down: down, visible_reference: None }
+    }
+    fn send(app: &mut BenchUpApp, state: &mut State, ctx: &egui::Context, end: bool, down: bool, clicked: bool) {
+        let input = pointer(app, end, down, clicked);
+        app.xr_world_pointer(Some(&input), state, true, ctx, &mut Storage);
+    }
+
+    #[test]
+    fn window_selection_commits_enclosed_groups_on_release_and_preserves_model_history() {
+        for toggle in [false, true] {
+            let (mut app, ctx, group, outside) = fixture();
+            if toggle { app.selected.insert(group); app.xr_panel.extend_selection = true; }
+            let before = app.doc.model.clone();
+            let selected = app.selected.clone();
+            let mut state = State::default();
+            send(&mut app, &mut state, &ctx, false, true, true);
+            send(&mut app, &mut state, &ctx, true, true, false);
+            assert_eq!(app.selected, selected);
+            assert!(state.capturing());
+            let mut overlays = super::super::viewport_overlays::Overlays::default();
+            state.append_window_overlay(&mut overlays);
+            assert_eq!(overlays.overlay_segments.len(), 4);
+            send(&mut app, &mut state, &ctx, true, false, false);
+            assert_eq!(app.selected, if toggle { BTreeSet::from([outside]) } else { BTreeSet::from([group]) });
+            assert!(!state.capturing());
+            assert_eq!(app.doc.model, before);
+            assert!(app.doc.history.undo_label().is_none());
+            assert!(!app.project.modified);
+        }
+    }
+
+    #[test]
+    fn window_selection_cancels_without_applying_pending_hits() {
+        for cause in 0..6 {
+            let (mut app, ctx, _, _) = fixture();
+            let mut state = State::default();
+            send(&mut app, &mut state, &ctx, false, true, true);
+            send(&mut app, &mut state, &ctx, true, true, false);
+            let mut release = pointer(&app, true, false, false);
+            match cause {
+                0 => release.cancel = true,
+                1 => { app.xr_world_pointer(None, &mut state, false, &ctx, &mut Storage); }
+                2 => { app.doc.model.add_edge(DVec3::X * 2., DVec3::X * 3.).unwrap(); app.changed(&ctx); }
+                3 => release.view.as_mut().unwrap().transform = glam::DMat4::from_scale(DVec3::splat(2.)),
+                4 => { let doc = app.doc.clone(); app.replace_project(doc, None, &ctx); }
+                _ => app.xr_panel.window_selection = false,
+            }
+            let selected = app.selected.clone();
+            app.xr_world_pointer(Some(&release), &mut state, true, &ctx, &mut Storage);
+            assert_eq!(app.selected, selected, "cause {cause}");
+            assert!(state.window.is_none());
+        }
+    }
+}
+
+#[cfg(test)]
 mod input_revision_tests {
     use super::*;
     use crate::test_ui::ContextExt;
@@ -2142,7 +2292,7 @@ mod input_revision_tests {
         let _ = ctx.run_test_ui(Default::default(), |_| { source = Some(app.xr_scene_source(ctx)); });
         let source = source.unwrap();
         Pointer {
-            stamp: Some(source.input_stamp), handle: None, model: source.model,
+            stamp: Some(source.input_stamp), handle: None, view: None, model: source.model,
             ray: Ray { origin: DVec3::new(0.5, 0., 1.), direction: -DVec3::Z },
             hit: Some(Hit { entity: app.doc.model.entity_in_context(edge), section: false,
                 face: None, edge: Some(edge), guide: None, guide_points: [None; 8], flip: None,

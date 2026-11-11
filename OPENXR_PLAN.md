@@ -35,8 +35,10 @@ committed-model revision so valid dragging remains active.
 Joint edit/warning billboards now have retained controller hit rectangles and
 world hints, using the shared desktop edit action, context navigation and permission
 checks. Captured gestures keep priority over icons. Fastener entry-face controls
-remain conditional on the existing disabled feature gate. Controller window
-selection is the next active interaction gap.
+remain conditional on the existing disabled feature gate. Controller enclosing
+window selection is implemented with a saved mode, retained GPU outline and
+release-time shared selection query. Remaining selection/context gestures are
+the next active interaction audit.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -97,8 +99,11 @@ record scope changes rather than silently changing an estimate.
 10. [x] C10: Captured erase interpolation and cancellation (`6ca8676`).
 11. [x] C11: Current-ray source validation across UI changes (`466b9f4`).
 12. [x] C12: Controller joint edit/warning icons (`d7c05f3`).
-13. [ ] C13: Controller enclosing-window selection; implementation in progress.
-14. [ ] C14: Reconcile remaining active desktop selection/context gestures.
+13. [x] C13: Controller enclosing-window selection, saved mode and safe cancellation.
+14. [ ] C14: Reconcile remaining active desktop selection/context gestures:
+    direct Select double-click text/object editing and empty-click context exit.
+    Shared Edit-menu commands and panel context controls already exist; assess
+    secondary-ray context targeting without displacing gesture cancellation.
 15. [ ] C15: Close the active global/off-face inference and reference gaps.
 16. [ ] C16: Finish the eight-row tool/overlay/command coding audit and its active gaps.
 

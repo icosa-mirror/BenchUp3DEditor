@@ -66,6 +66,9 @@ mod grain_direction;
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
 #[path = "xr_tools.rs"]
 pub(crate) mod xr_tools;
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[path = "xr_window_selection.rs"]
+pub(crate) mod xr_window_selection;
 #[path = "measurement_tools.rs"]
 mod measurement_tools;
 #[path = "move_tool.rs"]
@@ -3118,7 +3121,7 @@ impl BenchUpApp {
                             .map(|(message,_)|message.clone())
                             .or_else(||self.shared_status(ctx.input(|i|i.time)))
                             .or_else(||self.modeling_status_text())
-                            .unwrap_or_else(||xr_tools::hint(self.tool, self.xr_panel.precise_modeling).to_owned())
+                            .unwrap_or_else(||self.xr_tool_hint().to_owned())
                     } else { message };
                     // Reserve the precision controls before fitting the status message.
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

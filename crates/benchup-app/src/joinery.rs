@@ -1337,6 +1337,7 @@ mod tests {
                 let handle = source.references.handles.iter().find(|handle| handle.action == HandleAction::EditJoint(joint)).unwrap();
                 assert_eq!(handle.bounds, [-14., -14., 14., 14.]);
                 let mut pointer = Pointer { stamp: Some(source.input_stamp.clone()),
+                    view: None,
                     handle: Some((handle.action, handle.point)), ray: benchup_core::Ray {
                         origin: handle.point + DVec3::Z, direction: -DVec3::Z }, model: source.model.clone(),
                     hit: None, activate: false, cancel: false, primary_down: false, visible_reference: None };

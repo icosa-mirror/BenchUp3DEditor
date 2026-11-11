@@ -2,6 +2,25 @@ use crate::{Camera, CameraView, Model};
 use glam::DVec2;
 use std::collections::BTreeSet;
 
+/// Projection services for an enclosing selection window. Hosts can use a
+/// tracked view without installing a temporary camera on the document.
+pub trait BoxSelectionView {
+    fn project(&self, point: crate::DVec3) -> Option<DVec2>;
+    fn label_bounds(&self, point: crate::DVec3, size: DVec2) -> Option<(DVec2, DVec2)> {
+        let center = self.project(point)?;
+        Some((center - size * 0.5, center + size * 0.5))
+    }
+    fn guide_segment(&self, guide: &crate::ConstructionGuide) -> Option<(DVec2, DVec2)>;
+}
+
+struct CameraSelectionView<'a> { camera: &'a Camera, size: DVec2, view: CameraView }
+impl BoxSelectionView for CameraSelectionView<'_> {
+    fn project(&self, point: crate::DVec3) -> Option<DVec2> { self.view.project(point) }
+    fn guide_segment(&self, guide: &crate::ConstructionGuide) -> Option<(DVec2, DVec2)> {
+        guide.screen_segment(self.camera, self.size)
+    }
+}
+
 pub fn visible(model: &Model, camera: &Camera, size: DVec2, point: crate::DVec3) -> bool {
     visible_in_view(model, &camera.view(size), point)
 }
@@ -286,6 +305,14 @@ pub fn box_select_with_state(
     include_guides: bool,
     state: impl Fn(u64) -> (bool, Option<u64>),
 ) -> BTreeSet<u64> {
+    box_select_projected_with_state(model, &CameraSelectionView { camera, size, view: camera.view(size) },
+        start, end, include_guides, state)
+}
+
+pub fn box_select_projected_with_state(
+    model: &Model, view: &impl BoxSelectionView, start: DVec2, end: DVec2,
+    include_guides: bool, state: impl Fn(u64) -> (bool, Option<u64>),
+) -> BTreeSet<u64> {
     use std::collections::HashMap;
     fn record(
         id: u64,
@@ -314,7 +341,6 @@ pub fn box_select_with_state(
     let lo = start.min(end);
     let hi = start.max(end);
     let inside = |p: DVec2| p.cmpge(lo).all() && p.cmple(hi).all();
-    let view = camera.view(size);
     let mut vertices = HashMap::new();
     let mut vertex_inside = |id: u64| {
         *vertices.entry(id).or_insert_with(|| {
@@ -352,18 +378,14 @@ pub fn box_select_with_state(
         record(text.id, state(text.id), &mut groups, &mut selected, || {
             let [a, b] = text.layout(model);
             view.project(a).is_some_and(inside)
-                && view.project(b).is_some_and(|center| {
-                    let half = text.label_size() * 0.5;
-                    inside(center - half) && inside(center + half)
-                })
+                && view.label_bounds(b, text.label_size()).is_some_and(|(lo, hi)| inside(lo) && inside(hi))
         });
     }
     for (&id, guide) in &model.guides {
         record(id, state(id), &mut groups, &mut selected, || {
             include_guides
                 && if guide.direction.is_some() {
-                    guide
-                        .screen_segment(camera, size)
+                    view.guide_segment(guide)
                         .is_some_and(|(a, b)| intersects_rect(a, b, lo, hi))
                 } else {
                     view.project(guide.origin).is_some_and(inside)

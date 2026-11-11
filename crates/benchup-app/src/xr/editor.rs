@@ -226,6 +226,11 @@ impl Editor {
     fn update_ui(&mut self) -> Result<egui::FullOutput> {
         let mut events = std::mem::take(&mut self.input.events);
         events.extend(self.keyboard.take_events(&self.ctx, self.input.focused));
+        if events.iter().any(|event| matches!(event, egui::Event::Key { key: egui::Key::Escape, pressed: true, .. }))
+            && self.world_tools.cancel_window()
+        {
+            events.retain(|event| !matches!(event, egui::Event::Key { key: egui::Key::Escape, .. }));
+        }
         // A keyboard command may undo, replace or hide geometry before the
         // world callback. Never let an earlier erase stroke commit afterward.
         let cancel_erase = events.iter().any(|event| matches!(event,
@@ -257,7 +262,7 @@ impl Editor {
         let pointer = self
             .input
             .scene
-            .and_then(|input| self.scene.tool_pointer(input, preferences.scene_scale));
+            .and_then(|input| self.scene.tool_pointer(input, preferences));
         self.world_tools.set_panel_hover(self.input.focused && self.input.cursor.is_some() && pointer.is_none());
         // egui may repeat layout; consume a model operation only once.
         let mut activate = true;
@@ -369,7 +374,10 @@ impl Editor {
             if preferences.immersive_scene {
                 let mut source=self.app.xr_scene_source(&self.ctx);
                 source.tool_target=self.world_tools.pointer_target().or(source.tool_target);
-                if let Some(hint) = self.world_tools.handle_hint() { source.status = format!("{hint}\n{}", source.status); }
+                self.world_tools.append_window_overlay(&mut source.overlays);
+                if let Some(hint) = self.world_tools.handle_hint() && !source.status.contains(hint) {
+                    source.status = format!("{hint}\n{}", source.status);
+                }
                 self.scene.stage_labels(&self.ctx, &source);
                 self.staged_source=Some(source);
             } else {
@@ -427,12 +435,13 @@ impl Editor {
         // let a lost capture survive until a later release callback.
         if super::input::erase_capture_cancelled(self.input.scene, input.scene) {
             self.world_tools.cancel_erasing(&mut self.app);
+            self.world_tools.cancel_window();
             self.erase_sweep.reset();
         }
         if self.input.focused && !input.focused {
             self.input.events.push(egui::Event::WindowFocused(false));
         }
-        if !input.focused { self.keyboard_modifiers = Default::default(); }
+        if !input.focused { self.keyboard_modifiers = Default::default(); self.world_tools.cancel_window(); }
         for event in &mut input.events {
             if let egui::Event::PointerButton {modifiers,..} = event { *modifiers = self.keyboard_modifiers; }
         }

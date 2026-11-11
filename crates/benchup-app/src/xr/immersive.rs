@@ -500,9 +500,10 @@ impl Scene {
         super::world_handles::surface_visible(distance, face, cap, owners)
     }
 
-    pub fn tool_pointer(&self, input: super::input::SceneInput, scale: f32) -> Option<crate::app::xr_tools::Pointer> {
+    pub fn tool_pointer(&self, input: super::input::SceneInput, preferences: XrPanelPreferences) -> Option<crate::app::xr_tools::Pointer> {
         let (source, placement) = (self.source.as_ref()?, self.placement.as_ref()?);
-        let inverse = (self.navigation.matrix() * placement.model_to_tracking(scale as f64)).inverse();
+        let transform = self.navigation.matrix() * placement.model_to_tracking(preferences.scene_scale as f64);
+        let inverse = transform.inverse();
         let ray = benchup_core::Ray {
             origin: inverse.transform_point3(input.ray.origin),
             direction: inverse.transform_vector3(input.ray.direction).normalize(),
@@ -510,6 +511,12 @@ impl Scene {
         let snapping = !source.modeling && (source.tool.is_drawing() || source.tool.is_measuring() || source.tool == benchup_core::Tool::GrainDirection || source.paste.is_some());
         Some(crate::app::xr_tools::Pointer {
             stamp: Some(source.input_stamp.clone()),
+            view: Some(crate::app::xr_window_selection::View {
+                head: inverse.transform_point3(self.head.w_axis.truncate()),
+                right: inverse.transform_vector3(self.head.x_axis.truncate()).normalize(),
+                up: inverse.transform_vector3(self.head.y_axis.truncate()).normalize(),
+                units: transform.x_axis.truncate().length(), font_scale: (preferences.ui_scale / 1.3) as f64, transform,
+            }),
             handle: input.hit.and_then(|hit| hit.handle.map(|action| (action, hit.point))),
             ray,
             model: source.model.clone(),
