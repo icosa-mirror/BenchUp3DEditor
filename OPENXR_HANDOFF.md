@@ -455,6 +455,20 @@ No replacement headset session was launched; controller/visual acceptance remain
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
    context acceptance remain open; the broader eight-row audit is still active.
 
+A08 restores the desktop fixed-anchor circle during attached-text placement.
+The existing retained billboard uses the first point of the active Text
+measurement; opening the editor, committing or cancelling clears that placement
+state through the shared text flow. No new model state or preference is added.
+`text-anchor-marker-build.log` passes the native editor build without warnings.
+The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched. No new regression
+test was added for the bounded marker-source correction.
+
+The drawing-feedback comparison found two further source gaps: A09 restores
+projection/Move/Scale guide-source circles and the wider modeling-start hint
+offset; A10 adds the axes' small depth-tested origin dot through retained GPU
+instances. These are active coding items; C16 remains unchecked.
+
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
 selection and other tools. The inherited appearance regression initially failed

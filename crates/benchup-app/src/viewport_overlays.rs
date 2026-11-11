@@ -535,6 +535,8 @@ impl BenchUpApp {
             if let Some(start) = self
                 .trace_start()
                 .or_else(|| self.drawing.as_ref().map(|drawing| drawing.origin))
+                .or_else(|| self.measurement.as_ref().filter(|_| self.tool == Tool::Text)
+                    .and_then(|measurement| measurement.points.first().copied()))
             {
                 if !modeling_anchor {
                     result.circle(start, 3.5, colors.ink, colors.paper, false);
