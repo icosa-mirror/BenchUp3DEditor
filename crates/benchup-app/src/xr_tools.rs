@@ -1614,10 +1614,14 @@ impl BenchUpApp {
                 guides.extend([Axis::X, Axis::Y, Axis::Z].map(|axis| AxisGuide { origin, axis }));
             }
             if eligible && let Some(references) = references {
-                guides.extend(references.alignment(pointer.ray, plane, constraint).into_iter().flatten());
+                guides.extend(references.alignment_candidates(pointer.ray, plane, constraint).into_iter().flatten());
             }
         }
-        let global = crate::xr::world_inference::align_guides(pointer.ray, plane, constraint, &guides);
+        let on_surface = |point| base.kind != Inference::OnFace || pointer.hit.and_then(|hit| hit.face).is_some_and(|face| {
+            references.and_then(|references| references.contains_face(pointer.ray.origin, face, point))
+                .unwrap_or_else(|| pointer.model.faces.get(&face).is_some_and(|face| pointer.model.face_contains(face, point, true)))
+        });
+        let global = crate::xr::world_inference::align_guides_filtered(pointer.ray, plane, constraint, &guides, on_surface);
         let Some(reference) = state.reference else {
             if let Some((snap, guides)) = global { self.snap = Some(snap); self.drawing_axis_guides = guides; }
             return;
@@ -1625,13 +1629,14 @@ impl BenchUpApp {
         if self.tool != Tool::Dimensions
             && let Some((start,axis)) = start.zip(self.single_axis_lock())
             && let Some(snap) = crate::xr::world_inference::reference_projection(
-                pointer.ray,reference.point,start,axis,Some(plane),acquired)
+                pointer.ray,reference.point,start,axis,Some(plane),acquired).filter(|snap| on_surface(snap.point))
         {
             self.snap=Some(snap);
             self.drawing_projection=Some((reference.point,snap.point));
             return;
         }
-        if let Some((snap,guide)) = crate::xr::world_inference::reference_axis(pointer.ray,reference.point,constraint,Some(plane)) {
+        if let Some((snap,guide)) = crate::xr::world_inference::reference_axis(pointer.ray,reference.point,constraint,Some(plane))
+            .filter(|(snap, _)| on_surface(snap.point)) {
             self.snap=Some(snap);
             self.drawing_guide=Some(guide);
         } else if let Some((snap, guides)) = global {
@@ -2643,11 +2648,44 @@ mod input_revision_tests {
     }
 
     #[test]
+    fn alignment_candidates_keep_controller_drawing_on_the_target_face() {
+        struct References;
+        impl crate::xr::world_inference::ReferenceQuery for References {
+            fn alignment_candidates(&self, _: Ray, _: (DVec3, DVec3), _: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3] {
+                [vec![AxisGuide { origin: DVec3::new(0., 1., 0.), axis: Axis::X }],
+                    vec![AxisGuide { origin: DVec3::new(2.0001, 0., 0.), axis: Axis::Y },
+                        AxisGuide { origin: DVec3::new(1.99, 0., 0.), axis: Axis::Y }], vec![]]
+            }
+        }
+        let mut doc = Document::default();
+        doc.model.draw_polyline(&[DVec3::ZERO, DVec3::X * 2., DVec3::new(2., 2., 0.), DVec3::Y * 2., DVec3::ZERO], false).unwrap();
+        let face = *doc.model.faces.keys().next().unwrap();
+        let mut app = BenchUpApp::with_document(doc, None, true);
+        app.tool = Tool::Line; app.line_start = Some(DVec3::new(-1., 0.2, 0.));
+        app.doc.snap_to_geometry = true; app.doc.snap_to_axes = true;
+        app.snap_to_edge = true; app.snap_to_face = true; app.snap_to_grid = false;
+        let ctx = egui::Context::default();
+        let point = DVec3::new(1.999, 1.001, 0.);
+        let input = Pointer { stamp: None, view: None, handle: None, model: Arc::new(app.doc.model.clone()),
+            ray: Ray { origin: point + DVec3::Z * 2., direction: -DVec3::Z },
+            hit: Some(Hit { entity: Some(face), section: false, face: Some(face), edge: None,
+                guide: None, guide_points: [None; 8], flip: None, annotation: None, edge_targets: [None; 3],
+                point, normal: DVec3::Z, center: None }), activate: false, cancel: false,
+            primary_down: false, visible_reference: None };
+        app.xr_world_pointer_with_references(Some(&input), &mut State::default(), true, &ctx, &mut Storage, Some(&References));
+        let snap = app.snap.unwrap();
+        assert_eq!(snap.kind, Inference::Aligned);
+        assert!(snap.point.distance(DVec3::new(1.99, 1., 0.)) < 1e-8, "{:?}", snap.point);
+        assert!(app.doc.model.face_contains(&app.doc.model.faces[&face], snap.point, true));
+        assert!(app.doc.history.undo_label().is_none());
+    }
+
+    #[test]
     fn global_alignment_references_reach_the_shared_controller_drawing_preview() {
         struct References;
         impl crate::xr::world_inference::ReferenceQuery for References {
-            fn alignment(&self, _: Ray, _: (DVec3, DVec3), _: Option<(DVec3, AxisConstraint)>) -> [Option<AxisGuide>; 3] {
-                [None, Some(AxisGuide { origin: DVec3::new(2., 3., 0.), axis: Axis::Y }), None]
+            fn alignment_candidates(&self, _: Ray, _: (DVec3, DVec3), _: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3] {
+                [vec![], vec![AxisGuide { origin: DVec3::new(2., 3., 0.), axis: Axis::Y }], vec![]]
             }
         }
         let (mut app, ctx, edge, _) = fixture();

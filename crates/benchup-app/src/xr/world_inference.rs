@@ -3,14 +3,22 @@ use benchup_core::{Axis, AxisGuide, DVec3, Inference, Ray, Snap, inference::Axis
 use std::sync::Arc;
 
 pub(crate) trait ReferenceQuery {
-    fn alignment(&self, ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>) -> [Option<AxisGuide>; 3];
+    fn alignment_candidates(&self, ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3];
+    fn contains_face(&self, _origin: DVec3, _face: u64, _point: DVec3) -> Option<bool> { None }
 }
 
 /// Only a small per-axis result set reaches the shared tool callback. Combine
 /// intersecting lines there so their world coordinates, not screen projections,
 /// define the endpoint and its retained guide overlays.
+#[cfg(test)]
 pub(crate) fn align_guides(ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>,
     guides: &[AxisGuide]) -> Option<(Snap, Vec<AxisGuide>)>
+{
+    align_guides_filtered(ray, plane, constraint, guides, |_| true)
+}
+
+pub(crate) fn align_guides_filtered(ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>,
+    guides: &[AxisGuide], allowed: impl Fn(DVec3) -> bool) -> Option<(Snap, Vec<AxisGuide>)>
 {
     let near = |point: DVec3| {
         let delta = point - ray.origin;
@@ -19,17 +27,30 @@ pub(crate) fn align_guides(ray: Ray, plane: (DVec3, DVec3), constraint: Option<(
         (depth > 0. && score <= 0.01 && (point - plane.0).dot(plane.1).abs() < 1e-6
             && constraint.is_none_or(|(start, c)| c.contains(point - start))).then_some(score)
     };
-    let mut best: Option<(DVec3, Vec<AxisGuide>, f64)> = None;
-    let mut consider = |point: DVec3, active: Vec<AxisGuide>| {
+    let mut unique: Vec<(AxisGuide, f64, usize)> = Vec::with_capacity(72);
+    for (index, guide) in guides.iter().enumerate() {
+        if unique.iter().any(|(old, _, _)| old.axis == guide.axis
+            && (old.origin - guide.origin).cross(guide.axis.vector()).length() < 1e-7) { continue; }
+        let score = axis_point(ray, guide.origin, guide.axis, constraint, Some(plane)).and_then(near).unwrap_or(f64::INFINITY);
+        unique.push((*guide, score, index));
+    }
+    unique.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.2.cmp(&b.2)));
+    let mut counts = [0; 3];
+    let guides: Vec<_> = unique.into_iter().filter_map(|(guide, _, _)| {
+        let index = match guide.axis { Axis::X => 0, Axis::Y => 1, Axis::Z => 2 };
+        if counts[index] >= benchup_core::inference::MAX_ALIGNMENT_REFERENCES_PER_AXIS { return None; }
+        counts[index] += 1; Some(guide)
+    }).collect();
+    let mut candidates = Vec::new();
+    let mut consider = |point: DVec3, first: usize, second: Option<usize>| {
         let Some(score) = near(point) else { return; };
-        if best.as_ref().is_none_or(|(_, old, old_score)| active.len() > old.len()
-            || active.len() == old.len() && score < *old_score) { best = Some((point, active, score)); }
+        candidates.push((point, first, second, score));
     };
     for (i, guide) in guides.iter().enumerate() {
         if let Some(point) = axis_point(ray, guide.origin, guide.axis, constraint, Some(plane)) {
-            consider(point, vec![*guide]);
+            consider(point, i, None);
         }
-        for second in &guides[i + 1..] {
+        for (j, second) in guides.iter().enumerate().skip(i + 1) {
             if guide.axis == second.axis { continue; }
             let Some(point) = (Ray { origin: guide.origin, direction: guide.axis.vector() })
                 .axis(second.origin, second.axis.vector()) else { continue; };
@@ -38,14 +59,24 @@ pub(crate) fn align_guides(ray: Ray, plane: (DVec3, DVec3), constraint: Option<(
                 (delta - g.axis.vector() * delta.dot(g.axis.vector())).length() < 1e-6
             };
             if !on_line(guide) || !on_line(second) { continue; }
-            let mut active = vec![*guide, *second];
-            if let Some(third) = guides.iter().find(|g| g.axis != guide.axis && g.axis != second.axis && on_line(g)) {
-                active.push(*third);
-            }
-            consider(point, active);
+            consider(point, i, Some(j));
         }
     }
-    best.map(|(point, guides, _)| (Snap { point, kind: Inference::Aligned }, guides))
+    candidates.sort_by(|a, b| b.2.is_some().cmp(&a.2.is_some()).then(a.3.total_cmp(&b.3))
+        .then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+    for (point, first, second, _) in candidates {
+        if !allowed(point) { continue; }
+        let mut active = vec![guides[first]];
+        if let Some(second) = second {
+            active.push(guides[second]);
+            if let Some(third) = guides.iter().find(|g| g.axis != guides[first].axis && g.axis != guides[second].axis
+                && (point - g.origin).cross(g.axis.vector()).length() < 1e-7 && point.distance(g.origin) > 1e-7) {
+                active.push(*third);
+            }
+        }
+        return Some((Snap { point, kind: Inference::Aligned }, active));
+    }
+    None
 }
 
 #[derive(Default)]
@@ -70,17 +101,24 @@ impl References {
         self.source = Some(Arc::clone(model));
     }
 
+    #[cfg(test)]
     pub fn alignment(&self, ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>,
         visible: impl Fn(u64, DVec3) -> bool) -> [Option<AxisGuide>; 3]
     {
+        self.candidates(ray, plane, constraint, visible).map(|guides| guides.into_iter().next())
+    }
+
+    pub fn candidates(&self, ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>,
+        visible: impl Fn(u64, DVec3) -> bool) -> [Vec<AxisGuide>; 3]
+    {
         [Axis::X, Axis::Y, Axis::Z].map(|axis| {
-            let transform = axis_projection(ray, axis, plane, constraint)?;
-            let hit = self.index.query_mapped_points(ray, 0.01, transform, |slot, reference, point| {
+            let Some(transform) = axis_projection(ray, axis, plane, constraint) else { return Vec::new(); };
+            self.index.query_mapped_candidates(ray, 0.01, transform, benchup_core::inference::MAX_ALIGNMENT_REFERENCES_PER_AXIS, |slot, reference, point| {
                 let expected = axis_point(ray, reference, axis, constraint, Some(plane));
                 expected.is_some_and(|expected| expected.distance(point) < 1e-6)
                     && visible(self.anchors[slot as usize].0, reference)
-            })?;
-            Some(AxisGuide { origin: self.anchors[hit.id as usize].1, axis })
+            }, |a, b| (self.anchors[a as usize].1 - self.anchors[b as usize].1).cross(axis.vector()).length() < 1e-7)
+                .into_iter().map(|hit| AxisGuide { origin: self.anchors[hit.id as usize].1, axis }).collect()
         })
     }
 }
@@ -205,6 +243,53 @@ pub(crate) fn axis_point(ray: Ray, reference: DVec3, axis: Axis,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn alignment_candidates_rank_builtin_anchors_before_applying_the_limit() {
+        let limit = benchup_core::inference::MAX_ALIGNMENT_REFERENCES_PER_AXIS;
+        let mut guides = vec![AxisGuide { origin: DVec3::X * -100., axis: Axis::Y }];
+        guides.extend((1..=limit).map(|i| AxisGuide { origin: DVec3::new(i as f64 * 0.0001, 1., 0.), axis: Axis::Y }));
+        let last = limit as f64 * 0.0001;
+        let ray = Ray { origin: DVec3::Z * 2., direction: -DVec3::Z };
+        let (snap, _) = align_guides_filtered(ray, (DVec3::ZERO, DVec3::Z), None, &guides,
+            |point| (point.x - last).abs() < 1e-8).unwrap();
+        assert!((snap.point.x - last).abs() < 1e-8);
+    }
+    #[test]
+    fn alignment_candidates_retain_secondary_intersections_after_surface_rejection() {
+        let mut model = benchup_core::Model::default();
+        for coordinate in [0., 0.01] {
+            model.add_edge(DVec3::new(coordinate, 1., 0.), DVec3::new(coordinate, 2., 0.)).unwrap();
+            model.add_edge(DVec3::new(1., coordinate, 0.), DVec3::new(2., coordinate, 0.)).unwrap();
+        }
+        let mut references = References::default();
+        references.prepare(&Arc::new(model));
+        let ray = Ray { origin: DVec3::new(0.001, 0.001, 2.), direction: -DVec3::Z };
+        let plane = (DVec3::ZERO, DVec3::Z);
+        let candidates = references.candidates(ray, plane, None, |_, _| true);
+        assert_eq!(candidates[0].len(), 2);
+        assert_eq!(candidates[1].len(), 2);
+        let guides: Vec<_> = candidates.into_iter().flatten().collect();
+        let (snap, active) = align_guides_filtered(ray, plane, None, &guides, |p| p.x > 0.005 && p.y > 0.005).unwrap();
+        assert!(snap.point.distance(DVec3::new(0.01, 0.01, 0.)) < 1e-8);
+        assert_eq!(active.len(), 2);
+    }
+
+    #[test]
+    fn alignment_candidates_deduplicate_lines_before_the_shared_desktop_limit() {
+        let mut model = benchup_core::Model::default();
+        for i in 0..100 {
+            let x = i as f64 * 0.0001;
+            model.add_edge(DVec3::new(x, 1., 0.), DVec3::new(x, 2., 0.)).unwrap();
+        }
+        let mut references = References::default();
+        references.prepare(&Arc::new(model));
+        let ray = Ray { origin: DVec3::Z * 2., direction: -DVec3::Z };
+        let candidates = references.candidates(ray, (DVec3::ZERO, DVec3::Z), None, |_, _| true);
+        assert_eq!(candidates[1].len(), benchup_core::inference::MAX_ALIGNMENT_REFERENCES_PER_AXIS);
+        for (i, guide) in candidates[1].iter().enumerate() {
+            assert!((guide.origin.x - i as f64 * 0.0001).abs() < 1e-8);
+        }
+    }
 
     #[test]
     fn global_reference_index_finds_off_face_endpoints_and_midpoints_with_visibility_and_locks() {

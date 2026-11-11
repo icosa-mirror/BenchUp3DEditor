@@ -152,12 +152,14 @@ impl Targets {
         let mut guides: Vec<_> = [anchor, DVec3::ZERO].into_iter().flat_map(|origin|
             [Axis::X, Axis::Y, Axis::Z].map(|axis| AxisGuide { origin, axis })).collect();
         if geometry && edges {
-            guides.extend(self.references.alignment(ray, plane, constraint.map(|c| (anchor, c)), |id, reference| {
+            guides.extend(self.references.candidates(ray, plane, constraint.map(|c| (anchor, c)), |id, reference| {
                 let state = self.entities.get(id);
                 !state.hidden && state.context.is_some() && self.visible(ray.origin, reference, x_ray)
             }).into_iter().flatten());
         }
-        if let Some((snap, guides)) = super::world_inference::align_guides(ray, plane, constraint.map(|c| (anchor, c)), &guides)
+        if let Some((snap, guides)) = super::world_inference::align_guides_filtered(ray, plane, constraint.map(|c| (anchor, c)), &guides,
+            |point| allowed(point) && self.visible(ray.origin, point, x_ray)
+                && face_target.as_ref().is_none_or(|target| self.faces.get(target.face.unwrap()).contains_point(point)))
             && allowed(snap.point) && self.visible(ray.origin, snap.point, x_ray) {
             return Some(Target { snap, guides, edge: None, face: None });
         }

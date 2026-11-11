@@ -55,14 +55,17 @@ struct Placement {
 }
 
 impl super::world_inference::ReferenceQuery for Scene {
-    fn alignment(&self, ray: benchup_core::Ray, plane: (DVec3, DVec3),
-        constraint: Option<(DVec3, benchup_core::inference::AxisConstraint)>) -> [Option<benchup_core::AxisGuide>; 3]
+    fn alignment_candidates(&self, ray: benchup_core::Ray, plane: (DVec3, DVec3),
+        constraint: Option<(DVec3, benchup_core::inference::AxisConstraint)>) -> [Vec<benchup_core::AxisGuide>; 3]
     {
-        if self.source.as_ref().is_none_or(|source| !self.alignment_references.matches(&source.model)) { return [None; 3]; }
-        self.alignment_references.alignment(ray, plane, constraint, |edge, reference| {
+        if self.source.as_ref().is_none_or(|source| !self.alignment_references.matches(&source.model)) { return Default::default(); }
+        self.alignment_references.candidates(ray, plane, constraint, |edge, reference| {
             let state = self.entities.get(edge);
             !state.hidden && state.context.is_some() && self.point_visible(ray.origin, reference)
         })
+    }
+    fn contains_face(&self, origin: DVec3, face: u64, point: DVec3) -> Option<bool> {
+        Some(self.faces.get(face).contains_point(point) && self.point_visible(origin, point))
     }
 }
 

@@ -100,6 +100,9 @@ pub struct Snap {
     pub kind: Inference,
 }
 
+/// Bound alignment pair enumeration equally across desktop and tracked hosts.
+pub const MAX_ALIGNMENT_REFERENCES_PER_AXIS: usize = 24;
+
 /// Independent geometry targets; edges include endpoints and midpoints.
 #[derive(Clone, Copy, Debug)]
 pub struct SnapTargets {
@@ -617,7 +620,7 @@ fn combine_axis_guides(
         // Bound pair enumeration even for large models.
         nearby
             .into_iter()
-            .take(24)
+            .take(MAX_ALIGNMENT_REFERENCES_PER_AXIS)
             .map(|(_, _, guide)| guide)
             .collect()
     });

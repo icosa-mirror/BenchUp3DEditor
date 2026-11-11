@@ -106,14 +106,17 @@ pub(super) struct Index {
 impl Index {
     /// Query point anchors after an affine projection (for example onto an
     /// inference plane). Transform node bounds, not every scene anchor per frame.
-    pub fn query_mapped_points(
-        &self, ray: Ray, slope: f64, transform: glam::DMat4,
+    pub fn query_mapped_candidates(
+        &self, ray: Ray, slope: f64, transform: glam::DMat4, limit: usize,
         visible: impl Fn(u64, DVec3, DVec3) -> bool,
-    ) -> Option<Hit> {
-        self.nodes.first()?;
-        let ray = Ray { direction: ray.direction.try_normalize()?, ..ray };
-        if !ray.origin.is_finite() || !slope.is_finite() || slope <= 0. || !transform.is_finite() { return None; }
-        let mut best: Option<Hit> = None;
+        equivalent: impl Fn(u64, u64) -> bool,
+    ) -> Vec<Hit> {
+        let mut best: Vec<Hit> = Vec::with_capacity(limit);
+        if self.nodes.is_empty() || limit == 0 { return best; }
+        let Some(direction) = ray.direction.try_normalize() else { return best; };
+        let ray = Ray { direction, ..ray };
+        if !ray.origin.is_finite() || !slope.is_finite() || slope <= 0. || !transform.is_finite() { return best; }
+        let rank = |a: &Hit, b: &Hit| a.score.total_cmp(&b.score).then(a.depth.total_cmp(&b.depth)).then(a.id.cmp(&b.id));
         let mut pending = [0_usize; usize::BITS as usize + 1];
         let mut len = 1;
         while len > 0 {
@@ -127,7 +130,8 @@ impl Index {
                     }
                 }
             }
-            if bounds.entry(ray, slope, f64::INFINITY).is_none() { continue; }
+            let threshold = if best.len() == limit { best.last().unwrap().score.min(slope) } else { slope };
+            if bounds.entry(ray, threshold, f64::INFINITY).is_none() { continue; }
             if let Some((a, b)) = node.children {
                 pending[len] = a; pending[len + 1] = b; len += 2;
                 continue;
@@ -138,10 +142,15 @@ impl Index {
                 let depth = delta.dot(ray.direction);
                 if depth <= 0. || !depth.is_finite() { continue; }
                 let score = (delta - ray.direction * depth).length() / depth;
-                if score > slope || best.as_ref().is_some_and(|old| score > old.score
-                    || score == old.score && (depth > old.depth || depth == old.depth && anchor.id >= old.id)) { continue; }
+                let candidate = Hit { id: anchor.id, point, depth, score };
+                if score > slope || best.len() == limit && rank(&candidate, best.last().unwrap()).is_gt() { continue; }
+                let duplicate = best.iter().position(|old| equivalent(anchor.id, old.id));
+                if duplicate.is_some_and(|index| !rank(&candidate, &best[index]).is_lt()) { continue; }
                 if visible(anchor.id, anchor.a, point) {
-                    best = Some(Hit { id: anchor.id, point, depth, score });
+                    if let Some(index) = duplicate { best.remove(index); }
+                    let index = best.binary_search_by(|old| rank(old, &candidate)).unwrap_or_else(|index| index);
+                    best.insert(index, candidate);
+                    best.truncate(limit);
                 }
             }
         }

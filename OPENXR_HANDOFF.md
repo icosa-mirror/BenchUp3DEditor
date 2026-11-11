@@ -36,7 +36,8 @@ creation landed in `25b514f`; shared immersive View controls landed in `25fd106`
 Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
 guards landed in `466b9f4`; controller joint icons landed in `d7c05f3`. Current work
 has completed C13, controller enclosing-window selection, and C14's direct
-selection/context gestures. C15 is the next inference/reference audit. The plan now has stable coding
+selection/context gestures. C15 now covers remaining edge-constrained drawing
+and acquired-reference work. The plan has stable coding
 milestone IDs and checkboxes, separate from verification. Do not derive an effort
 percentage by counting unequal checklist rows; keep audit-discovered work visible.
 Generated caps remain read-only surfaces with optional editable group ownership.
@@ -231,13 +232,36 @@ C15 now adds a retained global endpoint/midpoint reference index, rebuilt only
 when the evaluated source model changes. Each world-axis query affinely maps
 BVH node bounds onto the tool's current working plane/lock before testing leaf
 anchors. The native scene callback supplies editing-context, hidden-state,
-section and face/cap visibility checks using its existing caches. It returns up
-to one reference per axis to the shared drawing/measurement callback. Compatible
+section and face/cap visibility checks using its existing caches. It retains up
+to 24 distinct visible guide lines per axis for the shared tool callback. Compatible
 reference/start/origin guides combine at a world intersection and use the existing
 GPU guide overlays. Exact geometry targets and acquired-reference projections
 retain priority. No desktop camera projection or new persistent option is involved.
-C15 remains open: finish geometry-constrained drawing refinements
-and cases requiring more than the nearest visible reference for each axis.
+C15 remains open for edge-constrained drawing refinement and evaluated-edge
+reference acquisition. Candidate coverage now
+uses the same 24-per-axis constant as desktop. Equivalent parallel guide lines
+are merged before the limit; nearby start/origin guides participate in ranking,
+so distant built-in anchors cannot displace useful geometry references. Candidate
+pair ranking is bounded, with no per-pair result-vector allocation or repeated
+third-axis scan. Native angular tolerance remains 0.01; matching the desktop
+candidate count is not a claim of identical pixel/angle interaction or performance.
+The shared drawing and modeling routes now validate candidate containment on a
+targeted face, including holes, and continue to secondary candidates after
+rejection. Native drawing uses its retained evaluated face cache for this check.
+Acquired-reference projection also preserves the active surface. GPU guide
+overlays still receive only the winning guides, not every candidate.
+
+`alignment-candidates-final-reference-tests.log` passes all ten reference cases,
+including secondary surface-valid intersections, distinct-line limits, built-in
+anchor ranking and retained-versus-exhaustive projection checks.
+`alignment-candidates-final-drawing-tests.log` passes the shared controller case
+that rejects the closest off-face intersection and uses the next valid pair.
+`alignment-candidates-modeling-target-tests.log` passes all seven stationary
+target/preference/occlusion cases. No headset acceptance or large-scene performance
+claim is made by these focused software checks.
+`alignment-candidates-build.log` passes the native editor example build without
+warnings. The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no replacement headset session was launched.
 Move now shares the immutable stationary geometry from `MoveSnapCache` with its
 world target index. Targets exclude the edited geometry and inherited hidden
 state, retain editing scope and section clipping, and match desktop Move's
@@ -247,7 +271,7 @@ grid refinement preserves exact geometry targets; no qualifying snap retains the
 existing controller-depth/constraint/grid fallback. The existing model preview,
 commit and single-undo routes remain authoritative. Target indexes persist for
 the gesture instead of following the changing preview. C15 still includes the
-geometry-constrained drawing and reference-candidate audit.
+geometry-constrained drawing and acquired-reference audit.
 
 Scale now reuses that stationary target service with visible-target semantics:
 opaque faces and generated section caps block hidden edge/reference targets,
@@ -258,7 +282,7 @@ world-space ratio from the original centre/reference. An exact target is not
 rounded a second time as a grid radius. Free controller-depth scaling retains
 its existing radius/grid fallback. Axis/plane locks, exact-value entry and the
 existing preview/commit/undo routes remain authoritative. Remaining C15 work
-includes geometry-constrained drawing refinements and reference-candidate coverage.
+includes geometry-constrained drawing refinements and evaluated-edge reference acquisition.
 
 The stationary service now carries all three existing target preferences
 independently: edges, faces and face centres. Previously its new Move/Scale
@@ -278,7 +302,7 @@ remain active. Free rotation uses a forward ray/plane intersection where possibl
 retaining the original depth-based projected fallback for parallel rays. Shared
 grid refinement preserves plane tilt/elevation; exact targets retain priority.
 The existing pivot/reference, exact numeric entry, preview, commit and undo paths
-remain authoritative. Drawing refinements and reference-candidate coverage
+remain authoritative. Drawing refinements and evaluated-edge reference acquisition
 are still under C15 audit; no full parity acceptance is implied.
 
 `rotate-inference-tests.log` passes the controller off-plane projection case
@@ -586,7 +610,7 @@ No replacement headset session was launched; controller/visual acceptance remain
 2. Evaluated-model preparation has been extracted from `paint_evaluated_scene`.
    Close the remaining UI/input dependencies: host/window commands, desktop-only
    selection gestures and any remaining handle/tool routes identified by the audit. Known limits include
-   broader off-face/global references, near-field/fast sweep sampling limits, evaluated-only paint/edit
+   edge-constrained alignment and evaluated-edge acquisition, near-field/fast sweep sampling limits, evaluated-only paint/edit
    guards and broader nested/scoped cap acceptance. A retained cap hierarchy now
    supplements original-face occlusion queries using the rendered triangles. Guide intersections are locally bounded
    to 16 candidates/eight exact targets; dense clusters can omit a target.
