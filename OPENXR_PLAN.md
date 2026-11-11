@@ -125,6 +125,8 @@ reconciled. Coding status remains separate from headset/graphics acceptance.
 | A01 | Desktop Move fades unselected faces and overlays edges; the retained XR renderer previously used ordinary opaque styling | GPU uniform/selection-mask route implemented; visual acceptance open |
 | A02 | XR previously used document selection while desktop highlighted preview copies/caps | Operation-returned preview selection is shared by desktop/XR; evaluated-ID fallback cached per rendered snapshot; visual acceptance open |
 | A03 | World HUD repeated default instructions and advertised direct Select actions during window selection or target-handle actions | Shared mode-specific hint and target override composition implemented; status/errors preserved; headset acceptance open |
+| A04 | Measurements/text only advertised their full sequence; section handles had no action-specific prompts | Measurement/text phase prompts shared by HUD and XR controls; section hover/drag instructions implemented; controller acceptance open |
+| A05 | Desktop attached text has an open arrowhead at its attachment; XR retained text currently draws only the leader | Active coding gap: saved, edited/new and clipboard text arrowheads |
 
 ## Current architecture and boundaries
 

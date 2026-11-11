@@ -250,8 +250,26 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 
 impl BenchUpApp {
     pub(super) fn xr_tool_hint(&self) -> &'static str {
-        if self.tool == Tool::Select && self.xr_panel.window_selection { WINDOW_HINT }
-        else { hint(self.tool, self.xr_panel.precise_modeling) }
+        if self.tool == Tool::Select && self.xr_panel.window_selection { return WINDOW_HINT; }
+        if let Some(measurement) = &self.measurement {
+            if measurement.complete && matches!(self.tool, Tool::TapeMeasure | Tool::Protractor) {
+                return if measurement.guide_id.is_some() {
+                    "Guide created. Enter an exact value on the panel to adjust it, or trigger to start another. Cancel clears."
+                } else {
+                    "Measurement complete. Trigger starts another measurement. Cancel clears."
+                };
+            }
+            match (self.tool, measurement.points.len()) {
+                (Tool::TapeMeasure, 1) => return "Trigger: second point. Use the panel for an exact length or axis locks. Cancel clears.",
+                (Tool::Protractor, 1) => return "Trigger: baseline point. Cancel clears.",
+                (Tool::Protractor, 2) => return "Trigger: angle point. Use the panel for an exact angle or plane lock. Cancel clears.",
+                (Tool::Dimensions, 1) => return "Trigger: second endpoint. Use the panel to align the measurement axis. Cancel clears.",
+                (Tool::Dimensions, 2) => return "Move to position the dimension; trigger places it. Use the panel for offset axis locks. Cancel clears.",
+                (Tool::Text, 1) => return "Move to position the label; trigger opens its text editor on the panel. Cancel clears.",
+                _ => {}
+            }
+        }
+        hint(self.tool, self.xr_panel.precise_modeling)
     }
 
     fn xr_window_select(&mut self, pointer: &Pointer, state: &mut State, clicked: bool,
@@ -593,6 +611,8 @@ impl BenchUpApp {
                 "Trigger places the copy. Cancel discards the preview."
             } else if self.tool == Tool::Select && preferences.window_selection {
                 WINDOW_HINT
+            } else if self.tool.is_measuring() {
+                self.xr_tool_hint()
             } else {
                 hint(self.tool, preferences.precise_modeling)
             };
@@ -1086,6 +1106,7 @@ impl BenchUpApp {
             self.snap = None;
             self.hover = None;
             self.flip_hover = None;
+            state.handle_hint = Some("Move the controller to slide the section plane; release trigger to keep it. Cancel restores it.");
             if !self.doc.display.section_planes
                 || !self.doc.display.section_axes[axis]
                 || activate && pointer.cancel
@@ -1136,6 +1157,7 @@ impl BenchUpApp {
         self.hover = None;
         self.flip_hover = None;
         state.pointer_target = Some(point);
+        state.handle_hint = Some("Hold trigger and move the controller to slide this section plane. Cancel restores it.");
         if activate && pointer.activate {
             self.begin_world_section(axis, point);
             state.section = Some(SectionGrab {
@@ -2682,6 +2704,69 @@ mod input_revision_tests {
         assert!(hud.contains("drag a window"));
         assert!(!hud.contains("Double trigger"));
         assert_eq!(hud.matches("drag a window").count(), 1);
+    }
+
+    #[test]
+    fn world_hud_follows_measurement_and_label_placement_phases() {
+        let ctx = egui::Context::default();
+        for tool in [Tool::TapeMeasure, Tool::Protractor, Tool::Dimensions] {
+            let mut app = BenchUpApp::with_document(Document::default(), None, true);
+            app.tool = tool;
+            app.create_guides = false;
+            for (point, expected) in [(DVec3::ZERO, match tool {
+                Tool::TapeMeasure => "second point", Tool::Protractor => "baseline point", _ => "second endpoint",
+            }), (DVec3::X, match tool {
+                Tool::TapeMeasure => "Measurement complete", Tool::Protractor => "angle point", _ => "position the dimension",
+            })] {
+                app.snap = Some(Snap { point, kind: Inference::Endpoint });
+                app.measurement_click_snap(DVec3::Z, DVec3::Z * 5., &ctx);
+                assert!(app.xr_tool_hint().contains(expected), "{tool:?}: {}", app.xr_tool_hint());
+            }
+            if tool == Tool::Protractor {
+                app.snap = Some(Snap { point: DVec3::Y, kind: Inference::Endpoint });
+                app.measurement_click_snap(DVec3::Z, DVec3::Z * 5., &ctx);
+                assert!(app.xr_tool_hint().contains("Measurement complete"));
+            }
+            app.measurement = None;
+            assert_eq!(app.xr_tool_hint(), hint(tool, app.xr_panel.precise_modeling));
+        }
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.tool = Tool::Text;
+        app.snap = Some(Snap { point: DVec3::ZERO, kind: Inference::Endpoint });
+        app.text_click_at_snap(None, &ctx);
+        assert!(app.xr_tool_hint().contains("position the label"));
+        app.text_click_at_snap(None, &ctx);
+        assert!(app.text_editor.is_some());
+        assert!(app.measurement.is_none());
+    }
+
+    #[test]
+    fn world_hud_section_prompts_follow_hover_drag_and_cancel_restores_offset() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.doc.display.section_planes = true;
+        app.doc.display.section_axes = [false, false, true];
+        let initial = app.doc.display.section_height;
+        let (_, anchor) = app.section_handle_anchors()[0];
+        let mut pointer = Pointer {
+            stamp: None, handle: None, view: None, model: Arc::new(app.doc.model.clone()),
+            ray: Ray { origin: anchor + DVec3::Z, direction: -DVec3::Z }, hit: None,
+            activate: false, cancel: false, primary_down: true, visible_reference: None,
+        };
+        let mut state = State::default();
+        assert!(app.xr_section_pointer(&pointer, &mut state, false, &ctx, &mut Storage));
+        assert!(state.handle_hint().unwrap().contains("Hold trigger"));
+        pointer.activate = true;
+        app.xr_section_pointer(&pointer, &mut state, true, &ctx, &mut Storage);
+        pointer.activate = false;
+        pointer.ray.origin.z += 0.5;
+        app.xr_section_pointer(&pointer, &mut state, true, &ctx, &mut Storage);
+        assert!((app.doc.display.section_height - initial - 0.5).abs() < 1e-8);
+        assert!(state.handle_hint().unwrap().contains("release trigger"));
+        pointer.cancel = true;
+        app.xr_section_pointer(&pointer, &mut state, true, &ctx, &mut Storage);
+        assert_eq!(app.doc.display.section_height, initial);
+        assert!(state.section.is_none());
     }
 
     #[test]

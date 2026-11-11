@@ -438,7 +438,14 @@ No replacement headset session was launched; controller/visual acceptance remain
    other controller target hints replace the generic instruction while preserving
    status/errors. Composition removes repeated instruction lines and retains the
    navigation hint. No settings or label-occlusion policy changed.
-4. Selection/context source reconciliation includes the enclosing-window and
+4. A04: Tape, Protractor, Dimensions and attached Text now report their current
+   input step in both the HUD and XR controls. Completed measurement/guide prompts
+   explain restarting or adjusting the result. Section handles advertise holding
+   the trigger to drag, releasing to keep the offset and Cancel to restore it.
+5. A05 remains active: desktop attached text draws an open arrowhead at its model
+   attachment, while XR's saved/transient/clipboard text currently has only its
+   leader and label. Add this through retained GPU line instances.
+6. Selection/context source reconciliation includes the enclosing-window and
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
    context acceptance remain open; the broader eight-row audit is still active.
 
@@ -473,6 +480,12 @@ errors while replacing old actions. `world-hud-build.log` passes the native edit
 example build without warnings. The executable is frozen under this milestone's
 commit in `.local/openxr/preview-builds/`; headset acceptance remains open and no
 session was launched.
+
+`world-phase-hud-tests.log` passes five focused cases, including actual shared
+measurement/text transitions and section hover, drag and cancellation restoring
+the original offset. `world-phase-hud-build.log` passes the native editor example
+build without warnings; its executable is frozen under this milestone's commit
+in `.local/openxr/preview-builds/`. No headset session was launched.
 
 ## User direction
 
