@@ -315,6 +315,13 @@ or complete-parity claims.
    regression remain recorded. These checks do not constitute a full suite or
    headset confirmation of all recent interactions; broad validation is deferred.
 
+   Current build `138d7f4` also passed three isolated RTX 4090 Vulkan snapshots
+   without OpenXR: clean Example and matched Guides off/on fixtures, each with
+   404 faces. The inspected guide image shows the dashed line and point cross;
+   the pair differs by 2,216 pixels (guide-colour pixels: 0 off, 852 on). This
+   exercises the new GPU uniform/guide branch in the main scene. It does not prove
+   OpenXR device/swapchain interoperability or controller clipboard placement.
+
 3. Phase 1 acceptance remains open: complete open/edit/undo/save/reopen workflow,
    controller text/file workflow acceptance, capture/loss/restart/disconnect recovery,
    immediate preference restoration and clean graphics validation. Historical

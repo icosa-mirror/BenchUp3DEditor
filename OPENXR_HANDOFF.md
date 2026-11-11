@@ -563,6 +563,21 @@ The current ready executable remains
 `.local/openxr/preview-builds/138d7f4/openxr_editor.exe`; the audit documentation
 change does not require a new executable or a headset launch.
 
+Current offscreen evidence for that frozen binary is under
+`.local/openxr/offscreen-138d7f4-e1db78d5/`. `renderer-check.json` records its
+executable hash and three accepted RTX 4090 Vulkan cases: `clean-eye.png` and
+`guides-off-v2/eye.png` / `guides-on-v2/eye.png`, all loading the 404-face Example.
+The inspected enabled image contains the dashed guide and point cross. The
+matched pair differs by 2,216 pixels, with 0 versus 852 guide-colour pixels.
+Their complete logs contain no error/warning/panic/validation messages. This is
+an independent wgpu device check of the new uniform/guide GPU path, not OpenXR
+adapter selection, swapchain interoperability, stereo/headset comfort, controller
+clipboard placement or a performance measurement. User data was isolated and no
+headset session was launched. Initial scratch fixtures with an ID collision were
+excluded; only corrected `v2` cases count. For fixture snapshots, verify the
+expected scene loaded as well as exit status: an empty recovery workspace can
+still produce a PNG successfully.
+
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
 selection and other tools. The inherited appearance regression initially failed
