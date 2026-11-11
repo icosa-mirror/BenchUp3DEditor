@@ -115,6 +115,16 @@ occlusion policy remains a separate discussion-dependent item. Hardware/browser
 acceptance, validation and performance work remain in the verification gates;
 unchecked audit milestones can still reveal additional implementation work.
 
+## C16 source audit
+
+C16 remains open until the eight parity rows and confirmed findings below are
+reconciled. Coding status remains separate from headset/graphics acceptance.
+
+| ID | Confirmed finding | State |
+|---|---|---|
+| A01 | Desktop Move fades unselected faces and overlays edges; the retained XR renderer previously used ordinary opaque styling | GPU uniform/selection-mask route implemented; visual acceptance open |
+| A02 | `xr_scene_source` uses document selection while desktop derives Move-copy/new extrusion-cap selection from preview geometry | Open: share prepared preview selection without a scene scan in every XR frame |
+
 ## Current architecture and boundaries
 
 1. `src/xr/runtime.rs` and the `openxr_diagnostics` example inspect the loader,
@@ -163,12 +173,12 @@ The numbered rows are the checklist for the replacement milestone.
 
 | # | Area | Implemented | Remaining audit/gap |
 |---|---|---|---|
-| 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions; held-trigger erase with bounded ray interpolation and one undo | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation; extreme/near-field sweep acceptance remains open |
+| 1 | Selection and context | Shared selection/hover, replace/toggle ray selection, enclosing windows and direct group/text/context shortcuts; context bounds, endpoint/edge cues; shared Edit-menu context actions; held-trigger erase with bounded ray interpolation and one undo | Controller window/context/cancellation acceptance and extreme/near-field sweep coverage remain open |
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired displayed-edge references, 3D edge-constrained guide pairs and locked-axis projection; persisted X/Y/Z and Unlock controls in XR, including two-axis planes | Complete controller lock/reference acceptance and display/workflow audit |
-| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover; host-aware lock refresh and shared precision commits | Pending drawing/measurement targets and Exact value modeling use world-based numeric Enter; remaining desktop handles/precision routes need audit |
+| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover; host-aware lock refresh and shared precision commits | Correct Move-copy/new-cap preview selection (A02); finish remaining desktop handle/precision source audit |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
-| 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |
+| 6 | Sections and display/environment | Shared effective display, face styles/X-Ray and derived GPU Move transparency (A01), hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |
 | 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, controller joint edit/warning icons and shared editor action, owner-aware guides, solid operand feedback and shared boolean/flip commands | Fastener entry-face controls are deferred under the existing disabled gate; audit remaining active target/edit gestures; evaluated-only paint targets remain restricted |
 | 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input; shared View framing and standard directions target XR placement | Audit remaining reachable commands, handles and native dialogs; controller acceptance of recent lock/view/file workflows remains pending |
 

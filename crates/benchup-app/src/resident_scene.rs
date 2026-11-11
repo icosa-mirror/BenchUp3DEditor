@@ -88,6 +88,12 @@ struct Uniform {
     tint_face:[f32;4],
     tint_edge:[f32;4],
 }
+
+const MOVE_X_RAY_FLAG: u32 = 1 << 7;
+
+fn move_x_ray(key: &SceneKey, model: &Model) -> bool {
+    key.tool == benchup_core::Tool::Move && key.selected.iter().any(|id| model.contains_entity(id))
+}
 #[derive(Default)]
 pub(super) struct Cache {
     key: Option<SceneKey>,
@@ -602,10 +608,11 @@ impl SceneCache {
         if shadows.as_ref().is_some_and(|map| previous_shadow.as_ref().is_none_or(|old| !Arc::ptr_eq(old, map))) {
             self.resident.shadow_builds += 1;
         }
+        let move_x_ray = move_x_ray(key, model);
         let callback = Draw {
             shadows: shadows.clone(),
             markers: key.display.endpoints || key.selected.iter().any(|id| model.edges.contains_key(id)),
-            translucent: key.display.x_ray || key.display.hidden_geometry || key.display.hidden_objects,
+            translucent: key.display.x_ray || move_x_ray || key.display.hidden_geometry || key.display.hidden_objects,
             appearance,
             grain,
             geometry: Arc::clone(&geometry),
@@ -669,7 +676,8 @@ impl SceneCache {
                     u32::from(key.display.x_ray) | (u32::from(key.display.back_edges) << 1)
                         | (u32::from(key.display.profiles) << 2) | (u32::from(key.display.depth_cue) << 3)
                         | (u32::from(key.display.endpoints) << 4) | (u32::from(key.display.extensions) << 5)
-                        | (u32::from(key.display.fog) << 6), 0, u32::from(render_view.is_some_and(|v|v.colors.is_some())),
+                        | (u32::from(key.display.fog) << 6) | if move_x_ray { MOVE_X_RAY_FLAG } else { 0 },
+                    0, u32::from(render_view.is_some_and(|v|v.colors.is_some())),
                 ],
                 display_params: [key.display.profile_width as f32, key.display.fog_start as f32, key.display.fog_end as f32, key.camera.distance as f32],
                 back_color: rgba(face_palette.back),
@@ -1326,7 +1334,7 @@ impl egui_wgpu::CallbackTrait for Draw {
         }
         for (pipeline, reference_pipeline) in [
             (&pipelines.edge_depth, &references.edge_depth_pipeline),
-            (if self.uniform.display_flags[1] & 3 != 0 || self.uniform.display_flags[0] == 4 { &pipelines.overlay_edge } else { &pipelines.edge }, &references.edge_pipeline),
+            (if self.uniform.display_flags[1] & (3 | MOVE_X_RAY_FLAG) != 0 || self.uniform.display_flags[0] == 4 { &pipelines.overlay_edge } else { &pipelines.edge }, &references.edge_pipeline),
         ] {
             pass.set_pipeline(pipeline);
             pass.set_bind_group(1, &draw.visibility_bind, &[]);
@@ -1397,6 +1405,32 @@ mod tests {
     use super::*;
     use crate::test_ui::ContextExt as _;
     use benchup_core::{Edge, Vertex as ModelVertex};
+
+    #[test]
+    fn resident_move_xray_shader_validates() {
+        let module = wgpu::naga::front::wgsl::parse_str(include_str!("resident_scene.wgsl")).unwrap();
+        wgpu::naga::valid::Validator::new(Default::default(), Default::default()).validate(&module).unwrap();
+    }
+
+    #[test]
+    fn resident_move_xray_requires_move_and_a_valid_selection() {
+        let mut model = Model::default();
+        let edge = model.add_edge(DVec3::ZERO, DVec3::X).unwrap();
+        let group = model.make_object(&std::collections::BTreeSet::from([edge]), false, "Part").unwrap();
+        let mut key = key();
+        key.tool = benchup_core::Tool::Move;
+        assert!(!move_x_ray(&key, &model));
+        key.selected.insert(u64::MAX);
+        assert!(!move_x_ray(&key, &model));
+        key.selected = std::collections::BTreeSet::from([group]);
+        assert!(move_x_ray(&key, &model));
+        key.tool = benchup_core::Tool::Select;
+        assert!(!move_x_ray(&key, &model));
+        key.tool = benchup_core::Tool::Rotate;
+        assert!(!move_x_ray(&key, &model));
+        key.display.x_ray = true;
+        assert!(!move_x_ray(&key, &model));
+    }
 
     // The Linux GLES backend enables Naga's GLSL writer. Exercise the WebGL2
     // translation path without requiring a browser or GPU adapter.

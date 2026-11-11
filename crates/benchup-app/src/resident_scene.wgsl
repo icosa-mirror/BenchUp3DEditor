@@ -1,3 +1,6 @@
+// Bit 7 mirrors MOVE_X_RAY_FLAG in resident_scene.rs.
+const MOVE_X_RAY_FLAG: u32 = 128u;
+
 struct Camera {
     matrix: mat4x4<f32>,
     shadow_matrix: mat4x4<f32>,
@@ -98,7 +101,10 @@ fn face_vertex(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>,
     if ((state&64u)!=0u && (camera.interaction.w&4u)==0u) || (camera.interaction.y!=0u && (state&4u)==0u) {output.position=vec4<f32>(2.0,2.0,2.0,1.0);}
     output.color = select(shaded, material, camera.display_flags.x == 3u || camera.display_flags.w!=0u);
     output.color *= color.a;
-    if (camera.display_flags.y & 1u) != 0u { output.color *= 0.18; }
+    if (camera.display_flags.y & 1u) != 0u
+        || ((camera.display_flags.y & MOVE_X_RAY_FLAG) != 0u && (state & 1u) == 0u) {
+        output.color *= 0.18;
+    }
     output.world = position;
     output.shadow = (camera.shadow_matrix * vec4<f32>(position,1.0)).xyz;
     output.lateral = 0.0;
@@ -367,7 +373,7 @@ fn edge_color(input: Output) -> @location(0) vec4<f32> {
     let amount = coverage(input);
     if amount < 0.001 || clipped(input.world) { discard; }
     var color=input.color;
-    if hidden_center(input) && (camera.display_flags.y&1u)==0u && camera.display_flags.x!=4u {
+    if hidden_center(input) && (camera.display_flags.y&(1u|MOVE_X_RAY_FLAG))==0u && camera.display_flags.x!=4u {
         if (camera.display_flags.y&2u)==0u { discard; }
         if (input.position.x+input.position.y)%10.0>5.0 {discard;}
         color*=0.5;
@@ -382,7 +388,7 @@ fn edge_color(input: Output) -> @location(0) vec4<f32> {
 }
 @fragment
 fn edge_depth(input: Output) -> @location(0) vec4<f32> {
-    if clipped(input.world) || (camera.display_flags.y&1u)!=0u || camera.display_flags.x==4u {discard;}
+    if clipped(input.world) || (camera.display_flags.y&(1u|MOVE_X_RAY_FLAG))!=0u || camera.display_flags.x==4u {discard;}
     let amount = coverage(input);
     if input.position.z <= 0.0 || input.position.z >= 1.0 || input.color.a < 1.0 || amount < 0.001 || hidden_center(input) { discard; }
     return vec4<f32>(0.0);

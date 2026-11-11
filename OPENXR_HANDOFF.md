@@ -412,6 +412,38 @@ The native example build passes without warnings in `joint-handle-build.log`.
 The executable is frozen under `d7c05f3` in `.local/openxr/preview-builds/`.
 No replacement headset session was launched; controller/visual acceptance remains open.
 
+## C16 source audit
+
+1. A01: `app.rs` derives Move X-ray styling from a nonempty expanded selection:
+   unselected faces use 0.18 opacity and Move edges draw in front. The XR path
+   calls the shared retained `paint_resident_view` directly, which previously had
+   only the user X-ray flag. It now derives a separate Move flag from the active
+   tool and valid selection. The GPU's inherited selection mask keeps selected
+   faces opaque, while the existing translucent pass draws stationary faces and
+   the overlay edge pipeline exposes target edges. Geometry buffers are retained;
+   this changes uniforms and shader interpretation. Other tools and the saved
+   X-ray setting retain their routes. General label-occlusion policy is unchanged.
+2. A02: `xr_scene_source` still supplies raw document selection, whereas desktop
+   derives the selected Move copy or new Push/Pull cap from its preview. This is
+   a confirmed pending highlight/feedback gap. Share the prepared preview selection
+   at model preparation time rather than scanning the scene in every XR frame.
+3. Selection/context source reconciliation includes the enclosing-window and
+   double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
+   context acceptance remain open; the broader eight-row audit is still active.
+
+`move-display-tests.log` passes cross-platform WGSL parsing/validation and the
+Move/valid-selection activation cases, including group selection, empty/invalid
+selection and other tools. The inherited appearance regression initially failed
+because its fixture locked the former child ID after regrouping; the isolated
+fixture correction resolves the live nested child and the rerun passes in
+`move-display-appearance-regression.log`. These are shader/control
+checks; in-headset translucency, overlapping faces and full visual parity remain
+unverified. Existing retained-transparency ordering is unchanged.
+The one-line fixture correction is isolated in `01d89ec`.
+`move-display-build.log` passes the native editor example build without warnings.
+The executable is frozen under the Move display milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched.
+
 ## User direction
 
 1. Continue immersive viewport replacement autonomously, updating both documents
