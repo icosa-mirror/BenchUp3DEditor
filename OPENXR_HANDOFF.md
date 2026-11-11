@@ -464,10 +464,13 @@ The executable is frozen under this milestone's commit in
 `.local/openxr/preview-builds/`; no headset session was launched. No new regression
 test was added for the bounded marker-source correction.
 
-The drawing-feedback comparison found two further source gaps: A09 restores
-projection/Move/Scale guide-source circles and the wider modeling-start hint
-offset; A10 adds the axes' small depth-tested origin dot through retained GPU
-instances. These are active coding items; C16 remains unchecked.
+The drawing-feedback comparison found two further source gaps. A09 now restores
+projection/Move/Scale guide-source circles through the existing retained
+billboards and uses the wider modeling-start hint offset before a grab. It
+inherits the same guide visibility and exact-value suppression as its guide line.
+A10, the axes' small depth-tested origin dot, remains active. Combined native
+marker build evidence will be recorded after these related feedback corrections;
+C16 remains unchecked and headset acceptance stays open.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid

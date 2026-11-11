@@ -509,16 +509,16 @@ impl BenchUpApp {
                 }
             }
             if let Some((a, b)) = self.active_drawing_projection() {
+                let color = self.lock.map(|axis| self.axis_color(axis))
+                    .unwrap_or_else(|| self.inference_color());
                 result.segments.push(Segment {
                     a,
                     b,
                     width: 1.2,
-                    color: self
-                        .lock
-                        .map(|axis| self.axis_color(axis))
-                        .unwrap_or_else(|| self.inference_color()),
+                    color,
                     dashed: true,
                 });
+                result.circle(a, 3.0, color, colors.paper, false);
             }
         }
         let modeling_anchor = matches!(
@@ -612,7 +612,7 @@ impl BenchUpApp {
                     shapes: vec![
                         shape,
                         Glyph::Hint {
-                            at: if self.modeling.is_some() {
+                            at: if self.modeling.is_some() || modeling_anchor {
                                 [45.0, 18.0]
                             } else {
                                 [14.0, 16.0]
@@ -824,6 +824,7 @@ impl BenchUpApp {
                         width: 1.5,
                         dashed: true,
                     });
+                    result.circle(guide.origin, 3.0, self.axis_color(guide.axis), Color32::TRANSPARENT, false);
                 }
             }
             let text = self.modeling_status_text().unwrap_or_default();
