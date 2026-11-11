@@ -7,6 +7,24 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+C22 provides recovery when a controller panel's toolbar is hidden by a keyboard
+or modal: the panel hand's existing secondary action recalls it without a ray,
+persists world placement and cancels current pointer/world captures. It is active
+only while controller attachment is selected; the dominant-hand secondary action
+and world-panel bindings retain their original paths. The shortcut requires an
+observed release after startup, action loss, mode or handedness changes, and fires
+once per press. It uses button state even if the host hand lacks a tracked pose.
+Recenter now stays pending until a valid head pose arrives. The C21 modal guard
+preserves drafts during recall's pointer cancellation. Setup text and the Recenter
+tooltip explain the default Menu/B command. The focused guard regression passes
+(`.local/openxr/panel-recovery-shortcut-tests.log`), as does the locked native
+build without warnings (`panel-recovery-shortcut-build.log`). The independent
+RTX 4090 Vulkan setup snapshot is inspected, with no error/warning/panic output
+(`.local/openxr/panel-recovery-shortcut-render/renderer-check.json`); it verifies
+the help layout only. The executable is frozen under this milestone's source
+commit. No headset session was started; physical binding, modal/keyboard focus
+and recovery remain unverified.
+
 C21 addresses a capture-loss/modal interaction: the pointer emits Escape to
 cancel a captured viewport drag, but the same event could dismiss an open dialog
 and discard its draft when tracking/ownership changes. FrameInput now marks

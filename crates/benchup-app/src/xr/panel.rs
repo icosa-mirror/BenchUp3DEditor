@@ -792,7 +792,8 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
         if let Some(editor) = &mut editor {
             let preferences = editor.panel_preferences();
             let recenter = editor.take_recenter_request();
-            if !anchored || recenter {
+            if recenter { anchored = false; }
+            if !anchored {
                 let head = view_space.locate(&space, frame.predicted_display_time)?;
                 if head.location_flags.contains(
                     xr::SpaceLocationFlags::POSITION_VALID

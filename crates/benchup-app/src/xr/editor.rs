@@ -309,6 +309,9 @@ impl Editor {
                                         ui.selectable_value(&mut preferences.dominant_hand, crate::app_host::XrHand::Right, egui::RichText::new("Right").size(18.));
                                     });
                             });
+                            if preferences.controller_panel {
+                                ui.label(egui::RichText::new("The panel hand's Menu/B button returns this panel to world space.").size(16.));
+                            }
                             let summary = if preferences.controller_panel {
                                 format!("Controller panel   {:.2} m wide   Text {:.0}%",
                                     preferences.controller_width_metres, preferences.ui_scale * 100.)
@@ -459,6 +462,12 @@ impl Editor {
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
         input.preserve_modal_on_cancel(self.ctx.memory(|memory| memory.top_modal_layer().is_some()));
+        if input.recenter_panel {
+            let mut preferences = self.app.xr_panel_preferences();
+            preferences.controller_panel = false;
+            self.app.update_xr_panel_preferences(&self.ctx, &mut self.preferences, preferences);
+            self.recenter_requested = true;
+        }
         // Input can keep updating while the runtime skips UI rendering. Do not
         // let a lost capture survive until a later release callback.
         if super::input::erase_capture_cancelled(self.input.scene, input.scene) {

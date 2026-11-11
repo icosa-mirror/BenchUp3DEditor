@@ -27,7 +27,7 @@ fn view_comfort_section(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui))
                 [104., 42.],
                 egui::Button::new(egui::RichText::new("Recenter").size(18.)),
             )
-            .on_hover_text("Bring the panel in front of you. A controller panel returns to world space.")
+            .on_hover_text("Bring the panel in front of you. A controller panel returns to world space. In controller mode, the panel hand's Menu/B button also recalls it without pointing.")
             .clicked();
     });
     if toggle {

@@ -136,6 +136,12 @@ record scope changes rather than silently changing an estimate.
     synthetic drag-cancel Escape from deliberate Escape, while still releasing
     the pointer outside widgets. The reproducing shared-Modal regression and
     locked native build pass. Hardware modal/loss acceptance remains open.
+22. [x] C22: Ray-free controller-panel recall using the panel hand's existing
+    secondary button. Detach/persist world placement, cancel captures and wait
+    for a valid head pose when recentering. Release guards prevent startup,
+    held-button, inactive-action and handedness-change commands. The guard
+    regression, locked native build and setup-layout snapshot pass. Physical
+    Menu/B delivery and modal/keyboard recovery acceptance remain open.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

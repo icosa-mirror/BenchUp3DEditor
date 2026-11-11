@@ -55,6 +55,7 @@ pub(super) struct FrameInput {
     pub scene: Option<SceneInput>,
     pub navigation: super::navigation::Input,
     pub cancelled: bool,
+    pub recenter_panel: bool,
 }
 
 impl FrameInput {
@@ -212,6 +213,26 @@ impl Pointer {
     }
 }
 
+#[derive(Default)]
+struct PanelRecovery {
+    hand: Option<usize>,
+    armed: bool,
+    down: bool,
+}
+
+impl PanelRecovery {
+    fn sample(&mut self, hand: Option<usize>, down: Option<bool>) -> bool {
+        if self.hand != hand || down.is_none() {
+            *self = Self { hand, ..Default::default() };
+        }
+        let Some(down) = down.filter(|_| hand.is_some()) else { return false; };
+        let pressed = self.armed && down && !self.down;
+        if !down { self.armed = true; }
+        self.down = down;
+        pressed
+    }
+}
+
 pub(super) struct Controllers {
     spaces: [xr::Space; 2],
     grip_spaces: [xr::Space; 2],
@@ -231,6 +252,7 @@ pub(super) struct Controllers {
     scene_buttons: [[bool; 2]; 2],
     scene_armed: [bool; 2],
     scene_captured: bool,
+    panel_recovery: PanelRecovery,
 }
 
 impl Controllers {
@@ -341,6 +363,7 @@ impl Controllers {
             scene_buttons: [[false; 2]; 2],
             scene_armed: [false; 2],
             scene_captured: false,
+            panel_recovery: Default::default(),
         })
     }
 
@@ -405,6 +428,19 @@ impl Controllers {
     ) -> xr::Result<FrameInput> {
         if !focused {
             return Ok(self.cancel());
+        }
+        // The host hand does not point while the panel is attached. Reuse its
+        // existing secondary binding as a ray-free recovery command, including
+        // when that hand has button input but no tracked pose.
+        let panel_hand = pointer_hand.map(|hand| 1 - hand);
+        let recovery_button = panel_hand.map(|hand| self.secondary.state(session, self.paths[hand])).transpose()?;
+        if self.panel_recovery.sample(panel_hand,
+            recovery_button.filter(|state| state.is_active).map(|state| state.current_state))
+        {
+            let mut output = self.cancel_pointers();
+            output.focused = true;
+            output.recenter_panel = true;
+            return Ok(output);
         }
         if navigation.enabled && navigation.buttons.iter().any(|down| *down == Some(true)) {
             let mut output = self.cancel_pointers();
@@ -564,6 +600,7 @@ impl Controllers {
 
     pub fn cancel(&mut self) -> FrameInput {
         self.grip_down = [false; 2];
+        self.panel_recovery = Default::default();
         self.cancel_pointers()
     }
 
@@ -606,6 +643,25 @@ fn rotation(value: xr::Quaternionf) -> Option<DQuat> {
 mod tests {
     use super::*;
     use crate::test_ui::ContextExt;
+
+    #[test]
+    fn panel_recovery_requires_release_after_activation_loss_or_handedness_change() {
+        let mut shortcut = PanelRecovery::default();
+        assert!(!shortcut.sample(None, Some(true)));
+        assert!(!shortcut.sample(Some(0), Some(true)), "held at attachment start");
+        assert!(!shortcut.sample(Some(0), Some(false)));
+        assert!(shortcut.sample(Some(0), Some(true)));
+        assert!(!shortcut.sample(Some(0), Some(true)), "one command per press");
+        assert!(!shortcut.sample(Some(0), None));
+        assert!(!shortcut.sample(Some(0), Some(true)), "held across action loss");
+        assert!(!shortcut.sample(Some(0), Some(false)));
+        assert!(shortcut.sample(Some(0), Some(true)));
+        assert!(!shortcut.sample(Some(1), Some(true)), "held across handedness change");
+        assert!(!shortcut.sample(Some(1), Some(false)));
+        assert!(shortcut.sample(Some(1), Some(true)));
+        assert!(!shortcut.sample(None, None));
+        assert!(!shortcut.sample(Some(1), Some(true)), "held across mode change");
+    }
 
     #[test]
     fn capture_loss_preserves_modal_drafts_and_releases_widgets_but_explicit_escape_closes() {
