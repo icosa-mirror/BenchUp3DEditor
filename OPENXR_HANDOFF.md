@@ -35,8 +35,8 @@ locks and host-aware shared precision input landed in `1de74a5`. Destination-fol
 creation landed in `25b514f`; shared immersive View controls landed in `25fd106`.
 Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
 guards landed in `466b9f4`; controller joint icons landed in `d7c05f3`. Current work
-has completed C13, controller enclosing-window selection; C14 audits remaining
-desktop selection/context gestures. The plan now has stable coding
+has completed C13, controller enclosing-window selection, and C14's direct
+selection/context gestures. C15 is the next inference/reference audit. The plan now has stable coding
 milestone IDs and checkboxes, separate from verification. Do not derive an effort
 percentage by counting unequal checklist rows; keep audit-discovered work visible.
 Generated caps remain read-only surfaces with optional editable group ownership.
@@ -203,6 +203,29 @@ saving/restoration and legacy defaults, including the new default-off mode.
 The native `openxr_editor` example build passes without warnings in
 `window-selection-build.log`. Its executable is frozen under this implementation
 commit in `.local/openxr/preview-builds/`; no replacement session was launched.
+
+Controller Select now shares desktop click shortcuts: two trigger clicks on the
+same group/component enter it, two on saved text open its shared editor, and an
+empty non-additive click leaves one editing level. Tiny clicks in Window selection
+mode use that same route; actual enclosure drags do not open objects or close
+context. Add/remove selection keeps its toggle semantics. Double-click timing
+uses egui's existing input option. Click continuity requires the same committed
+document/project/context/tool/display stamp and scene transform, and resets on
+pointer loss, keyboard actions, cancellation, focus/capture loss and tool changes.
+Object locks/visibility/context restrictions remain in the shared enter action.
+The panel's shared Edit menu already exposes the desktop entity actions, and the
+immersive panel has Edit group/component and Close context buttons. Keep secondary
+trigger as Cancel; no separate world context popup or conflicting button mapping
+was introduced. Controller timing and end-to-end nested editing remain unverified.
+
+`selection-context-final-tests.log` passes the two controller selection cases:
+group entry/context exit in ordinary and Window modes, saved-text editor opening,
+and interruption by missing pointers, project changes, additive selection,
+elapsed time and display changes. `selection-context-window-regressions.log`
+passes the four enclosure/projection/guide/cancellation cases after this change.
+`selection-context-build.log` passes the native editor example build without
+warnings. The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`. No headset session was launched.
 
 `joint-handle-tests.log` contains passing controller scope/permission/preference,
 hit-rectangle/scaling/action-cache and face/cap visibility cases (plus unrelated

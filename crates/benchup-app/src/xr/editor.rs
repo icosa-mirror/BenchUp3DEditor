@@ -226,6 +226,11 @@ impl Editor {
     fn update_ui(&mut self) -> Result<egui::FullOutput> {
         let mut events = std::mem::take(&mut self.input.events);
         events.extend(self.keyboard.take_events(&self.ctx, self.input.focused));
+        if events.iter().any(|event| matches!(event,
+            egui::Event::Key { pressed: true, .. } | egui::Event::WindowFocused(false)))
+        {
+            self.world_tools.cancel_selection_click();
+        }
         if events.iter().any(|event| matches!(event, egui::Event::Key { key: egui::Key::Escape, pressed: true, .. }))
             && self.world_tools.cancel_window()
         {
@@ -436,12 +441,17 @@ impl Editor {
         if super::input::erase_capture_cancelled(self.input.scene, input.scene) {
             self.world_tools.cancel_erasing(&mut self.app);
             self.world_tools.cancel_window();
+            self.world_tools.cancel_selection_click();
             self.erase_sweep.reset();
         }
         if self.input.focused && !input.focused {
             self.input.events.push(egui::Event::WindowFocused(false));
         }
-        if !input.focused { self.keyboard_modifiers = Default::default(); self.world_tools.cancel_window(); }
+        if !input.focused {
+            self.keyboard_modifiers = Default::default();
+            self.world_tools.cancel_window();
+            self.world_tools.cancel_selection_click();
+        }
         for event in &mut input.events {
             if let egui::Event::PointerButton {modifiers,..} = event { *modifiers = self.keyboard_modifiers; }
         }

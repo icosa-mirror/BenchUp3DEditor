@@ -84,6 +84,7 @@ pub(crate) struct State {
     pointer_target: Option<DVec3>,
     handle_hint: Option<&'static str>,
     window: Option<WindowGesture>,
+    selection_click: Option<SelectionClick>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
     erase_revision: Option<(u64, Option<u64>)>,
@@ -105,6 +106,13 @@ struct WindowGesture {
 }
 
 const WINDOW_HINT: &str = "Hold trigger and drag a window. Release selects enclosed entities. Cancel discards the window.";
+
+struct SelectionClick {
+    entity: u64,
+    time: f64,
+    stamp: InputStamp,
+    transform: Option<glam::DMat4>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ModelPhase { Aiming, Typing }
@@ -146,7 +154,12 @@ impl State {
         self.erasing || self.stroke || self.grab_depth.is_some() || self.section.is_some() || self.window.is_some()
     }
     pub(crate) fn handle_hint(&self) -> Option<&'static str> { self.handle_hint }
-    pub(crate) fn cancel_window(&mut self) -> bool { self.window.take().is_some() }
+    pub(crate) fn cancel_window(&mut self) -> bool {
+        let cancelled = self.window.take().is_some();
+        if cancelled { self.cancel_selection_click(); }
+        cancelled
+    }
+    pub(crate) fn cancel_selection_click(&mut self) { self.selection_click = None; }
     pub(crate) fn append_window_overlay(&self, overlays: &mut super::viewport_overlays::Overlays) {
         if let Some(window) = &self.window {
             let quad = window.frame.quad();
@@ -209,7 +222,7 @@ pub(crate) fn hint(tool: Tool, precise_modeling: bool) -> &'static str {
         Tool::GrainDirection => {
             "Trigger: choose a part and starting point, then the grain direction."
         }
-        Tool::Select => "Trigger selects. Add/remove selection toggles targets. Cancel clears selection.",
+        Tool::Select => "Trigger selects. Double trigger opens a group or text. Empty space leaves the editing context. Add/remove selection toggles targets. Cancel clears selection.",
         Tool::Paint => "Trigger paints a face or group with the chosen colour. Undo restores it.",
         Tool::Erase => "Hold trigger over entities; release to erase. Cancel discards the stroke.",
         Tool::Trim => "Trigger: choose the cutter, then the target body. Cancel clears operands.",
@@ -256,19 +269,49 @@ impl BenchUpApp {
         state.pointer_target = Some(point);
         state.handle_hint = Some(WINDOW_HINT);
         if pointer.primary_down || !activate { state.window = Some(window); return; }
-        let hits = if window.frame.end.length() > 4. {
+        if window.frame.end.length() <= 4. {
+            self.xr_select_click(pointer, state, ctx);
+            return;
+        }
+        state.cancel_selection_click();
+        let hits = {
             self.entity_cache.update_for_revision(&self.doc.model, revision.0);
             selection::box_select_projected_with_state(&self.doc.model, &window.frame, glam::DVec2::ZERO,
                 window.frame.end, self.doc.display.guides, |id| {
                     let state = self.entity_cache.get(id);
                     (state.hidden, state.context)
                 })
-        } else { pointer.hit.and_then(|hit| hit.entity).filter(|id| self.doc.model.contains_entity(id)).into_iter().collect() };
+        };
         if self.xr_panel.extend_selection || ctx.input(|input| input.modifiers.shift) {
             for id in hits { if !self.selected.remove(&id) { self.selected.insert(id); } }
         } else { self.selected = hits; }
         ctx.request_repaint();
     }
+    fn xr_select_click(&mut self, pointer: &Pointer, state: &mut State, ctx: &egui::Context) {
+        let previous = state.selection_click.take();
+        let hit = pointer.hit.and_then(|hit| hit.entity).filter(|id| self.doc.model.contains_entity(id));
+        if self.xr_panel.extend_selection || ctx.input(|input| input.modifiers.shift) {
+            if let Some(id) = hit && !self.selected.remove(&id) { self.selected.insert(id); }
+        } else if let Some(id) = hit {
+            let time = ctx.input(|input| input.time);
+            let stamp = self.xr_input_stamp(ctx);
+            let transform = pointer.view.map(|view| view.transform);
+            let delay = ctx.options(|options| options.input_options.max_double_click_delay);
+            let repeated = previous.is_some_and(|last| last.entity == id && last.stamp == stamp
+                && last.transform == transform && time >= last.time && time - last.time < delay);
+            self.selected = BTreeSet::from([id]);
+            if repeated {
+                if self.doc.model.texts.contains_key(&id) { self.begin_text_edit(id, ctx); }
+                else if self.doc.model.objects.contains_key(&id) { self.enter_object(id, ctx); }
+            } else {
+                state.selection_click = Some(SelectionClick { entity: id, time, stamp, transform });
+            }
+        } else if self.doc.model.edit_context.is_some() {
+            self.close_edit_context(ctx);
+        } else { self.selected.clear(); }
+        ctx.request_repaint();
+    }
+
     pub(super) fn xr_input_stamp(&mut self, ctx: &egui::Context) -> InputStamp {
         InputStamp { document: self.document_revision(ctx), project: self.xr_project_epoch,
             context: self.doc.model.edit_context, tool: self.tool, display: self.doc.display.clone() }
@@ -413,6 +456,7 @@ impl BenchUpApp {
                         .clicked()
                     {
                         let had_window = state.cancel_window();
+                        state.cancel_selection_click();
                         self.xr_cancel_action(action == 0 && !had_window, &ctx, storage);
                         state.reference = None;
                         state.erasing = false;
@@ -463,6 +507,7 @@ impl BenchUpApp {
                 Tool::Select => {
                     if ui.checkbox(&mut preferences.window_selection, egui::RichText::new("Window selection").size(18.)).changed() {
                         state.cancel_window();
+                        state.cancel_selection_click();
                     }
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut preferences.extend_selection,
@@ -595,6 +640,7 @@ impl BenchUpApp {
         let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx))
             .filter(|pointer| self.xr_pointer_is_current(pointer, ctx)) else {
             state.cancel_window();
+            state.cancel_selection_click();
             let retain_precision = state.panel_hover && self.xr_scene_interaction_enabled(ctx)
                 && state.precision_target.is_some()
                 && state.precision_target == self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
@@ -638,6 +684,7 @@ impl BenchUpApp {
                 self.persist_inspector_changes(ctx, Some(storage), false);
             }
             state.tool = Some(self.tool);
+            state.cancel_selection_click();
             state.cancel_window();
             state.cancel_erasing(self);
             state.line_normal = None;
@@ -655,6 +702,7 @@ impl BenchUpApp {
             return;
         }
         if activate && pointer.cancel {
+            state.cancel_selection_click();
             if state.cancel_window() { self.snap = None; self.hover = None; ctx.request_repaint(); return; }
             state.cancel_precision_modeling(self);
             self.xr_cancel_action(true, ctx, storage);
@@ -809,18 +857,7 @@ impl BenchUpApp {
             if self.xr_panel.window_selection { self.xr_window_select(pointer, state, clicked, activate, ctx); return; }
             state.cancel_window();
             if clicked {
-                let hit = pointer
-                    .hit
-                    .and_then(|hit| hit.entity)
-                    .filter(|id| self.doc.model.contains_entity(id));
-                if self.xr_panel.extend_selection || ctx.input(|input|input.modifiers.shift) {
-                    if let Some(id) = hit && !self.selected.remove(&id) {
-                        self.selected.insert(id);
-                    }
-                } else {
-                    self.selected = hit.into_iter().collect();
-                }
-                ctx.request_repaint();
+                self.xr_select_click(pointer, state, ctx);
             }
             return;
         }
@@ -2299,6 +2336,67 @@ mod input_revision_tests {
                 annotation: None, edge_targets: [None; 3], point: DVec3::X * 0.5,
                 normal: DVec3::Z, center: None }),
             activate: true, cancel: false, primary_down: true, visible_reference: None,
+        }
+    }
+
+    #[test]
+    fn controller_selection_clicks_open_groups_and_empty_clicks_leave_context() {
+        for window in [false, true] {
+            let (mut app, ctx, edge, group) = fixture();
+            app.xr_panel.window_selection = window;
+            app.project.modified = false;
+            let mut state = State::default();
+            let click = |app: &mut BenchUpApp, state: &mut State, empty: bool| {
+                let mut input = pointer(app, &ctx, edge);
+                if empty { input.hit = None; }
+                input.view = Some(super::super::xr_window_selection::View {
+                    head: DVec3::new(0.5, 0., 1.), right: DVec3::X, up: DVec3::Y,
+                    units: 1., font_scale: 1., transform: glam::DMat4::IDENTITY,
+                });
+                app.xr_world_pointer(Some(&input), state, true, &ctx, &mut Storage);
+                input.activate = false;
+                input.primary_down = false;
+                app.xr_world_pointer(Some(&input), state, true, &ctx, &mut Storage);
+            };
+            click(&mut app, &mut state, false);
+            assert_eq!(app.selected, BTreeSet::from([group]));
+            assert_eq!(app.doc.model.edit_context, None);
+            click(&mut app, &mut state, false);
+            assert_eq!(app.doc.model.edit_context, Some(group));
+            assert!(app.selected.is_empty());
+            click(&mut app, &mut state, true);
+            assert_eq!(app.doc.model.edit_context, None);
+            assert!(app.selected.is_empty());
+            assert!(app.doc.history.undo_label().is_none());
+            assert!(!app.project.modified);
+        }
+    }
+
+    #[test]
+    fn controller_selection_double_clicks_edit_text_and_respect_interruptions() {
+        for cause in 0..6 {
+            let (mut app, ctx, edge, _) = fixture();
+            let text = app.doc.model.add_text(DVec3::Y, DVec3::X, "Label").unwrap();
+            app.project.modified = false;
+            let mut state = State::default();
+            let mut input = pointer(&mut app, &ctx, edge);
+            input.hit.as_mut().unwrap().entity = Some(text);
+            app.xr_world_pointer(Some(&input), &mut state, true, &ctx, &mut Storage);
+            assert!(app.text_editor.is_none());
+            match cause {
+                1 => app.xr_world_pointer(None, &mut state, true, &ctx, &mut Storage),
+                2 => app.xr_project_epoch = app.xr_project_epoch.wrapping_add(1),
+                3 => app.xr_panel.extend_selection = true,
+                4 => { let _ = ctx.run_test_ui(egui::RawInput { time: Some(100.), ..Default::default() }, |_| {}); }
+                5 => app.doc.display.guides = !app.doc.display.guides,
+                _ => {}
+            }
+            let mut input = pointer(&mut app, &ctx, edge);
+            input.hit.as_mut().unwrap().entity = Some(text);
+            app.xr_world_pointer(Some(&input), &mut state, true, &ctx, &mut Storage);
+            assert_eq!(app.text_editor.is_some(), cause == 0, "interruption {cause}");
+            assert!(app.doc.history.undo_label().is_none());
+            assert!(!app.project.modified);
         }
     }
 
