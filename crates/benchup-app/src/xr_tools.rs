@@ -86,6 +86,7 @@ pub(crate) struct State {
     window: Option<WindowGesture>,
     selection_click: Option<SelectionClick>,
     move_targets: Option<crate::xr::world_move::Targets>,
+    model_plane: Option<DVec3>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
     erase_revision: Option<(u64, Option<u64>)>,
@@ -640,7 +641,7 @@ impl BenchUpApp {
     ) {
         state.pointer_target = None;
         state.handle_hint = None;
-        if self.modeling.is_none() { state.move_targets = None; }
+        if self.modeling.is_none() { state.move_targets = None; state.model_plane = None; }
         if state.model_phase == Some(ModelPhase::Typing)
             && (state.precision_target.is_none() || state.precision_target != self.xr_precision_target(ctx, true))
         {
@@ -1188,6 +1189,7 @@ impl BenchUpApp {
                     self.say(ctx, "Choose an original document face to edit.");
                     return;
                 }
+                state.model_plane = Some(plane.normal);
                 let direction = if self.tool == Tool::Offset {
                     self.offset_direction(face, hit.point, plane)
                 } else {
@@ -1229,7 +1231,13 @@ impl BenchUpApp {
                 hit.point
             };
             self.begin_modeling_at_anchor(anchor, direction, face, Pos2::ZERO, pointer.ray);
-            self.modeling.as_mut().unwrap().world_input = true;
+            let edit = self.modeling.as_mut().unwrap();
+            edit.world_input = true;
+            // Linear face operations may target original rings/surfaces, but
+            // never their changing evaluated preview.
+            if edit.move_snap.is_none() {
+                edit.move_snap = Some(benchup_core::inference::MoveSnapCache::new(&edit.base));
+            }
             if self.tool == Tool::Rotate
                 && let Some(edit) = &mut self.modeling
             {
@@ -1286,7 +1294,7 @@ impl BenchUpApp {
             edit.unlocked_direction
         };
         let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
-        let model_target = if matches!(self.tool, Tool::Move | Tool::Scale | Tool::Rotate) {
+        let model_target = if matches!(self.tool, Tool::Move | Tool::Scale | Tool::Rotate | Tool::PushPull | Tool::Offset) {
             let geometry = edit.move_snap.as_ref().map(|cache| cache.shared_geometry());
             geometry.and_then(|geometry| {
                 let targets = state.move_targets.get_or_insert_with(Default::default);
@@ -1299,6 +1307,16 @@ impl BenchUpApp {
                 let target = if self.tool == Tool::Rotate {
                     let normal = edit.rotation.as_ref().unwrap().normal_for_lock(rotation_lock);
                     targets.rotation(pointer.ray, edit.anchor, normal, point, options)
+                } else if self.tool == Tool::Offset {
+                    targets.offset(pointer.ray, edit.anchor, state.model_plane.unwrap_or(DVec3::Z), point, constraint, options)
+                } else if self.tool == Tool::PushPull {
+                    targets.infer_with_options(pointer.ray, edit.anchor, edit.anchor + delta, None, options)
+                        .filter(|target| {
+                            let starting_surface = target.face == edit.face && edit.face.is_some()
+                                || target.edge.is_some_and(|edge| edit.snap_excluded.contains(&edge));
+                            (target.snap.point - edit.anchor).dot(direction).abs() > 1e-7
+                                || target.snap.kind != Inference::OnFace && !starting_surface
+                        })
                 } else { targets.infer_with_options(pointer.ray, edit.anchor, point, constraint, options) };
                 target.map(|target| (target, geometry))
             })
@@ -1399,13 +1417,53 @@ impl BenchUpApp {
             edit.value = (radius / reference.length()).clamp(0.001, 1000.);
         } else {
             edit.direction = direction;
+            let mut target = model_target.map(|(target, _)| target);
+            let plane = if self.tool == Tool::Offset {
+                match constraint {
+                    Some(AxisConstraint::Plane(axis)) => Some(axis.vector()),
+                    Some(AxisConstraint::Axis(_)) => None,
+                    None => Some(state.model_plane.unwrap_or(DVec3::Z)),
+                }
+            } else { None };
+            if target.is_none() && self.tool == Tool::Offset {
+                let constrained = if let Some(AxisConstraint::Axis(axis)) = constraint {
+                    pointer.ray.axis(edit.anchor, axis.vector())
+                } else {
+                    let normal = plane.unwrap();
+                    let denominator = pointer.ray.direction.dot(normal);
+                    (denominator.abs() > 1e-8).then(|| {
+                        pointer.ray.origin + pointer.ray.direction * (edit.anchor - pointer.ray.origin).dot(normal) / denominator
+                    })
+                }.filter(|point| (*point - pointer.ray.origin).dot(pointer.ray.direction) > 0.);
+                let fallback = edit.anchor + constraint.map_or(delta, |c| c.project(delta));
+                let fallback = if constraint.is_none() {
+                    let normal = plane.unwrap();
+                    fallback - normal * (fallback - edit.anchor).dot(normal)
+                } else { fallback };
+                let point = constrained.unwrap_or(fallback);
+                target = Some(crate::xr::world_move::Target { snap: Snap { point, kind: Inference::Plane },
+                    guides: Vec::new(), edge: None, face: None });
+            }
+            let snapped = if let Some(mut target) = target {
+                if self.snap_to_grid {
+                    let axis = if self.tool == Tool::Offset {
+                        grid::movement_axis(target.snap.point, Some(edit.anchor), constraint, self.doc.snap_to_axes)
+                    } else { None };
+                    target.snap = grid::snap_with_geometry_hint(target.snap, spacing, plane, axis, &edit.base,
+                        Some(&edit.snap_excluded), Some((target.edge, target.face)));
+                }
+                delta = target.snap.point - edit.anchor;
+                edit.snap = Some(target.snap);
+                edit.guides = target.guides;
+                true
+            } else { false };
             if self.tool == Tool::Offset
                 && let Some(constraint) = constraint
             {
                 delta = constraint.project(delta);
             }
             edit.value = delta.dot(direction);
-            if self.snap_to_grid {
+            if self.snap_to_grid && !snapped {
                 edit.value = (edit.value / spacing).round() * spacing;
             }
         }
@@ -2074,6 +2132,75 @@ mod precise_modeling_tests {
         app.tool = tool;
         app.xr_panel.precise_modeling = precise;
         (app, State::default(), egui::Context::default(), face)
+    }
+
+    #[test]
+    fn world_linear_controller_uses_exact_geometry_height_and_offset_with_grid() {
+        for tool in [Tool::PushPull, Tool::Offset] {
+            let (mut app, mut state, ctx, face) = fixture(tool, false);
+            let (anchor, target) = if tool == Tool::PushPull {
+                (DVec3::new(1., 0.5, 0.), DVec3::new(1., 0.5, 0.37))
+            } else { (DVec3::new(1., 0., 0.), DVec3::new(1., 0.37, 0.)) };
+            app.doc.model.add_edge(target, target + DVec3::X * 0.4).unwrap();
+            app.doc.snap_to_geometry = true; app.snap_to_edge = true; app.snap_to_face = true;
+            app.snap_to_face_center = true; app.doc.snap_to_axes = false; app.snap_to_grid = true;
+            let original = app.doc.model.clone();
+            let start = point(&app, anchor, Some(face), true, true);
+            app.xr_world_pointer(Some(&start), &mut state, true, &ctx, &mut Storage);
+            let held = point(&app, target, None, false, true);
+            app.xr_world_pointer(Some(&held), &mut state, true, &ctx, &mut Storage);
+            let edit = app.modeling.as_ref().unwrap();
+            assert_eq!(edit.snap.unwrap().kind, Inference::Endpoint, "{tool:?}");
+            assert!((edit.value - 0.37).abs() < 1e-8, "{tool:?}: {}", edit.value);
+            assert_eq!(app.doc.model, original);
+            let released = point(&app, target, None, false, false);
+            app.xr_world_pointer(Some(&released), &mut state, true, &ctx, &mut Storage);
+            assert!(app.modeling.is_none());
+            assert_ne!(app.doc.model, original, "{tool:?}");
+            app.undo(&ctx, false);
+            assert_eq!(app.doc.model, original);
+            assert!(app.doc.history.undo_label().is_none());
+        }
+    }
+
+    #[test]
+    fn world_linear_controller_free_pull_is_not_captured_by_the_starting_face_centre() {
+        let (mut app, mut state, ctx, face) = fixture(Tool::PushPull, false);
+        app.doc.snap_to_geometry = true; app.snap_to_edge = true; app.snap_to_face = true;
+        app.snap_to_face_center = true; app.doc.snap_to_axes = false; app.snap_to_grid = false;
+        let anchor = DVec3::new(1., 0.5, 0.);
+        let start = point(&app, anchor, Some(face), true, true);
+        app.xr_world_pointer(Some(&start), &mut state, true, &ctx, &mut Storage);
+        let held = point(&app, anchor + DVec3::Z * 0.37, Some(face), false, true);
+        app.xr_world_pointer(Some(&held), &mut state, true, &ctx, &mut Storage);
+        let edit = app.modeling.as_ref().unwrap();
+        assert!(edit.snap.is_none());
+        assert!((edit.value - 0.37).abs() < 1e-8);
+    }
+
+    #[test]
+    fn world_linear_controller_offset_follows_a_tilted_face_with_geometry_snaps_disabled() {
+        let mut doc = Document::default();
+        let normal = DVec3::new(0., -1., 1.).normalize();
+        let v = DVec3::new(0., 1., 1.).normalize();
+        doc.model.draw_polyline(&[DVec3::ZERO, DVec3::X * 2., DVec3::X * 2. + v, v, DVec3::ZERO], false).unwrap();
+        let face = *doc.model.faces.keys().next().unwrap();
+        let mut app = BenchUpApp::with_document(doc, None, true);
+        app.tool = Tool::Offset; app.doc.snap_to_geometry = false; app.doc.snap_to_axes = false; app.snap_to_grid = false;
+        let ctx = egui::Context::default(); let mut state = State::default();
+        let anchor = DVec3::X;
+        let mut start = point(&app, anchor, Some(face), true, true);
+        start.ray = Ray { origin: anchor + normal * 2., direction: -normal };
+        start.hit.as_mut().unwrap().normal = normal;
+        app.xr_world_pointer(Some(&start), &mut state, true, &ctx, &mut Storage);
+        let target = anchor + v * 0.2;
+        let mut held = point(&app, target, None, false, true);
+        held.ray = Ray { origin: target + normal * 2., direction: -normal };
+        app.xr_world_pointer(Some(&held), &mut state, true, &ctx, &mut Storage);
+        let edit = app.modeling.as_ref().unwrap();
+        assert!((edit.value - 0.2).abs() < 1e-8, "{}", edit.value);
+        assert!(edit.snap.unwrap().point.distance(target) < 1e-8);
+        assert!(edit.snap.unwrap().point.dot(normal).abs() < 1e-8);
     }
 
     #[test]

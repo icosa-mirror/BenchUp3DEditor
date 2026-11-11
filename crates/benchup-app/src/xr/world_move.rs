@@ -1,5 +1,5 @@
-//! Stationary modeling targets share the core gesture snapshot; previews never
-//! become targets and the world indexes remain unchanged while dragging.
+//! Operation-specific fixed modeling snapshots keep the changing preview out
+//! of targets; their world indexes remain unchanged while dragging.
 use benchup_core::{Axis, AxisGuide, DVec3, DisplaySettings, Inference, Model, Ray, Snap, inference::AxisConstraint};
 use std::sync::Arc;
 use crate::renderer;
@@ -84,6 +84,12 @@ impl Targets {
         projected.edge = None;
         projected.face = None;
         Some(projected)
+    }
+
+    pub fn offset(&self, ray: Ray, anchor: DVec3, normal: DVec3, point: DVec3,
+        constraint: Option<AxisConstraint>, options: Options) -> Option<Target>
+    {
+        self.infer_on_plane(ray, anchor, point, constraint, constraint.is_none().then_some((anchor, normal)), options)
     }
 
     fn infer_on_plane(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,

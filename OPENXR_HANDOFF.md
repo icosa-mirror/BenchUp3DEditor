@@ -236,7 +236,7 @@ to one reference per axis to the shared drawing/measurement callback. Compatible
 reference/start/origin guides combine at a world intersection and use the existing
 GPU guide overlays. Exact geometry targets and acquired-reference projections
 retain priority. No desktop camera projection or new persistent option is involved.
-C15 remains open: audit manipulation inference, geometry-constrained refinements
+C15 remains open: finish geometry-constrained drawing refinements
 and cases requiring more than the nearest visible reference for each axis.
 Move now shares the immutable stationary geometry from `MoveSnapCache` with its
 world target index. Targets exclude the edited geometry and inherited hidden
@@ -247,7 +247,7 @@ grid refinement preserves exact geometry targets; no qualifying snap retains the
 existing controller-depth/constraint/grid fallback. The existing model preview,
 commit and single-undo routes remain authoritative. Target indexes persist for
 the gesture instead of following the changing preview. C15 still includes the
-remaining manipulation and geometry-constrained drawing inference audit.
+geometry-constrained drawing and reference-candidate audit.
 
 Scale now reuses that stationary target service with visible-target semantics:
 opaque faces and generated section caps block hidden edge/reference targets,
@@ -258,7 +258,7 @@ world-space ratio from the original centre/reference. An exact target is not
 rounded a second time as a grid radius. Free controller-depth scaling retains
 its existing radius/grid fallback. Axis/plane locks, exact-value entry and the
 existing preview/commit/undo routes remain authoritative. Remaining C15 work
-includes Rotate, Push/Pull, Offset and geometry-constrained drawing refinements.
+includes geometry-constrained drawing refinements and reference-candidate coverage.
 
 The stationary service now carries all three existing target preferences
 independently: edges, faces and face centres. Previously its new Move/Scale
@@ -278,7 +278,7 @@ remain active. Free rotation uses a forward ray/plane intersection where possibl
 retaining the original depth-based projected fallback for parallel rays. Shared
 grid refinement preserves plane tilt/elevation; exact targets retain priority.
 The existing pivot/reference, exact numeric entry, preview, commit and undo paths
-remain authoritative. Push/Pull, Offset and the remaining drawing refinements
+remain authoritative. Drawing refinements and reference-candidate coverage
 are still under C15 audit; no full parity acceptance is implied.
 
 `rotate-inference-tests.log` passes the controller off-plane projection case
@@ -293,6 +293,33 @@ visibility. These checks do not establish headset comfort or complete parity.
 warnings, including the preceding snap-preference fix. The executable is frozen
 under this Rotate milestone's commit in `.local/openxr/preview-builds/`; no
 replacement headset session was launched.
+
+Push/Pull and Offset now have fixed original-model target snapshots. Unlike
+Move/Scale's exclusion-filtered geometry, these retain original rings/surfaces
+as desktop targets while excluding the changing evaluated preview. Push/Pull
+projects an eligible target into the selected extrusion direction; the unchanged
+starting face/centre/ring cannot capture free depth movement at zero. Without
+a target it retains the original depth-based scalar/grid fallback. Offset queries
+its original face plane, including tilted/vertical planes, unless an explicit
+axis/plane lock takes precedence. Free input uses the forward ray/plane or axis
+intersection, with a projected depth fallback for parallel rays. The face normal
+is cached at grab time. Both routes preserve exact target distances through shared
+grid refinement and publish snap/guide feedback through the existing GPU overlay
+path. Target toggles, visibility, exact-value entry, preview, commit and undo
+remain shared. Geometry-constrained drawing refinements and the broader C15
+candidate/reference audit remain open.
+
+`linear-inference-tests.log` passes three focused controller cases: exact 0.37
+Push/Pull height and Offset distance with grid enabled and one undo; free pull
+past the starting face centre; and free Offset on a tilted face with geometry
+snapping disabled. `linear-inference-modeling-regressions.log` passes all nine
+current modeling cases, including exact numeric values, cancellation, release,
+Move/Scale/Rotate targets and undo. `linear-inference-target-regressions.log`
+passes all seven stationary target/preference/occlusion cases. Controller comfort,
+large-scene costs and complete parity remain unverified.
+`linear-inference-build.log` passes the native editor example build without
+warnings. Its executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched.
 
 `scale-inference-final-tests.log` passes three focused cases: controller scaling
 to an exact target with grid enabled, in free and X-locked modes, with one undo;
