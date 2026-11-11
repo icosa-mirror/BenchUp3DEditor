@@ -1062,8 +1062,12 @@ mod tests {
         let source = app.doc.model.clone();
         app.refresh_joint_preview();
         let model = app.joinery_dialog.preview_model().unwrap();
+        let mut volume_model = model.clone();
+        let mut volume_source = source.clone();
         for member in outside {
-            assert!((model.solid_volume(member).unwrap() - source.solid_volume(member).unwrap()).abs() < 1e-10,
+            volume_model.edit_context = volume_model.parent(member);
+            volume_source.edit_context = volume_source.parent(member);
+            assert!((volume_model.solid_volume(member).unwrap() - volume_source.solid_volume(member).unwrap()).abs() < 1e-10,
                 "joints outside the edited assembly must remain suspended during preview");
         }
         let preview = rendered_triangles(&mut app, &ctx);
