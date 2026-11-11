@@ -1589,6 +1589,7 @@ mod tests {
         let root = model
             .make_object(&BTreeSet::from([child]), false, "Root")
             .unwrap();
+        let child = *model.objects[&root].entities.iter().find(|id| model.objects.contains_key(id)).unwrap();
         model.locked.insert(child);
         let face = *model
             .faces
