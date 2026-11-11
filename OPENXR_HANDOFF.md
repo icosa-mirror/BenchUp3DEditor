@@ -602,6 +602,14 @@ checks; it does not establish full rendered/controller acceptance.
    3-pixel half-width and 1-pixel stroke. Each eye projects its direction in the
    shader. Clipped attachments discard the head rather than moving it onto a
    section or near-plane boundary; the existing leader and label routes remain.
+   Build `591c117` now has independent rendered evidence for saved text: the
+   three-label fixture in `.local/openxr/annotation-render/front/` loads all 404
+   faces and renders upright readable labels/open heads toward their anchors in
+   three directions. `renderer-check.json` records the binary hash, image and
+   scope. No error/warning/panic output or OpenXR session occurred. This is one
+   diagnostic eye with unattached saved anchors, not live/clipboard/stereo or
+   occlusion-policy acceptance. The fixture and preferences are isolated; the
+   bundled Example and normal user data are unchanged.
 6. A06: controller joint-marker hints now include the targeted joint's ID and its
    own evaluation error, independently of the HUD's bounded four-error summary.
    Multiline target hints compose without repeating their action lines, and

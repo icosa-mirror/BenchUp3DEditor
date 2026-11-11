@@ -172,7 +172,7 @@ work and must be recorded explicitly.
 | A02 | XR previously used document selection while desktop highlighted preview copies/caps | Operation-returned preview selection is shared by desktop/XR; evaluated-ID fallback cached per rendered snapshot; visual acceptance open |
 | A03 | World HUD repeated default instructions and advertised direct Select actions during window selection or target-handle actions | Shared mode-specific hint and target override composition implemented; status/errors preserved; headset acceptance open |
 | A04 | Measurements/text only advertised their full sequence; section handles had no action-specific prompts | Measurement/text phase prompts shared by HUD and XR controls; section hover/drag instructions implemented; controller acceptance open |
-| A05 | Desktop attached text has an open arrowhead at its attachment; XR retained text previously drew only the leader | Retained GPU arrowheads implemented for saved, edited/new and clipboard text; shader validation and native build passed; visual acceptance open |
+| A05 | Desktop attached text has an open arrowhead at its attachment; XR retained text previously drew only the leader | Retained GPU arrowheads implemented for saved, edited/new and clipboard text; shader/native checks pass; independent saved-text fixture renders three readable labels/open heads in three directions; live/clipboard/headset acceptance remains open |
 | A06 | Desktop joint marker tooltips identify the joint and its warning; XR only advertised editing, and its global error list is limited to four | Target-specific joint identity/error prompt implemented independently of that limit; multiline HUD composition updated; six focused checks and native build passed; controller acceptance open |
 | A07 | Desktop Flip planes use a 1-point idle / 2-point hover outline; XR previously used a fixed 1.5-point outline | XR retained segments now use the desktop idle/hover widths; native build passed; visual acceptance open |
 | A08 | Desktop marks the fixed text attachment while positioning its label; XR omitted that marker | Text measurement anchor now supplies the existing retained billboard circle; native build passed; visual acceptance open |
@@ -358,6 +358,14 @@ or complete-parity claims.
    the pair differs by 2,216 pixels (guide-colour pixels: 0 off, 852 on). This
    exercises the new GPU uniform/guide branch in the main scene. It does not prove
    OpenXR device/swapchain interoperability or controller clipboard placement.
+
+   Prepared build `591c117` independently renders a three-leader saved-text
+   fixture on RTX 4090 Vulkan, with all 404 Example faces loaded and no
+   error/warning/panic output. The inspected image shows upright readable labels
+   and open arrowheads pointing toward their anchors in three screen directions.
+   Evidence: `.local/openxr/annotation-render/front/renderer-check.json` and
+   `eye.png`. This uses one diagnostic eye and unattached saved text; it does not
+   accept live/clipboard text, stereo, occlusion policy or headset readability.
 
    A focused application/file-worker integration check also passes Save As,
    edit/undo, save to the existing path, New and Open through the XR dialog host,
