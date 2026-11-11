@@ -525,9 +525,17 @@ warnings. Its executable is frozen under this milestone's commit in
 The construction-guide comparison found A13: desktop selected guides use a
 2.5-point stroke, hovered guides use 2 points and idle guides use 1.5 points, for
 both dashed lines and point crosses. Native guides currently change colour but
-retain a fixed 1.5-point stroke. Match these states while preserving the native
-erasing colour and retained line/point instances. The existing 6-on/4-off native
+retained a fixed 1.5-point stroke. A13 now matches these states while preserving
+the native erasing colour and retained line/point instances. The existing 6-on/4-off native
 guide dash pattern already matches the desktop construction-guide pattern.
+Combined native guide build evidence is pending; this bounded width correction
+does not add a new setting or regression test.
+
+A14 is a confirmed clipboard-preview omission: the native paste reference buffer
+contains text leaders/ticks/arrowheads but not the clipboard's construction guides.
+Desktop `paint_construction_guides` explicitly draws both copied line guides and
+copied point crosses. Add them to the retained native paste instances under the
+existing Guides setting and hidden-guide rule, using the same paste transform.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid

@@ -67,6 +67,10 @@ impl Line {
         self.style[3] = 0.0;
         self
     }
+    pub fn stroke_width(mut self, width: f32) -> Self {
+        self.width = width;
+        self
+    }
     pub fn overlay(mut self) -> Self {
         self.style[3] = 1.0;
         self

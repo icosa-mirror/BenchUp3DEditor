@@ -854,29 +854,29 @@ impl Scene {
                         .iter()
                         .filter(|(id, _)| !source.model.is_hidden(**id))
                     {
-                        let color = if self.entities.selected(&source.model,*id,&source.erasing) {
-                            crate::theme::ERASING
+                        let (color, width) = if self.entities.selected(&source.model,*id,&source.erasing) {
+                            (crate::theme::ERASING, 1.5)
                         } else if self.entities.selected(&source.model, *id, &source.selected)
                         {
-                            colors.accent
+                            (colors.accent, 2.5)
                         } else if self.input.and_then(|input| input.hit).is_some_and(|hit| {
                             hit.entity.is_some() && source.model.entity_in_context(*id) == hit.entity
                         }) {
-                            colors.green
+                            (colors.green, 2.0)
                         } else {
-                            egui::Color32::from_rgb(0, 174, 214)
-                        }
-                        .to_normalized_gamma_f32();
+                            (egui::Color32::from_rgb(0, 174, 214), 1.5)
+                        };
+                        let color = color.to_normalized_gamma_f32();
                         if guide.direction.is_some() {
                             let (a,b) = placement.guide_frame().segment(guide);
                             lines.push(Line::dashed(
                                 a - origin,
                                 b - origin,
                                 color,
-                                1.5,
+                                width,
                             ));
                         } else {
-                            lines.push(Line::marker(guide.origin - origin, color, 4.0).overlay());
+                            lines.push(Line::marker(guide.origin - origin, color, 4.0).stroke_width(width).overlay());
                         }
                     }
                 }
