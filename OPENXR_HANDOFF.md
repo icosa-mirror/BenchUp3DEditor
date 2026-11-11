@@ -36,8 +36,8 @@ creation landed in `25b514f`; shared immersive View controls landed in `25fd106`
 Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
 guards landed in `466b9f4`; controller joint icons landed in `d7c05f3`. Current work
 has completed C13, controller enclosing-window selection, and C14's direct
-selection/context gestures. C15 coding is implemented; C16's fourteen confirmed
-source gaps are implemented and the final route reconciliation is active.
+selection/context gestures. C15 coding and the C16 eight-row source audit are
+implemented; all fourteen confirmed source gaps have built native implementations.
 The plan has stable coding
 milestone IDs and checkboxes, separate from verification. Do not derive an effort
 percentage by counting unequal checklist rows; keep audit-discovered work visible.
@@ -239,7 +239,7 @@ reference/start/origin guides combine at a world intersection and use the existi
 GPU guide overlays. Exact geometry targets and acquired-reference projections
 retain priority. No desktop camera projection or new persistent option is involved.
 C15 coding now includes edge-constrained drawing and evaluated-edge reference
-acquisition; acceptance and C16's broader audit remain open. Candidate coverage now
+acquisition; controller acceptance remains open after the C16 source audit. Candidate coverage now
 uses the same 24-per-axis constant as desktop. Equivalent parallel guide lines
 are merged before the limit; nearby start/origin guides participate in ranking,
 so distant built-in anchors cannot displace useful geometry references. Candidate
@@ -295,7 +295,7 @@ grid refinement preserves exact geometry targets; no qualifying snap retains the
 existing controller-depth/constraint/grid fallback. The existing model preview,
 commit and single-undo routes remain authoritative. Target indexes persist for
 the gesture instead of following the changing preview. Broader tool/display
-workflow reconciliation remains in C16.
+workflow acceptance remains open.
 
 Scale now reuses that stationary target service with visible-target semantics:
 opaque faces and generated section caps block hidden edge/reference targets,
@@ -306,7 +306,7 @@ world-space ratio from the original centre/reference. An exact target is not
 rounded a second time as a grid radius. Free controller-depth scaling retains
 its existing radius/grid fallback. Axis/plane locks, exact-value entry and the
 existing preview/commit/undo routes remain authoritative. Broader tool/display
-workflow reconciliation remains in C16.
+workflow acceptance remains open.
 
 The stationary service now carries all three existing target preferences
 independently: edges, faces and face centres. Previously its new Move/Scale
@@ -326,7 +326,7 @@ remain active. Free rotation uses a forward ray/plane intersection where possibl
 retaining the original depth-based projected fallback for parallel rays. Shared
 grid refinement preserves plane tilt/elevation; exact targets retain priority.
 The existing pivot/reference, exact numeric entry, preview, commit and undo paths
-remain authoritative. C16's broader parity audit and acceptance remain open.
+remain authoritative. Controller/rendered acceptance remains open after the C16 source audit.
 
 `rotate-inference-tests.log` passes the controller off-plane projection case
 with snaps enabled/disabled, fixed Z axis, grid-enabled exact target, release
@@ -353,7 +353,7 @@ intersection, with a projected depth fallback for parallel rays. The face normal
 is cached at grab time. Both routes preserve exact target distances through shared
 grid refinement and publish snap/guide feedback through the existing GPU overlay
 path. Target toggles, visibility, exact-value entry, preview, commit and undo
-remain shared. Broader tool/display workflow reconciliation remains in C16.
+remain shared. Broader tool/display workflow acceptance remains open.
 
 `linear-inference-tests.log` passes three focused controller cases: exact 0.37
 Push/Pull height and Offset distance with grid enabled and one undo; free pull
@@ -415,6 +415,10 @@ No replacement headset session was launched; controller/visual acceptance remain
 
 ## C16 source audit
 
+Coding reconciliation is complete for the plan's eight source routes and fourteen
+confirmed findings. The evidence below records those corrections and their narrow
+checks; it does not establish full rendered/controller acceptance.
+
 1. A01: `app.rs` derives Move X-ray styling from a nonempty expanded selection:
    unselected faces use 0.18 opacity and Move edges draw in front. The XR path
    calls the shared retained `paint_resident_view` directly, which previously had
@@ -454,7 +458,7 @@ No replacement headset session was launched; controller/visual acceptance remain
    switching targets discards the previous target's instruction/warning block.
 7. Selection/context source reconciliation includes the enclosing-window and
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
-   context acceptance remain open; the broader eight-row audit is still active.
+   context acceptance remain open after the eight-row source audit.
 
 A08 restores the desktop fixed-anchor circle during attached-text placement.
 The existing retained billboard uses the first point of the active Text
@@ -473,8 +477,7 @@ A10 now adds the axes' small depth-tested origin dot as one retained GPU line
 instance with a filled-circle shader style. It uses the existing axes setting,
 muted palette colour, 2.5-point radius and scene depth/section clipping; pose
 changes update the normal uniforms rather than rebuilding a CPU-projected circle.
-The combined native build includes A09 and A10; C16 remains unchecked and
-headset acceptance stays open.
+The combined native build includes A09 and A10; headset acceptance stays open.
 
 `reference-markers-shader-tests.log` passes the parser/validator for the shared
 world-line shader, including the new filled-circle style.
@@ -551,7 +554,14 @@ offset. `clipboard-guides-build.log` passes the combined native editor build
 without warnings. Its executable, including A13 and A14, is frozen under this
 milestone's commit in `.local/openxr/preview-builds/`; no headset session was
 launched. No headset or broad backend/performance acceptance is inferred from
-these source/math checks. C16 remains open for final route reconciliation.
+these source/math checks. The plan records the final eight-row producer/consumer
+reconciliation and marks C16's coding audit complete. This does not close the
+phase/visual/controller/backend/performance gates or the full goal. Clipboard
+ghosts now cover geometry, dimensions, text/arrowheads and construction guides;
+group-name ghost suppression matches the desktop's main-model-only marker loop.
+The current ready executable remains
+`.local/openxr/preview-builds/138d7f4/openxr_editor.exe`; the audit documentation
+change does not require a new executable or a headset launch.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
@@ -600,7 +610,7 @@ attached text uses the desktop monospace 12 font and 320-point wrap width. Text
 creation/editing, locked-entity checks and commits use the shared text editor;
 native label/stroke picking supplies the selected annotation ID. A05 closes the
 confirmed attachment-marker gap. These source checks do not prove visual or
-controller acceptance, and the remaining C16 areas stay open.
+controller acceptance; the C16 coding audit is closed separately.
 
 Native file-route source audit: `project_files::run` captures the installed dialog
 host before starting its worker; native Open/Save, geometry import/export and
@@ -672,7 +682,7 @@ the current preview still uses the world panel.
 5. Commit focused milestones and push under the existing authorization. No deploy,
    release tags or PR. Work in this checkout and preserve unrelated/concurrent work.
 
-## Repository and latest milestones
+## Repository and implementation references
 
 1. Checkout: `F:\Unity Projects\BenchUp3DEditor`, branch `feat/openxr-phase1`.
    Origin is `https://github.com/icosa-mirror/BenchUp3DEditor.git`;
@@ -687,8 +697,8 @@ the current preview still uses the world panel.
 8. XR multi-selection now has a saved Add/remove selection control and honors
    native Shift using desktop toggle semantics. Empty misses retain selection in
    that mode. The shared Edit menu already exposes context entry/exit and entity
-   actions without requiring the 2D model view. Selection/gesture parity beyond
-   ray toggle still needs auditing.
+   actions without requiring the 2D model view. Window selection and direct
+   context/text gestures are implemented in C13/C14; controller acceptance remains.
 9. Shared scene preparation now updates the evaluated model without painting a
    2D viewport. Scoped XR snapshots propagate editing context while retaining
    geometry snapshots; connection overlays use that scope and labels/eyes share
@@ -713,7 +723,7 @@ the current preview still uses the world panel.
    reusing placement/navigation reset and saved zoom handling; empty/degenerate
    bounds retain the existing fallback. The desktop camera is not changed.
 3. `desktop.rs` owns the normal taskbar window on the main thread. XR runs on a
-   worker. Physical keyboard/text/IME and Windows clipboard are bridged; controller text entry is added in the current milestone; desktop
+   worker. Physical keyboard/text/IME and Windows clipboard are bridged; controller text entry is implemented; desktop
    mouse/focus do not replace headset pointing/focus. Close/Alt+F4 and shared
    Close/File Quit request shutdown. The eight-second stalled-shutdown guard is
    not a session deadline. Desktop mirroring is not implemented.
@@ -732,8 +742,8 @@ the current preview still uses the world panel.
    paint/erase, text, grain, solids, clipboard and history commands. Held-trigger
    erase accumulates sampled targets for one release-time shared command/undo,
    with geometry/guide/annotation preview colors. Cancel, lost input, tool changes,
-   paste and keyboard commands discard the pending erase. Fast-motion ray sweep
-   interpolation is not implemented yet. Section grabs
+   paste and keyboard commands discard the pending erase. Fast-motion ray sweeps
+   use bounded interpolation; extreme/near-field coverage remains unverified. Section grabs
    use shared drag/settings/persistence machinery. See the plan's tool table.
 7. `world_picking.rs` retains edge/guide hierarchies and finite guide spans;
    `world_labels.rs` retains label rectangles and annotation-stroke indices;
@@ -866,14 +876,15 @@ the current preview still uses the world panel.
    from the chooser and previewing exported PDFs inside the headset are not yet
    implemented; existing PDF exports still invoke the desktop PDF viewer.
 
-## Next implementation work
+## Remaining implementation and acceptance work
 
-1. Follow the numbered spatial parity inventory in `OPENXR_PLAN.md`. Audit concrete
-   desktop consumers and immersive input routes: editing context/context actions,
-   remaining handles, precision/locks, joinery/fastener targeting and display modes.
+1. Follow the numbered spatial parity inventory in `OPENXR_PLAN.md` for rendered
+   and controller acceptance. C16's source audit and its fourteen confirmed coding
+   findings are closed. Record and fix newly demonstrated gaps rather than
+   treating source reconciliation as full visual/workflow acceptance.
 2. Evaluated-model preparation has been extracted from `paint_evaluated_scene`.
-   Close the remaining UI/input dependencies: host/window commands, desktop-only
-   selection gestures and any remaining handle/tool routes identified by the audit. Known limits include
+   The audited View, selection/context, tool-handle and clipboard routes have native
+   input paths. Verify they work without a required 2D model view. Known limits include
    tool/display/workflow combinations, near-field/fast sweep sampling limits, evaluated-only paint/edit
    guards and broader nested/scoped cap acceptance. A retained cap hierarchy now
    supplements original-face occlusion queries using the rendered triangles. Guide intersections are locally bounded
@@ -1020,7 +1031,7 @@ the current preview still uses the world panel.
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-8. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+8. Earlier immersive-first layout build evidence: `.local/openxr/immersive-primary-final-build.log`.
    `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
    inspected: shared inspector/controls without the duplicate model, and the clean
    404-face example in the independent eye renderer. A subsequent requested

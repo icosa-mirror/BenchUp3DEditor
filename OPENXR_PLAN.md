@@ -42,7 +42,8 @@ and empty-click context exit share desktop operations, including tiny window-mod
 clicks. C15's global/off-face and modeling inference routes are implemented.
 C16 has closed its recorded A01-A14 coding gaps, including retained overlay
 markers, axes styling/fade, mode/target instructions, native paste seeds and copied
-guide previews. Final source-route reconciliation remains active.
+guide previews. C16's eight-row coding audit is complete; the acceptance gates
+below remain open.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -109,19 +110,24 @@ record scope changes rather than silently changing an estimate.
     commands and panel context controls provide entity actions; secondary trigger
     retains Cancel rather than opening a competing world context popup.
 15. [x] C15: Global/off-face references, bounded candidate pairs, edge/face containment, evaluated-edge acquisition and all five modeling inference routes.
-16. [ ] C16: Finish the eight-row tool/overlay/command coding audit and its active gaps.
+16. [x] C16: Reconcile the eight tool/overlay/command source routes and implement
+    the fourteen confirmed gaps A01-A14. Rendered/controller acceptance remains
+    separate from this coding milestone.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
 feature or a current required gap against the active desktop editor. Label
 occlusion policy remains a separate discussion-dependent item. Hardware/browser
 acceptance, validation and performance work remain in the verification gates;
-unchecked audit milestones can still reveal additional implementation work.
+acceptance can still reveal additional implementation work.
 
 ## C16 source audit
 
-C16 remains open until the eight parity rows and confirmed findings below are
-reconciled. Coding status remains separate from headset/graphics acceptance.
+C16's coding audit is closed: the eight source routes below are reconciled and
+the fourteen confirmed findings are implemented in the built native preview.
+This is source/build evidence, not proof of headset/graphics acceptance or full
+goal completion. New findings from the acceptance matrix remain implementation
+work and must be recorded explicitly.
 
 | ID | Confirmed finding | State |
 |---|---|---|
@@ -139,6 +145,27 @@ reconciled. Coding status remains separate from headset/graphics acceptance.
 | A12 | Shared Paste seeds its preview with desktop camera inference, and library insertion uses the desktop camera target, even in immersive mode while the ray is still over the panel | Native initial previews now use the clipboard anchor and skip desktop picking/inference; shared world-ray placement/commit and one-step undo checks passed; desktop library/Paste in Place checks and native build passed; controller acceptance open |
 | A13 | Desktop construction guides increase stroke width on selection/hover, including point crosses; XR previously changed colour but kept a fixed 1.5-point stroke | Retained lines and point crosses now use 2.5-point selected / 2-point hovered / 1.5-point idle strokes with existing colour/erasing logic; combined guide build passed; visual acceptance open |
 | A14 | Desktop clipboard ghosts include copied construction lines and guide points; native paste reference instances previously contained text leaders/ticks only | Clipboard line/point instances implemented with shared hidden/Guides rules; GPU spans include paste translation; source/rebasing/span, shader checks and native build passed, including remote diagonal anchors; visual acceptance open |
+
+The source reconciliation follows actual producers and consumers, rather than
+counting passing tests as proof of the whole viewport:
+
+| Row | Desktop/shared producer | Native consumer and reconciliation |
+|---|---|---|
+| 1 | `viewport_selection.rs`, shared selection/context operations and resident appearance | XR source uses prepared selection; `xr_tools.rs` routes ray/window selection and context actions; retained masks/handles draw the selection. A01/A02 close the confirmed display gaps. |
+| 2 | Shared display, inference state, guide definitions and `ReferenceFade` semantics | `floor_grid`, `world_lines`, `world_inference` and retained picking supply grid/axes/guide/reference routes. A09-A11/A13 restore marker and styling cues; dynamic guide spans use GPU uniforms. |
+| 3 | `drawing_points`, shared modeling previews/selection, precision and rotation geometry | `viewport_overlays.rs` prepares native tool feedback; world-ray tools keep authoritative commits. A02/A07-A09 restore preview selection, Flip and anchor/reference cues; A14 supplies copied guides. |
+| 4 | `measurement_tools.rs`, `Dimension::layout`, shared units/guide/exact-value commits | Native ray/offset adapters feed shared measurement operations; retained overlays and `world_text` consume the same layout/value data. A04 supplies current-step prompts. |
+| 5 | `text_tools.rs`, group marker data and shared text editor | `world_text` consumes saved labels/layout and editor state; native annotation picking routes to shared edits. A05/A08 restore arrowheads and placement anchors. Saved text retains monospace 12 / 320-point wrapping. |
+| 6 | `display_scene` effective display/section cache and shared resident renderer | Native eyes use explicit runtime views, shared cap triangles/owners, retained cap picking and GPU environment/shadows. Section handles use shared anchors/offset operations; A01/A04 cover confirmed display/action cues. |
+| 7 | Evaluated joinery previews, cut regions/marker anchors, grain cache and solid commands | Native snapshots include evaluated geometry; reference overlays and controller handles consume shared joint data/permissions. A06/A07 restore targeted warnings and Flip cues. Automatic Fasteners stays disabled. |
+| 8 | `ui_with_host`, shared menus/inspectors/modals, file workers and clipboard commands | Immersive workspace replaces the duplicate model canvas; frame-scoped host routing supplies native View/Paste actions, keyboard and chooser bridge. A03/A04/A12 remove misleading instructions and desktop-camera paste seeds. |
+
+Clipboard-specific reconciliation includes the desktop's explicit dimension,
+text and construction-guide ghost loops. Native paste text/guide instances use
+the same visibility/units and a shared paste transform. Ghost group names remain
+suppressed because desktop group markers describe the main render model only.
+Screenshots/reports retain their explicit output-camera sizing; additional native
+window commands remain the separately recorded future work.
 
 ## Current architecture and boundaries
 
@@ -207,7 +234,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 | 1 | Selection and navigation | World hover/replace/toggle and enclosing-window selection; double-trigger group/text editing and empty-click context exit; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
-| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; Move, Scale and Rotate have stationary geometry/reference targets and shared grid refinement. Scale preserves visible-target/exact-ratio behavior; Rotate supports in-plane targets and off-plane projection without changing its axis. Original-document guards reject unsupported evaluated-only targets. Push/Pull and Offset now preserve exact target distances and face/lock-aware free input; the broader tool/display/workflow audit remains under C16 |
+| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; Move, Scale and Rotate have stationary geometry/reference targets and shared grid refinement. Scale preserves visible-target/exact-ratio behavior; Rotate supports in-plane targets and off-plane projection without changing its axis. Original-document guards reject unsupported evaluated-only targets. Push/Pull and Offset preserve exact target distances and face/lock-aware free input; tool/display/workflow acceptance remains open after the C16 source audit |
 | 5 | Paint and erase | Face/group paint; held-trigger erase interpolates bounded adjacent rays, previews accumulated targets and commits once on release; cancel/loss/keyboard commands discard it. Thin/near targets at the sample limit and evaluated-only paint remain open |
 | 6 | Text and annotations | Text anchor/leader placement and shared editor modal; saved text/dimension labels and strokes can be selected, erased or transformed; Text opens an editable saved text; section-clipped and face-occluded targets are filtered |
 | 7 | Solids and grain | Shared solid validation/operand order and boolean history; Flip uses the displayed quads for hover/click; Grain Direction uses shared part/reference validation and assignment |
@@ -238,24 +265,22 @@ Push/Pull now projects fixed original-model targets into its extrusion direction
 with a starting-surface guard and the free depth fallback. Offset queries the
 original face plane or explicit lock, retaining tilt/elevation and exact target
 distances through shared grid refinement. All five modeling tools now have
-geometry/reference input routes; C15 coding is implemented and the broader C16 parity audit remains open.
+geometry/reference input routes; C15 and the C16 source audit are implemented.
 XR grid refinement no longer scans all edges/faces; containment
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.
 
-## Next implementation work
+## Remaining implementation and acceptance work
 
-1. Reconcile the eight parity rows against actual desktop consumers and XR input
-   routes. Record concrete missing cases, especially editing context/context
-   actions, remaining handles, precision/locks, joinery/fastener targeting and
-   display combinations. Do not substitute repeated minor snap refinements for
-   this replacement-viewport checklist.
-2. Close the remaining UI/input dependencies on the 2D model view; evaluated
-   scene preparation is now independent of painting. Shared View framing and
-   standard directions now have immersive routes; reconcile remaining desktop-only
-   selection/handle gestures with immersive equivalents. Known work includes
-   display/workflow combinations, near-field/fast sweep sampling limits, safe handling of
-   unsupported evaluated targets and nested/scoped cap/controller acceptance.
+1. Exercise the eight parity rows against the recorded acceptance matrix and fix
+   newly demonstrated gaps. The source audit and its fourteen confirmed coding
+   findings are closed; source reconciliation alone does not establish full
+   rendered/workflow equivalence.
+2. Verify that the native routes work without a required 2D model-view fallback.
+   Evaluated scene preparation, shared View framing and standard directions,
+   selection/context handles and clipboard placement now have immersive routes.
+   Remaining checks include display/workflow combinations, near-field/fast sweep
+   sampling limits, unsupported evaluated targets and nested/scoped cap interaction.
    Current-ray source guards now cover all native world tools; live project/undo/
    context transition and capture acceptance still needs the broader matrix.
    Preserve shared operations, bounded queries and retained GPU feedback.
@@ -279,7 +304,7 @@ or complete-parity claims.
    under head movement; controller cursor/clicks and scrolling work; Closer/Text +
    and Recenter work. Basic immersive viewing and two-grip navigation received
    positive feedback. This is not a complete overlay/tool/display comparison.
-2. The latest native build passes for the immersive-first panel. Isolated RTX 4090
+2. Native builds pass for the immersive-first panel. Earlier isolated RTX 4090
    Vulkan images show its inspector/controls without a duplicate model canvas and
    the clean 404-face model in the eye path. These are layout/rendering checks;
    headset confirmation of the new layout and selected-target framing is not recorded. Two focused application tests prove edit refresh without 2D painting
