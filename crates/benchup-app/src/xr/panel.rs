@@ -618,8 +618,9 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             multiview_mask: None,
             cache: None,
         });
-    let space =
+    let mut space =
         session.create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)?;
+    let mut reference_changes = super::reference_space::Changes::default();
     let view_space =
         session.create_reference_space(xr::ReferenceSpaceType::VIEW, xr::Posef::IDENTITY)?;
     let mut editor = if show_editor {
@@ -724,6 +725,16 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                         _ => {}
                     }
                 }
+                xr::Event::ReferenceSpaceChangePending(event)
+                    if event.session() == session.as_raw()
+                        && event.reference_space_type() == xr::ReferenceSpaceType::LOCAL =>
+                {
+                    reference_changes.schedule(
+                        event.change_time(),
+                        event.pose_valid().then(|| event.pose_in_previous_space()),
+                    );
+                    println!("[BenchUpXR] LOCAL reference change scheduled at {:?}", event.change_time());
+                }
                 xr::Event::InteractionProfileChanged(_) => {
                     if let Some(controllers) = &controllers {
                         controllers.log_profiles(&session)?;
@@ -758,6 +769,19 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
         }
         let frame = waiter.wait()?;
         stream.begin()?;
+        if let Some(rebase) = reference_changes.take_due(frame.predicted_display_time) {
+            if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
+                editor.cancel_input(controllers.cancel(), &graphics.device, &graphics.queue)?;
+            }
+            space = session.create_reference_space(xr::ReferenceSpaceType::LOCAL, rebase.offset)?;
+            if rebase.reset_world {
+                anchored = false;
+                if let Some(editor) = &mut editor {
+                    editor.reset_tracking_origin();
+                }
+            }
+            println!("[BenchUpXR] LOCAL reference change applied; world refit: {}", rebase.reset_world);
+        }
         if let (Some(native), Some(editor)) = (&native, &mut editor) {
             for input in native.events.try_iter() {
                 editor.native_keyboard(input, focused && frame.should_render);
@@ -785,7 +809,11 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             };
         }
         let head_location = if frame.should_render && editor.is_some() {
-            Some(view_space.locate(&space, frame.predicted_display_time)?)
+            Some(view_space.locate(&space, frame.predicted_display_time)?).filter(|head| {
+                head.location_flags.contains(
+                    xr::SpaceLocationFlags::POSITION_VALID | xr::SpaceLocationFlags::ORIENTATION_VALID,
+                )
+            })
         } else { None };
         if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
             let logical = editor.logical_size();
@@ -795,7 +823,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             )
             .ok_or("Invalid editor panel dimensions")?;
             let now = Instant::now();
-            if frame.should_render {
+            if frame.should_render && head_location.is_some() {
                 if let Some(head) = &head_location {
                     editor.scene_input_head(upright_anchor(head.pose).unwrap_or(anchor));
                 }
@@ -817,7 +845,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             }
             last_input = now;
         }
-        if !frame.should_render {
+        if !frame.should_render || (editor.is_some() && head_location.is_none()) {
             stream.end(frame.predicted_display_time, blend, &[])?;
             continue;
         }

@@ -7,6 +7,22 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+The next lifecycle source audit found C17: the frame loop ignored
+`ReferenceSpaceChangePending`. Its implementation now queues LOCAL changes for
+the current session and applies them at the first predicted display time at or
+after `changeTime`. A valid new-origin pose updates the application reference
+offset by `inverse(change) * old_offset`, preserving panel/scene coordinates and
+navigation without modifying the document. All active input captures are cancelled
+at the change. Unknown/malformed poses reset the application offset and refit
+the scene beside the user's next valid head pose; they do not edit model data.
+Invalid head poses now cancel input and submit no layers until tracking returns.
+Two focused chronological/composition/fallback checks pass in
+`.local/openxr/reference-space-tests.log`. The updated editor example passes the
+locked offline native build without warnings (`reference-space-build.log`) and
+is frozen under this milestone's source commit in `.local/openxr/preview-builds/`.
+Runtime recenter/focus/controller acceptance is not established. The prior
+`aa74082` build and its independent-render evidence remain preserved separately.
+
 The user resumed the full goal on 2026-11-11 and asked for independent development
 until they return. Do not replace the running preview or keep asking for tests.
 The current tested executable is `dfab0e6`, preserved in

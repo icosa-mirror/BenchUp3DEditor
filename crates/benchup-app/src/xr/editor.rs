@@ -507,6 +507,10 @@ impl Editor {
 
     pub(super) fn scene_input_head(&mut self, pose: openxr::Posef) { self.scene.input_head(pose); }
 
+    pub(super) fn reset_tracking_origin(&mut self) {
+        self.scene.reset_tracking_origin();
+    }
+
     pub(super) fn take_recenter_request(&mut self) -> bool {
         std::mem::take(&mut self.recenter_requested)
     }

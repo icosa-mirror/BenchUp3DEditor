@@ -229,6 +229,13 @@ impl Scene {
         self.source = Some(source);
     }
 
+    pub fn reset_tracking_origin(&mut self) {
+        self.placement = None;
+        self.input = None;
+        self.navigation.reset();
+        self.head = DMat4::IDENTITY;
+    }
+
     pub fn set_input(&mut self, input: Option<super::input::SceneInput>) {
         self.input = input;
     }

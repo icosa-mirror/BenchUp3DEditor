@@ -113,6 +113,10 @@ record scope changes rather than silently changing an estimate.
 16. [x] C16: Reconcile the eight tool/overlay/command source routes and implement
     the fourteen confirmed gaps A01-A14. Rendered/controller acceptance remains
     separate from this coding milestone.
+17. [x] C17: Handle runtime LOCAL reference-space changes at their specified
+    frame time, preserve physical placement with a valid origin transform and
+    cancel/refit safely when that transform is unknown. Two focused checks and
+    the locked native build pass. Runtime recenter acceptance remains open.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
@@ -393,3 +397,4 @@ or complete-parity claims.
 5. [Windows/Vulkan OpenXR setup](https://www.openxr-tutorial.com/windows/vulkan/1-introduction.html)
 6. [Khronos multiview guide](https://docs.vulkan.org/tutorial/latest/OpenXR_Vulkan_Spatial_Computing/08_Slang_Spatial_Shaders/04_incorporating_into_the_engine.html)
 7. [wgpu MULTIVIEW](https://docs.rs/wgpu/30.0.1/wgpu/struct.Features.html#associatedconstant.MULTIVIEW)
+8. [OpenXR reference-space change timing and origin transforms](https://registry.khronos.org/OpenXR/specs/1.1/man/html/XrEventDataReferenceSpaceChangePending.html)
