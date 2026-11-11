@@ -58,6 +58,7 @@ pub(super) struct Text {
     dirty: bool,
     pub lines: Vec<(DVec3, DVec3, [f32; 4])>,
     pub ticks: Vec<(DVec3, DVec3, [f32; 4])>,
+    pub leader_arrows: Vec<(DVec3, DVec3, [f32; 4])>,
     pub revision: u64,
 }
 
@@ -117,6 +118,7 @@ impl Text {
             dirty: false,
             lines: Vec::new(),
             ticks: Vec::new(),
+            leader_arrows: Vec::new(),
             revision: 0,
         }
     }
@@ -191,6 +193,7 @@ impl Text {
         }
         let mut lines = Vec::new();
         let mut ticks = Vec::new();
+        let mut leader_arrows = Vec::new();
         if source.display.group_names {
             for marker in self.markers.update(model, source.revision).iter() {
                 if let Some(object) = model.objects.get(&marker.id).filter(|object| {
@@ -253,6 +256,7 @@ impl Text {
         }) {
             let points = text.layout(model);
             let ink = color(text.id);
+            leader_arrows.push((points[0], points[1], ink.to_normalized_gamma_f32()));
             lines.push((points[0], points[1], ink.to_normalized_gamma_f32()));
             hit_lines.push(super::world_labels::Line { id:text.id, a:points[0], b:points[1] });
             label_ids.insert(labels.len(), text.id);
@@ -495,6 +499,7 @@ impl Text {
         key.atlas = ctx.fonts(|fonts| fonts.font_image_size());
         self.lines = lines;
         self.ticks = ticks;
+        self.leader_arrows = leader_arrows;
         self.key = Some(key);
         self.dirty = true;
         self.revision = self.revision.wrapping_add(1);
@@ -609,6 +614,7 @@ impl Text {
             self.meshes.clear();
             self.lines.clear();
             self.ticks.clear();
+            self.leader_arrows.clear();
             self.count = 0;
             self.vertices = None;
             self.indices = None;

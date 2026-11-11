@@ -45,6 +45,14 @@ impl Line {
             ..Self::new(point, toward, color, 1.5)
         }
     }
+    pub fn leader_arrow(point: glam::DVec3, toward: glam::DVec3, color: [f32; 4]) -> Self {
+        Self {
+            // Eight-pixel open head at the attachment, matching desktop text.
+            // Direction, clipping and width are evaluated per eye on the GPU.
+            style: [4.0, 8.0, 1.0, 0.0],
+            ..Self::new(toward, point, color, 1.0)
+        }
+    }
     pub fn owned(mut self, range: [u32; 2]) -> Self {
         self.owners = range;
         self.style[3] = 0.0;
@@ -292,5 +300,15 @@ impl Lines {
                 pass.draw(0..6, 0..count);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn world_leader_arrow_shader_validates() {
+        let module = eframe::wgpu::naga::front::wgsl::parse_str(include_str!("world_lines.wgsl")).unwrap();
+        eframe::wgpu::naga::valid::Validator::new(Default::default(), Default::default())
+            .validate(&module).unwrap();
     }
 }

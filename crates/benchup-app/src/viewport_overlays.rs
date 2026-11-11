@@ -30,6 +30,7 @@ pub(crate) struct Overlays {
     pub billboards: Vec<Billboard>,
     pub overlay_segments: Vec<Segment>,
     pub arrows: Vec<(DVec3, DVec3, Color32)>,
+    pub leader_arrows: Vec<(DVec3, DVec3, Color32)>,
     pub flip_planes: Vec<(Axis, [DVec3; 4])>,
     pub handles: Vec<Handle>,
 }
@@ -729,6 +730,7 @@ impl BenchUpApp {
         }
         for text in self.transient_text_annotations() {
             let [a, b] = text.layout(&self.doc.model);
+            result.leader_arrows.push((a, b, colors.green));
             result.segments.push(Segment {
                 a,
                 b,

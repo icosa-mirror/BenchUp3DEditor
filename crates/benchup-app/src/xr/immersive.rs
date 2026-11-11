@@ -778,6 +778,9 @@ impl Scene {
                     color.to_normalized_gamma_f32(),
                 )
             }));
+            tools.extend(source.overlays.leader_arrows.iter().map(|(point, toward, color)| {
+                Line::leader_arrow(*point - origin, *toward - origin, color.to_normalized_gamma_f32())
+            }));
             for line in source
                 .overlays
                 .overlay_segments
@@ -910,6 +913,9 @@ impl Scene {
                 for &(a, b, color) in &self.text.ticks {
                     lines.push(Line::tick(a - origin, b - origin, color));
                 }
+                for &(point, toward, color) in &self.text.leader_arrows {
+                    lines.push(Line::leader_arrow(point - origin, toward - origin, color));
+                }
                 for &(a, b) in &self.sections.segments {
                     lines.push(Line::new(
                         a - origin,
@@ -1027,6 +1033,9 @@ impl Scene {
                         }
                         for &(a, b, color) in &self.paste_text.ticks {
                             lines.push(Line::tick(a - paste_origin, b - paste_origin, color));
+                        }
+                        for &(point, toward, color) in &self.paste_text.leader_arrows {
+                            lines.push(Line::leader_arrow(point - paste_origin, toward - paste_origin, color));
                         }
                         lines
                     },

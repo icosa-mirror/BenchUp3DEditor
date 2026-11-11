@@ -442,9 +442,11 @@ No replacement headset session was launched; controller/visual acceptance remain
    input step in both the HUD and XR controls. Completed measurement/guide prompts
    explain restarting or adjusting the result. Section handles advertise holding
    the trigger to drag, releasing to keep the offset and Cancel to restore it.
-5. A05 remains active: desktop attached text draws an open arrowhead at its model
-   attachment, while XR's saved/transient/clipboard text currently has only its
-   leader and label. Add this through retained GPU line instances.
+5. A05: saved, transient/editor and clipboard text now supply retained attachment
+   arrowheads. A distinct GPU line style uses the desktop head's 8-pixel length,
+   3-pixel half-width and 1-pixel stroke. Each eye projects its direction in the
+   shader. Clipped attachments discard the head rather than moving it onto a
+   section or near-plane boundary; the existing leader and label routes remain.
 6. Selection/context source reconciliation includes the enclosing-window and
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
    context acceptance remain open; the broader eight-row audit is still active.
@@ -486,6 +488,32 @@ measurement/text transitions and section hover, drag and cancellation restoring
 the original offset. `world-phase-hud-build.log` passes the native editor example
 build without warnings; its executable is frozen under this milestone's commit
 in `.local/openxr/preview-builds/`. No headset session was launched.
+
+C16 measurement/text source reconciliation: `measurement_click_snap` and
+`commit_measurement_value` remain shared authoritative commits; the native path
+adapts controller rays for dimension offset and annotation planes. Retained
+measurement overlays use the same `Dimension::layout`, measurement values and
+unit formatting. Saved dimensions use that layout and formatting in `world_text`;
+attached text uses the desktop monospace 12 font and 320-point wrap width. Text
+creation/editing, locked-entity checks and commits use the shared text editor;
+native label/stroke picking supplies the selected annotation ID. A05 closes the
+confirmed attachment-marker gap. These source checks do not prove visual or
+controller acceptance, and the remaining C16 areas stay open.
+
+Native file-route source audit: `project_files::run` captures the installed dialog
+host before starting its worker; native Open/Save, geometry import/export and
+report/screenshot exports use that host. Direct `rfd::AsyncFileDialog` calls in
+`project_files.rs` are Web-only. XR installs and shows the panel chooser in its
+editor loop and supplies the shared screenshot dialog with its GPU device/queue.
+This reconciles chooser routing, not end-to-end import/export acceptance or
+additional desktop window commands.
+
+`text-leader-arrow-tests.log` passes the shared world-line WGSL parser/validator;
+`world-phase-hud-regression.log` passes all five HUD cases against this source.
+`text-leader-arrow-build.log` passes the native editor example build without
+warnings. Its executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`. No headset session was launched; arrowhead visual
+acceptance, including near/section clipping and clipboard placement, remains open.
 
 ## User direction
 

@@ -23,6 +23,9 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     if view.viewport.z>0.0 && style.w==0.0 {
         for(var axis=0u;axis<3u;axis++) {
             let limit=view.limits[axis];
+            // An annotation head belongs to its attachment. Clipping must not
+            // move it to the cut boundary of an otherwise visible leader.
+            if style.x==4.0 && end[axis]>limit {return out;}
             if world_a[axis]>limit && world_b[axis]>limit {return out;}
             if world_a[axis]>limit {world_a=mix(world_a,world_b,(limit-world_a[axis])/(world_b[axis]-world_a[axis]));}
             if world_b[axis]>limit {world_b=mix(world_b,world_a,(limit-world_b[axis])/(world_a[axis]-world_b[axis]));}
@@ -30,6 +33,7 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     }
     var a = view.matrix * vec4(world_a, 1.0);
     var b = view.matrix * vec4(world_b, 1.0);
+    if style.x==4.0 && b.z<0.0 {return out;}
     if (a.z < 0.0 && b.z < 0.0) { return out; }
     if a.z < 0.0 { a = mix(a, b, -a.z / (b.z - a.z)); }
     if b.z < 0.0 { b = mix(b, a, -b.z / (a.z - b.z)); }
@@ -52,15 +56,16 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
         let tick = direction * 3.0 + normal * 4.0;
         let cross_tick = vec2(-tick.y, tick.x) / 5.0;
         offset = tick * along + cross_tick * radius * side;
-    } else if style.x==3.0 {
+    } else if style.x==3.0 || style.x==4.0 {
         clip=b;
-        offset=direction*select(-style.y,0.0,at_end)+normal*side*style.y*0.5;
+        let slope=select(0.5,0.375,style.x==4.0);
+        offset=direction*select(-style.y,0.0,at_end)+normal*side*style.y*slope;
     }
     out.position = vec4(clip.xy + offset * 2.0 * clip.w / view.viewport.xy, clip.zw);
     out.color = color;
     out.local = vec2(select(0.0,length(delta),at_end),side*radius);
     if style.x == 1.0 { out.local = vec2(along, side) * style.y; }
-    if style.x==3.0 {out.local=vec2(select(-style.y,0.0,at_end),side*style.y*0.5);}
+    if style.x==3.0 || style.x==4.0 {out.local=vec2(select(-style.y,0.0,at_end),side*style.y*select(0.5,0.375,style.x==4.0));}
     out.style = style;
     out.owners=owners;out.depth=clip.z/clip.w;
     out.width=width;
@@ -80,7 +85,11 @@ fn fragment(input: Output) -> @location(0) vec4<f32> {
     if input.style.x == 0.0 && input.style.y > 0.0 && input.local.x % input.style.y > input.style.z { discard; }
     var amount=clamp(input.width*0.5+0.5-abs(input.local.y),0.0,1.0);
     if input.style.x==1.0 {let distance=min(abs(input.local.x-input.local.y),abs(input.local.x+input.local.y))*0.70710678;amount=clamp(input.width*0.5+0.5-distance,0.0,1.0);}
-    if input.style.x==3.0 {let distance=abs(abs(input.local.y)+input.local.x*0.5)/1.11803399;amount=clamp(input.style.z*0.5+0.5-distance,0.0,1.0);}
+    if input.style.x==3.0 || input.style.x==4.0 {
+        let slope=select(0.5,0.375,input.style.x==4.0);
+        let distance=abs(abs(input.local.y)+input.local.x*slope)/sqrt(1.0+slope*slope);
+        amount=clamp(input.style.z*0.5+0.5-distance,0.0,1.0);
+    }
     if amount<=0.0 {discard;}
     let gamma = input.color;
     let linear = select(gamma.rgb / 12.92, pow((gamma.rgb + 0.055) / 1.055, vec3<f32>(2.4)), gamma.rgb > vec3<f32>(0.04045));
