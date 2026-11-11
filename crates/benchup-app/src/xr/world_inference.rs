@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 pub(crate) trait ReferenceQuery {
     fn alignment_candidates(&self, ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3];
+    fn spatial_candidates(&self, _ray: Ray, _constraint: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3] { Default::default() }
     fn contains_face(&self, _origin: DVec3, _face: u64, _point: DVec3) -> Option<bool> { None }
+    fn visible_point(&self, _origin: DVec3, _point: DVec3) -> Option<bool> { None }
 }
 
 /// Only a small per-axis result set reaches the shared tool callback. Combine
@@ -20,18 +22,24 @@ pub(crate) fn align_guides(ray: Ray, plane: (DVec3, DVec3), constraint: Option<(
 pub(crate) fn align_guides_filtered(ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>,
     guides: &[AxisGuide], allowed: impl Fn(DVec3) -> bool) -> Option<(Snap, Vec<AxisGuide>)>
 {
+    align_spatial_guides(ray, Some(plane), constraint, guides, false, allowed)
+}
+
+pub(crate) fn align_spatial_guides(ray: Ray, plane: Option<(DVec3, DVec3)>, constraint: Option<(DVec3, AxisConstraint)>,
+    guides: &[AxisGuide], require_pair: bool, allowed: impl Fn(DVec3) -> bool) -> Option<(Snap, Vec<AxisGuide>)>
+{
     let near = |point: DVec3| {
         let delta = point - ray.origin;
         let depth = delta.dot(ray.direction);
         let score = (delta - ray.direction * depth).length() / depth;
-        (depth > 0. && score <= 0.01 && (point - plane.0).dot(plane.1).abs() < 1e-6
+        (depth > 0. && score <= 0.01 && plane.is_none_or(|(origin, normal)| (point - origin).dot(normal).abs() < 1e-6)
             && constraint.is_none_or(|(start, c)| c.contains(point - start))).then_some(score)
     };
     let mut unique: Vec<(AxisGuide, f64, usize)> = Vec::with_capacity(72);
     for (index, guide) in guides.iter().enumerate() {
         if unique.iter().any(|(old, _, _)| old.axis == guide.axis
             && (old.origin - guide.origin).cross(guide.axis.vector()).length() < 1e-7) { continue; }
-        let score = axis_point(ray, guide.origin, guide.axis, constraint, Some(plane)).and_then(near).unwrap_or(f64::INFINITY);
+        let score = axis_point(ray, guide.origin, guide.axis, constraint, plane).and_then(near).unwrap_or(f64::INFINITY);
         unique.push((*guide, score, index));
     }
     unique.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.2.cmp(&b.2)));
@@ -47,7 +55,7 @@ pub(crate) fn align_guides_filtered(ray: Ray, plane: (DVec3, DVec3), constraint:
         candidates.push((point, first, second, score));
     };
     for (i, guide) in guides.iter().enumerate() {
-        if let Some(point) = axis_point(ray, guide.origin, guide.axis, constraint, Some(plane)) {
+        if !require_pair && let Some(point) = axis_point(ray, guide.origin, guide.axis, constraint, plane) {
             consider(point, i, None);
         }
         for (j, second) in guides.iter().enumerate().skip(i + 1) {
@@ -111,10 +119,16 @@ impl References {
     pub fn candidates(&self, ray: Ray, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>,
         visible: impl Fn(u64, DVec3) -> bool) -> [Vec<AxisGuide>; 3]
     {
+        self.candidates_in(ray, Some(plane), constraint, visible)
+    }
+
+    pub fn candidates_in(&self, ray: Ray, plane: Option<(DVec3, DVec3)>, constraint: Option<(DVec3, AxisConstraint)>,
+        visible: impl Fn(u64, DVec3) -> bool) -> [Vec<AxisGuide>; 3]
+    {
         [Axis::X, Axis::Y, Axis::Z].map(|axis| {
             let Some(transform) = axis_projection(ray, axis, plane, constraint) else { return Vec::new(); };
             self.index.query_mapped_candidates(ray, 0.01, transform, benchup_core::inference::MAX_ALIGNMENT_REFERENCES_PER_AXIS, |slot, reference, point| {
-                let expected = axis_point(ray, reference, axis, constraint, Some(plane));
+                let expected = axis_point(ray, reference, axis, constraint, plane);
                 expected.is_some_and(|expected| expected.distance(point) < 1e-6)
                     && visible(self.anchors[slot as usize].0, reference)
             }, |a, b| (self.anchors[a as usize].1 - self.anchors[b as usize].1).cross(axis.vector()).length() < 1e-7)
@@ -125,12 +139,12 @@ impl References {
 
 // The valid target on an axis is affine in its reference. Invalid plane/lock
 // combinations are rejected exactly in the leaf callback, after bounds pruning.
-fn axis_projection(ray: Ray, axis: Axis, plane: (DVec3, DVec3), constraint: Option<(DVec3, AxisConstraint)>) -> Option<glam::DMat4> {
+fn axis_projection(ray: Ray, axis: Axis, plane: Option<(DVec3, DVec3)>, constraint: Option<(DVec3, AxisConstraint)>) -> Option<glam::DMat4> {
     let direction = axis.vector();
     let lock_plane = constraint.and_then(|(start, c)| match c {
         AxisConstraint::Plane(normal) => Some((start, normal.vector())), _ => None,
     });
-    let intersect = [Some(plane), lock_plane].into_iter().flatten()
+    let intersect = [plane, lock_plane].into_iter().flatten()
         .find(|(_, normal)| direction.dot(*normal).abs() > 1e-9);
     let fixed = constraint.and_then(|(start, c)| match c {
         AxisConstraint::Axis(lock) if lock != axis => Some(start), _ => None,
@@ -243,6 +257,23 @@ pub(crate) fn axis_point(ray: Ray, reference: DVec3, axis: Axis,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn spatial_reference_index_and_pairs_support_sloping_edges_without_an_implicit_plane() {
+        let mut model = benchup_core::Model::default();
+        model.add_edge(DVec3::new(0., 1., 2.), DVec3::new(1., 1., 2.)).unwrap();
+        model.add_edge(DVec3::new(2., 0., 2.), DVec3::new(2., 0.5, 2.)).unwrap();
+        let mut references = References::default();
+        references.prepare(&Arc::new(model));
+        let ray = Ray { origin: DVec3::new(2.004, 1.004, 4.004), direction: -DVec3::Z };
+        let guides: Vec<_> = references.candidates_in(ray, None, None, |_, _| true).into_iter().flatten().collect();
+        let (snap, active) = align_spatial_guides(ray, None, None, &guides, true, |point|
+            (point - DVec3::new(1., 0., 1.)).cross(DVec3::ONE).length() < 1e-7).unwrap();
+        assert!(snap.point.distance(DVec3::new(2., 1., 2.)) < 1e-8);
+        assert_eq!(active.len(), 2);
+        assert!(align_spatial_guides(ray, None, None, &active[..1], true, |_| true).is_none());
+        let lock = Some((DVec3::ZERO, AxisConstraint::Plane(Axis::Z)));
+        assert!(align_spatial_guides(ray, None, lock, &guides, true, |_| true).is_none());
+    }
     #[test]
     fn alignment_candidates_rank_builtin_anchors_before_applying_the_limit() {
         let limit = benchup_core::inference::MAX_ALIGNMENT_REFERENCES_PER_AXIS;

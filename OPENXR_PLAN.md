@@ -105,7 +105,7 @@ record scope changes rather than silently changing an estimate.
     context exit, including tiny clicks in Window selection mode. Shared Edit
     commands and panel context controls provide entity actions; secondary trigger
     retains Cancel rather than opening a competing world context popup.
-15. [ ] C15: Close the active global/off-face inference and reference gaps.
+15. [x] C15: Global/off-face references, bounded candidate pairs, edge/face containment, evaluated-edge acquisition and all five modeling inference routes.
 16. [ ] C16: Finish the eight-row tool/overlay/command coding audit and its active gaps.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
@@ -164,7 +164,7 @@ The numbered rows are the checklist for the replacement milestone.
 | # | Area | Implemented | Remaining audit/gap |
 |---|---|---|---|
 | 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions; held-trigger erase with bounded ray interpolation and one undo | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation; extreme/near-field sweep acceptance remains open |
-| 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired edge references and locked-axis projection; persisted X/Y/Z and Unlock controls in XR, including two-axis planes | Edge-constrained refinement; acquired references from evaluated-only edges; complete controller lock acceptance |
+| 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired displayed-edge references, 3D edge-constrained guide pairs and locked-axis projection; persisted X/Y/Z and Unlock controls in XR, including two-axis planes | Complete controller lock/reference acceptance and display/workflow audit |
 | 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover; host-aware lock refresh and shared precision commits | Pending drawing/measurement targets and Exact value modeling use world-based numeric Enter; remaining desktop handles/precision routes need audit |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
@@ -182,7 +182,7 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 | 1 | Selection and navigation | World hover/replace/toggle and enclosing-window selection; double-trigger group/text editing and empty-click context exit; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
-| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; Move, Scale and Rotate have stationary geometry/reference targets and shared grid refinement. Scale preserves visible-target/exact-ratio behavior; Rotate supports in-plane targets and off-plane projection without changing its axis. Original-document guards reject unsupported evaluated-only targets. Push/Pull and Offset now preserve exact target distances and face/lock-aware free input; edge-constrained drawing and evaluated-edge acquisition remain under C15 audit |
+| 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; Move, Scale and Rotate have stationary geometry/reference targets and shared grid refinement. Scale preserves visible-target/exact-ratio behavior; Rotate supports in-plane targets and off-plane projection without changing its axis. Original-document guards reject unsupported evaluated-only targets. Push/Pull and Offset now preserve exact target distances and face/lock-aware free input; the broader tool/display/workflow audit remains under C16 |
 | 5 | Paint and erase | Face/group paint; held-trigger erase interpolates bounded adjacent rays, previews accumulated targets and commits once on release; cancel/loss/keyboard commands discard it. Thin/near targets at the sample limit and evaluated-only paint remain open |
 | 6 | Text and annotations | Text anchor/leader placement and shared editor modal; saved text/dimension labels and strokes can be selected, erased or transformed; Text opens an editable saved text; section-clipped and face-occluded targets are filtered |
 | 7 | Solids and grain | Shared solid validation/operand order and boolean history; Flip uses the displayed quads for hover/click; Grain Direction uses shared part/reference validation and assignment |
@@ -195,8 +195,8 @@ endpoint/midpoint query now retains up to 24 distinct visible guide lines per
 world axis. Start/origin guides compete within that same shared desktop limit
 before compatible intersections are combined on the current working plane.
 The drawing/measurement callback queries the native scene's visibility caches;
-it does not project the desktop camera or scan all references per frame. Remaining
-edge-constrained drawing refinement remains part of C15. Face refinements now
+it does not project the desktop camera or scan all references per frame.
+edge snaps require a true 3D guide-pair intersection on the picked segment. Face refinements
 validate containment/visibility and try secondary candidates when the closest
 intersection falls outside the targeted face or into a hole.
 Move now uses the same immutable, exclusion-filtered target snapshot as desktop,
@@ -213,7 +213,7 @@ Push/Pull now projects fixed original-model targets into its extrusion direction
 with a starting-surface guard and the free depth fallback. Offset queries the
 original face plane or explicit lock, retaining tilt/elevation and exact target
 distances through shared grid refinement. All five modeling tools now have
-geometry/reference input routes; the remaining C15 edge/acquisition audit is open.
+geometry/reference input routes; C15 coding is implemented and the broader C16 parity audit remains open.
 XR grid refinement no longer scans all edges/faces; containment
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.
@@ -229,7 +229,7 @@ or complete-parity claims.
    scene preparation is now independent of painting. Shared View framing and
    standard directions now have immersive routes; reconcile remaining desktop-only
    selection/handle gestures with immersive equivalents. Known work includes
-   edge-constrained alignment and evaluated-edge acquisition, near-field/fast sweep sampling limits, safe handling of
+   display/workflow combinations, near-field/fast sweep sampling limits, safe handling of
    unsupported evaluated targets and nested/scoped cap/controller acceptance.
    Current-ray source guards now cover all native world tools; live project/undo/
    context transition and capture acceptance still needs the broader matrix.

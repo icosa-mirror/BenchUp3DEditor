@@ -88,6 +88,7 @@ pub(crate) struct State {
     move_targets: Option<crate::xr::world_move::Targets>,
     model_plane: Option<DVec3>,
     reference: Option<drawing_inference::DrawingReference>,
+    reference_stamp: Option<InputStamp>,
     erasing: bool,
     erase_revision: Option<(u64, Option<u64>)>,
     erase_sweep: Option<EraseTargets>,
@@ -1571,10 +1572,12 @@ impl BenchUpApp {
         references: Option<&dyn crate::xr::world_inference::ReferenceQuery>) {
         let eligible = (self.tool.is_drawing() || self.tool.is_measuring() || self.tool == Tool::GrainDirection)
             && self.doc.snap_to_axes && self.doc.snap_to_geometry && self.snap_to_edge;
+        if state.reference_stamp.as_ref() != pointer.stamp.as_ref() { state.reference = None; }
+        state.reference_stamp = pointer.stamp.clone();
         let contains = |reference:drawing_inference::DrawingReference| {
-            let Some(edge) = self.doc.model.edges.get(&reference.edge)
-                .filter(|edge|!self.doc.model.is_hidden(edge.id)) else { return false; };
-            let (a,b) = self.doc.model.points(edge);
+            let Some(edge) = pointer.model.edges.get(&reference.edge)
+                .filter(|edge|!pointer.model.is_hidden(edge.id)) else { return false; };
+            let (a,b) = pointer.model.points(edge);
             let segment=b-a;
             if segment.length_squared()<1e-24 { return false; }
             let t=(reference.point-a).dot(segment)/segment.length_squared();
@@ -1591,7 +1594,7 @@ impl BenchUpApp {
             let source = if self.snap_to_grid {
                 grid::snap_with_geometry_hint(source,
                     grid::configured_spacing(&self.doc.camera,&self.doc.display),
-                    None,None,&self.doc.model,None,Some((hit.edge,None)))
+                    None,None,&pointer.model,None,Some((hit.edge,None)))
             } else { source };
             let reference = drawing_inference::DrawingReference {edge:hit.edge.unwrap(),point:source.point};
             if contains(reference) { state.reference=Some(reference); acquired=true; }
@@ -1599,7 +1602,8 @@ impl BenchUpApp {
         self.drawing_reference=state.reference;
         let Some(base) = self.snap else { return; };
         if matches!(base.kind,Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter
-            | Inference::Origin | Inference::OnEdge | Inference::OnGuide | Inference::GuidePoint) { return; }
+            | Inference::Origin | Inference::OnGuide | Inference::GuidePoint) { return; }
+        let on_edge = base.kind == Inference::OnEdge;
         let constraint = if self.tool.is_drawing() && self.tool != Tool::Line {
             self.shape_lock().map(AxisConstraint::Plane)
         } else if self.tool == Tool::Dimensions { None } else { self.axis_constraint() };
@@ -1614,14 +1618,32 @@ impl BenchUpApp {
                 guides.extend([Axis::X, Axis::Y, Axis::Z].map(|axis| AxisGuide { origin, axis }));
             }
             if eligible && let Some(references) = references {
-                guides.extend(references.alignment_candidates(pointer.ray, plane, constraint).into_iter().flatten());
+                let candidates = if on_edge { references.spatial_candidates(pointer.ray, constraint) }
+                    else { references.alignment_candidates(pointer.ray, plane, constraint) };
+                guides.extend(candidates.into_iter().flatten());
             }
         }
-        let on_surface = |point| base.kind != Inference::OnFace || pointer.hit.and_then(|hit| hit.face).is_some_and(|face| {
-            references.and_then(|references| references.contains_face(pointer.ray.origin, face, point))
-                .unwrap_or_else(|| pointer.model.faces.get(&face).is_some_and(|face| pointer.model.face_contains(face, point, true)))
-        });
-        let global = crate::xr::world_inference::align_guides_filtered(pointer.ray, plane, constraint, &guides, on_surface);
+        let on_surface = |point| match base.kind {
+            Inference::OnFace => pointer.hit.and_then(|hit| hit.face).is_some_and(|face| {
+                references.and_then(|references| references.contains_face(pointer.ray.origin, face, point))
+                    .unwrap_or_else(|| pointer.model.faces.get(&face).is_some_and(|face| pointer.model.face_contains(face, point, true)))
+            }),
+            Inference::OnEdge => pointer.hit.is_some_and(|hit| hit.edge.is_some() && hit.contains(&pointer.model, point))
+                && references.and_then(|references| references.visible_point(pointer.ray.origin, point)).unwrap_or(true),
+            _ => true,
+        };
+        let global = crate::xr::world_inference::align_spatial_guides(pointer.ray, (!on_edge).then_some(plane),
+            constraint, &guides, on_edge, on_surface);
+        if on_edge {
+            if let Some((snap, guides)) = global {
+                self.snap = Some(snap); self.drawing_axis_guides = guides;
+                if eligible && let Some(edge) = pointer.hit.and_then(|hit| hit.edge) {
+                    state.reference = Some(drawing_inference::DrawingReference { edge, point: snap.point });
+                    self.drawing_reference = state.reference;
+                }
+            }
+            return;
+        }
         let Some(reference) = state.reference else {
             if let Some((snap, guides)) = global { self.snap = Some(snap); self.drawing_axis_guides = guides; }
             return;
@@ -2644,6 +2666,80 @@ mod input_revision_tests {
                 annotation: None, edge_targets: [None; 3], point: DVec3::X * 0.5,
                 normal: DVec3::Z, center: None }),
             activate: true, cancel: false, primary_down: true, visible_reference: None,
+        }
+    }
+
+    #[test]
+    fn spatial_reference_controller_refines_only_visible_intersections_on_the_picked_edge() {
+        struct References(bool);
+        impl crate::xr::world_inference::ReferenceQuery for References {
+            fn alignment_candidates(&self, _: Ray, _: (DVec3, DVec3), _: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3] { Default::default() }
+            fn spatial_candidates(&self, _: Ray, _: Option<(DVec3, AxisConstraint)>) -> [Vec<AxisGuide>; 3] {
+                [vec![AxisGuide { origin: DVec3::new(0., 1., 2.), axis: Axis::X }],
+                    vec![AxisGuide { origin: DVec3::new(2.003, 0., 2.), axis: Axis::Y },
+                        AxisGuide { origin: DVec3::new(2., 0., 2.), axis: Axis::Y }], vec![]]
+            }
+            fn visible_point(&self, _: DVec3, _: DVec3) -> Option<bool> { Some(self.0) }
+        }
+        for visible in [false, true] {
+            let mut doc = Document::default();
+            let edge = doc.model.add_edge(DVec3::new(1., 0., 1.), DVec3::new(4., 3., 4.)).unwrap();
+            let mut app = BenchUpApp::with_document(doc, None, true);
+            app.tool = Tool::Line; app.line_start = Some(DVec3::new(-1., -1., 0.));
+            app.doc.snap_to_geometry = true; app.doc.snap_to_axes = true; app.snap_to_edge = true; app.snap_to_grid = false;
+            let original = app.doc.model.clone();
+            let point = DVec3::new(2.004, 1.004, 2.004);
+            let input = Pointer { stamp: None, handle: None, view: None, model: Arc::new(original.clone()),
+                ray: Ray { origin: point + DVec3::Z * 2., direction: -DVec3::Z },
+                hit: Some(Hit { entity: Some(edge), section: false, edge: Some(edge), face: None,
+                    guide: None, guide_points: [None; 8], flip: None, annotation: None,
+                    edge_targets: [Some(DVec3::new(1., 0., 1.)), Some(DVec3::new(4., 3., 4.)), Some(DVec3::new(2.5, 1.5, 2.5))],
+                    point, normal: DVec3::Z, center: None }), activate: false, cancel: false, primary_down: false, visible_reference: None };
+            let ctx = egui::Context::default(); let mut state = State::default();
+            app.xr_world_pointer_with_references(Some(&input), &mut state, true, &ctx, &mut Storage, Some(&References(visible)));
+            let snap = app.snap.unwrap();
+            assert_eq!(snap.kind, if visible { Inference::Aligned } else { Inference::OnEdge });
+            assert!(snap.point.distance(if visible { DVec3::new(2., 1., 2.) } else { point }) < 1e-8);
+            if visible { assert!(state.reference.unwrap().point.distance(snap.point) < 1e-8); }
+            assert_eq!(app.doc.model, original);
+            assert!(app.doc.history.undo_label().is_none());
+        }
+    }
+
+    #[test]
+    fn spatial_reference_controller_acquires_evaluated_edges_without_document_edits_and_invalidates_sources() {
+        for cause in 0..3 {
+            let mut app = BenchUpApp::with_document(Document::default(), None, true);
+            app.tool = Tool::Line; app.line_start = Some(DVec3::ZERO);
+            app.doc.snap_to_geometry = true; app.doc.snap_to_axes = true; app.snap_to_edge = true; app.snap_to_grid = false;
+            let original = app.doc.model.clone();
+            let mut evaluated = original.clone();
+            let point = DVec3::new(2., 3., 1.);
+            let edge = evaluated.add_edge(point, point + DVec3::X * 2.).unwrap();
+            assert!(!original.edges.contains_key(&edge));
+            let ctx = egui::Context::default(); let mut state = State::default();
+            let mut input = Pointer { stamp: Some(app.xr_input_stamp(&ctx)), handle: None, view: None, model: Arc::new(evaluated.clone()),
+                ray: Ray { origin: point + DVec3::Z * 2., direction: -DVec3::Z },
+                hit: Some(Hit { entity: None, section: false, edge: Some(edge), face: None,
+                    guide: None, guide_points: [None; 8], flip: None, annotation: None,
+                    edge_targets: [Some(point), None, None], point, normal: DVec3::Z, center: None }),
+                activate: false, cancel: false, primary_down: false, visible_reference: None };
+            app.xr_world_pointer(Some(&input), &mut state, true, &ctx, &mut Storage);
+            assert_eq!(state.reference.unwrap().edge, edge);
+            assert_eq!(state.reference.unwrap().point, point);
+            input.hit = None; input.visible_reference = Some(point);
+            app.xr_world_pointer(Some(&input), &mut state, true, &ctx, &mut Storage);
+            assert!(state.reference.is_some());
+            match cause {
+                0 => { app.xr_project_epoch = app.xr_project_epoch.wrapping_add(1); input.stamp = Some(app.xr_input_stamp(&ctx)); }
+                1 => { input.model = Arc::new(original.clone()); }
+                _ => { evaluated.hidden.insert(edge); input.model = Arc::new(evaluated); }
+            }
+            app.xr_world_pointer(Some(&input), &mut state, true, &ctx, &mut Storage);
+            assert!(state.reference.is_none(), "cause {cause}");
+            assert!(app.drawing_reference.is_none());
+            assert_eq!(app.doc.model, original);
+            assert!(app.doc.history.undo_label().is_none());
         }
     }
 
