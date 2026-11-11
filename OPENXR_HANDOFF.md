@@ -5,6 +5,37 @@ Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continui
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
+## Prepared build and next requested test
+
+The latest prepared executable is source `591c117`, at
+`.local/openxr/preview-builds/591c117/openxr_editor.exe`; its `build.json` records
+the full source commit, binary hash and passing build/GUI-check artifacts. Later
+documentation-only commits do not require replacing that executable. It has not
+been launched in the headset. The last human-tested executable remains `dfab0e6`;
+do not confuse that older acceptance evidence with the current prepared build.
+
+When the user requests testing, inspect process ownership and launch this frozen
+binary through `scripts/openxr_preview.ps1` with no duration limit. The helper
+starts a clean bundled Example and carries preferences only. Confirm the new
+process/path and fresh FOCUSED/stereo/quad output before asking any question.
+Ask only one check at a time; do not present this whole queue to a busy user:
+
+1. Set Dominant hand to Right under View and comfort and enable Panel on
+   controller. Check whether the panel follows the left controller.
+2. Check whether the immersive model stays in place while moving that panel.
+3. Open Save As and the keyboard, then check continuous entry of `abc`.
+4. With that dialog open, press the panel hand's Menu/B button and check recall
+   to world placement in front of the user.
+5. Check that `abc` remains in the dialog's input.
+6. Append `d` and check that it works without selecting the field again.
+
+This typing check does not require saving a file; use Cancel afterward.
+
+Keep handedness reversal, grip freezing, loss/restart and broader overlay parity
+in the remaining acceptance matrix. The earlier Exact value movement/undo check
+is still unanswered and must also be completed later. None of the new controller
+panel or recall behaviours has human acceptance yet.
+
 ## Active continuation; user busy
 
 C23 separates live panel placement changes from real keyboard-focus loss. The

@@ -42,8 +42,11 @@ and empty-click context exit share desktop operations, including tiny window-mod
 clicks. C15's global/off-face and modeling inference routes are implemented.
 C16 has closed its recorded A01-A14 coding gaps, including retained overlay
 markers, axes styling/fade, mode/target instructions, native paste seeds and copied
-guide previews. C16's eight-row coding audit is complete; the acceptance gates
-below remain open.
+guide previews. C16's eight-row coding audit is complete. Subsequent C17-C23
+milestones implement reference-space recovery, compact controls, optional
+controller attachment/recall and modal/keyboard cancellation fixes. The latest
+prepared executable is `591c117`; it has not been launched in the headset.
+The acceptance gates below remain open.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -77,13 +80,13 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 
 | Phase | Implemented now | Outstanding acceptance or functionality |
 |---|---|---|
-| 1A: panel/input foundation | Metric panel geometry; ray mapping; OpenXR actions; capture and focus/tracking cancellation | Complete drag/loss/restart coverage on the headset |
-| 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle | Clean graphics validation and the full restart/loss matrix remain open |
-| 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad | Desktop mirroring and complete host-service verification remain open |
-| 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; in-panel file chooser with destination-folder creation; native lifetime window; shared Close/Quit path; saved preferences | Headset keyboard/file-chooser acceptance, other window commands and end-to-end project workflow verification |
-| 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit |
+| 1A: panel/input foundation | Metric panel geometry; ray mapping; OpenXR actions; capture and focus/tracking cancellation; LOCAL origin-change compensation | Complete drag/loss/reference-change/restart coverage on the headset |
+| 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle; pinned SPIR-V compiler fix | OpenXR-runtime core/synchronization validation and the full restart/loss matrix remain open |
+| 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad; native desktop lifetime window | Complete host-service workflow acceptance; desktop mirroring stays explicitly deferred |
+| 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; in-panel file chooser with destination-folder creation; native lifetime window; shared Close/Quit path; saved preferences; compact controls and optional controller panel/recall | Headset keyboard/file-chooser/controller-panel acceptance and end-to-end project workflow verification; additional native window commands remain explicitly deferred |
+| 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas; eight-row source audit closed | Rendered/controller workflow acceptance across the recorded parity matrix |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
-| 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and remaining workflow/gesture parity; immersive mode no longer duplicates the 2D model view |
+| 2C: immersive editing | World-ray selection, audited drawing/modeling/annotation/handle routes, guides/reference inference and upright two-grip navigation; no duplicate 2D model view | Controller acceptance of inference/tool/handle and workflow/gesture parity; fix newly demonstrated gaps |
 
 ## Coding milestone checklist
 
