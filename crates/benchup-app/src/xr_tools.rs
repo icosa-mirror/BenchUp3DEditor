@@ -629,6 +629,14 @@ impl BenchUpApp {
         ctx: &egui::Context,
         storage: &mut dyn eframe::Storage,
     ) {
+        self.xr_world_pointer_with_references(pointer, state, activate, ctx, storage, None);
+    }
+
+    pub(crate) fn xr_world_pointer_with_references(
+        &mut self, pointer: Option<&Pointer>, state: &mut State, activate: bool,
+        ctx: &egui::Context, storage: &mut dyn eframe::Storage,
+        references: Option<&dyn crate::xr::world_inference::ReferenceQuery>,
+    ) {
         state.pointer_target = None;
         state.handle_hint = None;
         if state.model_phase == Some(ModelPhase::Typing)
@@ -929,7 +937,7 @@ impl BenchUpApp {
             .or_else(|| pointer.hit.filter(|hit| hit.section).map(|hit| hit.normal))
             .unwrap_or(DVec3::Z);
         self.snap = self.xr_ray_snap(pointer, start, normal);
-        self.xr_reference_inference(pointer,state,start,normal);
+        self.xr_reference_inference(pointer,state,start,normal,references);
         self.xr_shape_plane(pointer.ray);
         if matches!(self.tool, Tool::Text | Tool::GrainDirection) && start.is_none() {
             // A new leader must attach to geometry, even with snapping disabled.
@@ -1436,7 +1444,8 @@ impl BenchUpApp {
         ctx.request_repaint();
     }
 
-    fn xr_reference_inference(&mut self, pointer: &Pointer, state: &mut State, start: Option<DVec3>, normal: DVec3) {
+    fn xr_reference_inference(&mut self, pointer: &Pointer, state: &mut State, start: Option<DVec3>, normal: DVec3,
+        references: Option<&dyn crate::xr::world_inference::ReferenceQuery>) {
         let eligible = (self.tool.is_drawing() || self.tool.is_measuring() || self.tool == Tool::GrainDirection)
             && self.doc.snap_to_axes && self.doc.snap_to_geometry && self.snap_to_edge;
         let contains = |reference:drawing_inference::DrawingReference| {
@@ -1465,7 +1474,7 @@ impl BenchUpApp {
             if contains(reference) { state.reference=Some(reference); acquired=true; }
         }
         self.drawing_reference=state.reference;
-        let (Some(reference),Some(base)) = (state.reference,self.snap) else { return; };
+        let Some(base) = self.snap else { return; };
         if matches!(base.kind,Inference::Endpoint | Inference::Midpoint | Inference::FaceCenter
             | Inference::Origin | Inference::OnEdge | Inference::OnGuide | Inference::GuidePoint) { return; }
         let constraint = if self.tool.is_drawing() && self.tool != Tool::Line {
@@ -1476,6 +1485,20 @@ impl BenchUpApp {
         }));
         let plane = pointer.hit.filter(|hit|base.kind == Inference::OnFace && hit.face.is_some())
             .map_or((start.unwrap_or(DVec3::ZERO),normal),|hit|(hit.point,hit.normal));
+        let mut guides = Vec::new();
+        if self.doc.snap_to_axes {
+            for origin in start.into_iter().chain([DVec3::ZERO]) {
+                guides.extend([Axis::X, Axis::Y, Axis::Z].map(|axis| AxisGuide { origin, axis }));
+            }
+            if eligible && let Some(references) = references {
+                guides.extend(references.alignment(pointer.ray, plane, constraint).into_iter().flatten());
+            }
+        }
+        let global = crate::xr::world_inference::align_guides(pointer.ray, plane, constraint, &guides);
+        let Some(reference) = state.reference else {
+            if let Some((snap, guides)) = global { self.snap = Some(snap); self.drawing_axis_guides = guides; }
+            return;
+        };
         if self.tool != Tool::Dimensions
             && let Some((start,axis)) = start.zip(self.single_axis_lock())
             && let Some(snap) = crate::xr::world_inference::reference_projection(
@@ -1488,6 +1511,8 @@ impl BenchUpApp {
         if let Some((snap,guide)) = crate::xr::world_inference::reference_axis(pointer.ray,reference.point,constraint,Some(plane)) {
             self.snap=Some(snap);
             self.drawing_guide=Some(guide);
+        } else if let Some((snap, guides)) = global {
+            self.snap = Some(snap); self.drawing_axis_guides = guides;
         }
     }
 
@@ -2337,6 +2362,35 @@ mod input_revision_tests {
                 normal: DVec3::Z, center: None }),
             activate: true, cancel: false, primary_down: true, visible_reference: None,
         }
+    }
+
+    #[test]
+    fn global_alignment_references_reach_the_shared_controller_drawing_preview() {
+        struct References;
+        impl crate::xr::world_inference::ReferenceQuery for References {
+            fn alignment(&self, _: Ray, _: (DVec3, DVec3), _: Option<(DVec3, AxisConstraint)>) -> [Option<AxisGuide>; 3] {
+                [None, Some(AxisGuide { origin: DVec3::new(2., 3., 0.), axis: Axis::Y }), None]
+            }
+        }
+        let (mut app, ctx, edge, _) = fixture();
+        app.set_tool(Tool::Line);
+        app.line_start = Some(DVec3::ZERO);
+        app.doc.snap_to_axes = true;
+        app.doc.snap_to_geometry = true;
+        app.snap_to_edge = true;
+        app.snap_to_grid = false;
+        let before = app.doc.model.clone();
+        let mut input = pointer(&mut app, &ctx, edge);
+        input.hit = None;
+        input.ray = Ray { origin: DVec3::new(2.004, 0.1, 2.), direction: -DVec3::Z };
+        input.activate = false;
+        input.primary_down = false;
+        app.xr_world_pointer_with_references(Some(&input), &mut State::default(), true, &ctx, &mut Storage, Some(&References));
+        assert!(app.snap.unwrap().point.distance(DVec3::new(2., 0.1, 0.)) < 1e-8);
+        assert_eq!(app.snap.unwrap().kind, Inference::Aligned);
+        assert!(app.drawing_axis_guides.iter().any(|guide| guide.origin == DVec3::new(2., 3., 0.) && guide.axis == Axis::Y));
+        assert_eq!(app.doc.model, before);
+        assert!(app.doc.history.undo_label().is_none());
     }
 
     #[test]

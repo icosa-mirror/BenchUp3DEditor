@@ -369,7 +369,8 @@ impl Editor {
             self.file_dialogs.show(&self.ctx, &mut file_preferences);
             self.keyboard.remember_target(&self.ctx);
             self.keyboard.show(&self.ctx, &mut preferences);
-            self.app.xr_world_pointer(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx, &mut self.preferences);
+            self.app.xr_world_pointer_with_references(pointer.as_ref(), &mut self.world_tools, activate, &self.ctx,
+                &mut self.preferences, Some(&self.scene));
             if self.world_tools.take_precision_input_request() {
                 preferences.keyboard_visible = true;
                 self.ctx.memory_mut(|memory| memory.request_focus(egui::Id::unique("benchup.precision_input")));

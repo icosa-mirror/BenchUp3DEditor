@@ -54,6 +54,18 @@ struct Placement {
     offset: DVec3,
 }
 
+impl super::world_inference::ReferenceQuery for Scene {
+    fn alignment(&self, ray: benchup_core::Ray, plane: (DVec3, DVec3),
+        constraint: Option<(DVec3, benchup_core::inference::AxisConstraint)>) -> [Option<benchup_core::AxisGuide>; 3]
+    {
+        if self.source.as_ref().is_none_or(|source| !self.alignment_references.matches(&source.model)) { return [None; 3]; }
+        self.alignment_references.alignment(ray, plane, constraint, |edge, reference| {
+            let state = self.entities.get(edge);
+            !state.hidden && state.context.is_some() && self.point_visible(ray.origin, reference)
+        })
+    }
+}
+
 pub(super) struct Scene {
     ctx: egui::Context,
     cache: renderer::SceneCache,
@@ -65,6 +77,7 @@ pub(super) struct Scene {
     picking: crate::picking::PickingCache,
     edge_picking: super::world_picking::Index,
     guide_picking: super::world_picking::Index,
+    alignment_references: super::world_inference::References,
     input: Option<super::input::SceneInput>,
     navigation: super::navigation::Navigation,
     lines: super::world_lines::Lines,
@@ -101,6 +114,7 @@ impl Scene {
             picking: Default::default(),
             edge_picking: Default::default(),
             guide_picking: Default::default(),
+            alignment_references: Default::default(),
             input: None,
             navigation: Default::default(),
             lines: super::world_lines::Lines::new(device, format),
@@ -132,6 +146,11 @@ impl Scene {
             .update_for_revision(&source.model, source.revision);
         self.entities
             .update_for_revision(&source.model, source.revision);
+        if !source.modeling && source.snap_geometry && source.snap_edges
+            && (source.tool.is_drawing() || source.tool.is_measuring() || source.tool == benchup_core::Tool::GrainDirection)
+        {
+            self.alignment_references.prepare(&source.model);
+        }
         let display =
             crate::app::display_scene::effective_display(&source.display, &source.model, self.dark);
         self.picking.set_display(&display);

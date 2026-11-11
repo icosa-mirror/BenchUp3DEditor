@@ -179,19 +179,24 @@ manipulation gizmo. Classify remaining painter paths by function rather than fil
 
 | # | Interaction | Current behavior and limits |
 |---|---|---|
-| 1 | Selection and navigation | World hover/replace/toggle select; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
+| 1 | Selection and navigation | World hover/replace/toggle and enclosing-window selection; double-trigger group/text editing and empty-click context exit; saved Add/remove selection control and native Shift; model-space loose-edge picking; two-grip translation/yaw/scale with optional full rotation; Fit 3D, Fit selection and recenter; UI/modal/grip ownership and cancellation |
 | 2 | Drawing | Line, Rectangle, Circle, Polygon and trigger-held Freehand share previews, document commits and undo; bounded Freehand sampling; empty projects have a usable initial drawing space |
 | 3 | Measurement and construction | Tape Measure, Protractor and Dimensions; saved guide-mode toggle and live guide preview; finite rendered guide spans used for picking; guide points and crossings; reference axes/locked-coordinate projections |
 | 4 | Manipulation | Move, Push/Pull, Scale, Offset and Rotate use shared modeling state and commits, with default trigger grabs or optional two-click Exact value entry; original-document guards reject unsupported evaluated-only targets |
-| 5 | Paint and erase | Face/group paint; held-trigger erase accumulates sampled targets, previews them and commits once on release; cancel/loss/keyboard commands discard it. Fast sweep interpolation and evaluated-only paint remain open |
+| 5 | Paint and erase | Face/group paint; held-trigger erase interpolates bounded adjacent rays, previews accumulated targets and commits once on release; cancel/loss/keyboard commands discard it. Thin/near targets at the sample limit and evaluated-only paint remain open |
 | 6 | Text and annotations | Text anchor/leader placement and shared editor modal; saved text/dimension labels and strokes can be selected, erased or transformed; Text opens an editable saved text; section-clipped and face-occluded targets are filtered |
 | 7 | Solids and grain | Shared solid validation/operand order and boolean history; Flip uses the displayed quads for hover/click; Grain Direction uses shared part/reference validation and assignment |
 | 8 | Clipboard/history | Copy/Paste ghost and placement; trigger commit and Cancel; shared Undo/Redo. Paste snapping does not inherit restrictions from the previous tool and flip handles do not capture it |
 
 Guide intersection inference is bounded to 16 nearby candidates and eight exact
 point targets (at most 120 pairs); dense clusters may omit a candidate. World
-references currently acquire the hit original edge, not an unrestricted global
-reference search. XR grid refinement no longer scans all edges/faces; containment
+reference acquisition retains the hit original edge. A separate retained global
+endpoint/midpoint query now supplies up to one visible reference per world axis
+on the current working plane, combining compatible guides with start/origin axes.
+The drawing/measurement callback queries the native scene's visibility caches;
+it does not project the desktop camera or scan all references per frame. Remaining
+manipulation and geometry-constrained alignment routes are still part of C15.
+XR grid refinement no longer scans all edges/faces; containment
 still tests the picked face's topology. These are explicit limits, not performance
 or complete-parity claims.
 

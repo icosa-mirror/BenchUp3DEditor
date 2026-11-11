@@ -104,6 +104,50 @@ pub(super) struct Index {
 }
 
 impl Index {
+    /// Query point anchors after an affine projection (for example onto an
+    /// inference plane). Transform node bounds, not every scene anchor per frame.
+    pub fn query_mapped_points(
+        &self, ray: Ray, slope: f64, transform: glam::DMat4,
+        visible: impl Fn(u64, DVec3, DVec3) -> bool,
+    ) -> Option<Hit> {
+        self.nodes.first()?;
+        let ray = Ray { direction: ray.direction.try_normalize()?, ..ray };
+        if !ray.origin.is_finite() || !slope.is_finite() || slope <= 0. || !transform.is_finite() { return None; }
+        let mut best: Option<Hit> = None;
+        let mut pending = [0_usize; usize::BITS as usize + 1];
+        let mut len = 1;
+        while len > 0 {
+            len -= 1;
+            let node = &self.nodes[pending[len]];
+            let mut bounds = Bounds::empty();
+            for x in [node.bounds.lo.x, node.bounds.hi.x] {
+                for y in [node.bounds.lo.y, node.bounds.hi.y] {
+                    for z in [node.bounds.lo.z, node.bounds.hi.z] {
+                        bounds.include(transform.transform_point3(DVec3::new(x, y, z)));
+                    }
+                }
+            }
+            if bounds.entry(ray, slope, f64::INFINITY).is_none() { continue; }
+            if let Some((a, b)) = node.children {
+                pending[len] = a; pending[len + 1] = b; len += 2;
+                continue;
+            }
+            for anchor in &self.edges[node.start..node.end] {
+                let point = transform.transform_point3(anchor.a);
+                let delta = point - ray.origin;
+                let depth = delta.dot(ray.direction);
+                if depth <= 0. || !depth.is_finite() { continue; }
+                let score = (delta - ray.direction * depth).length() / depth;
+                if score > slope || best.as_ref().is_some_and(|old| score > old.score
+                    || score == old.score && (depth > old.depth || depth == old.depth && anchor.id >= old.id)) { continue; }
+                if visible(anchor.id, anchor.a, point) {
+                    best = Some(Hit { id: anchor.id, point, depth, score });
+                }
+            }
+        }
+        best
+    }
+
     pub fn replace_points(&mut self, points: impl IntoIterator<Item = (u64, DVec3)>) {
         self.replace_segments(points.into_iter().map(|(id, point)| (id, point, point)));
     }

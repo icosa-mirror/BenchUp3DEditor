@@ -227,6 +227,32 @@ passes the four enclosure/projection/guide/cancellation cases after this change.
 warnings. The executable is frozen under this milestone's commit in
 `.local/openxr/preview-builds/`. No headset session was launched.
 
+C15 now adds a retained global endpoint/midpoint reference index, rebuilt only
+when the evaluated source model changes. Each world-axis query affinely maps
+BVH node bounds onto the tool's current working plane/lock before testing leaf
+anchors. The native scene callback supplies editing-context, hidden-state,
+section and face/cap visibility checks using its existing caches. It returns up
+to one reference per axis to the shared drawing/measurement callback. Compatible
+reference/start/origin guides combine at a world intersection and use the existing
+GPU guide overlays. Exact geometry targets and acquired-reference projections
+retain priority. No desktop camera projection or new persistent option is involved.
+C15 remains open: audit manipulation inference, geometry-constrained refinements
+and cases requiring more than the nearest visible reference for each axis.
+The next concrete gap is `xr_model_grab`: Move currently projects its tracking
+delta onto the active constraint and grid, while clearing `edit.snap`/`edit.guides`.
+It does not yet use the shared geometry/reference inference available on desktop.
+
+`global-inference-checked-tests.log` passes all seven focused reference cases,
+including retained-versus-exhaustive comparisons on oblique/grazing planes,
+endpoint/midpoint eligibility, visibility/lock rejection, combined-guide/skew-line
+behavior and the earlier acquired-reference regressions.
+`global-inference-preview-test.log` passes the shared controller drawing-preview
+route without a document/history edit. These checks do not establish headset
+snapping comfort, dense-scene GPU performance or complete inference parity.
+`global-inference-build.log` passes the native editor example build without
+warnings. The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`. No replacement headset session was launched.
+
 `joint-handle-tests.log` contains passing controller scope/permission/preference,
 hit-rectangle/scaling/action-cache and face/cap visibility cases (plus unrelated
 matches from the initial filter). `joint-handle-capture-tests.log` passes captured
