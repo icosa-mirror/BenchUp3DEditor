@@ -120,6 +120,7 @@ pub(crate) struct SectionCache {
     key: Option<SectionKey>,
     pub(crate) segments: Vec<(DVec3, DVec3)>,
     pub(crate) triangles: Vec<[DVec3; 3]>,
+    pub(crate) triangle_owners: Vec<Option<u64>>,
     pub(crate) generation: u64,
     #[cfg(test)]
     builds: usize,
@@ -149,10 +150,14 @@ impl SectionCache {
         }
         self.segments.clear();
         self.triangles.clear();
+        self.triangle_owners.clear();
         for (axis, height) in key.limits.into_iter().enumerate() {
             let Some(height) = height else { continue };
-            let mut section = Model::default();
-            for (_, face) in cache
+            // Keep selectable bodies separate: merging all cut contours loses
+            // ownership and can join touching groups into one generated face.
+            // Ungrouped/inactive-context geometry has no selectable cap owner.
+            let mut sections = std::collections::BTreeMap::<Option<u64>, Model>::new();
+            for (id, face) in cache
                 .iter()
                 .filter(|(id, _)| entities.get(*id).displayed(d))
             {
@@ -173,18 +178,22 @@ impl SectionCache {
                             self.segments.push(segment);
                         }
                         if key.fill {
+                            let owner = entities.get(id).context.filter(|owner| *owner != id);
+                            let section = sections.entry(owner).or_default();
                             let _ = section.add_edge(hits[0], hits[1]);
                         }
                     }
                 }
             }
             if key.fill {
-                for face in section.faces.values() {
-                    for triangle in section.face_triangles(face) {
-                        let (polygon, len) = d.section_triangle(triangle);
-                        for i in 1..len.saturating_sub(1) {
-                            self.triangles
-                                .push([polygon[0], polygon[i], polygon[i + 1]]);
+                for (owner, section) in sections {
+                    for face in section.faces.values() {
+                        for triangle in section.face_triangles(face) {
+                            let (polygon, len) = d.section_triangle(triangle);
+                            for i in 1..len.saturating_sub(1) {
+                                self.triangles.push([polygon[0], polygon[i], polygon[i + 1]]);
+                                self.triangle_owners.push(owner);
+                            }
                         }
                     }
                 }
@@ -281,6 +290,30 @@ mod tests {
         let face = *model.faces.keys().next().unwrap();
         model.push_pull(face, 2.).unwrap();
         model
+    }
+
+    #[test]
+    fn section_caps_preserve_group_ownership_when_bodies_touch() {
+        let mut model = box_model();
+        let first_entities = model.selectable_entities();
+        let first = model.make_object(&first_entities,false,"First").unwrap();
+        let points = [DVec3::new(2.,0.,0.), DVec3::new(4.,0.,0.), DVec3::new(4.,2.,0.), DVec3::new(2.,2.,0.)];
+        for i in 0..4 { model.add_edge(points[i],points[(i+1)%4]).unwrap(); }
+        let face = model.faces.keys().copied().find(|id|model.parent(*id).is_none()).unwrap();
+        model.push_pull(face,2.).unwrap();
+        let second_entities = model.selectable_entities().into_iter().filter(|id|*id!=first).collect();
+        let second = model.make_object(&second_entities,false,"Second").unwrap();
+        let mut faces = renderer::FaceCache::default();
+        let mut entities = renderer::EntityCache::default();
+        faces.update(&model); entities.update(&model);
+        let mut section = SectionCache::default();
+        section.update(&faces,&entities,&DisplaySettings { section_cuts:true,section_fill:true,section_height:1., ..Default::default() });
+        assert_eq!(section.triangles.len(),section.triangle_owners.len());
+        for owner in [first,second] {
+            let area:f64 = section.triangles.iter().zip(&section.triangle_owners)
+                .filter(|(_,id)|**id==Some(owner)).map(|([a,b,c],_)|(*b-*a).cross(*c-*a).length()*0.5).sum();
+            assert!((area-4.).abs()<1e-6,"owner={owner}, area={area}");
+        }
     }
 
     #[test]

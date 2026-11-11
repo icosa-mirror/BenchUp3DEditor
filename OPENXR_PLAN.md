@@ -1,30 +1,26 @@
 # BenchUp OpenXR implementation plan
 
-Updated: 2026-11-10. Status follows the current `feat/openxr-phase1` worktree;
+Updated: 2026-11-11. Status follows the current `feat/openxr-phase1` worktree;
 completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
-## Paused for a requested headset test
+## Active continuation
 
-The user paused the goal and requested a prepared build with explicit checks.
-The checked executable is `ceae626`, built 2026-11-10 14:15:19 local time, preserved
-in `.local/openxr/preview-builds/ceae626/openxr_editor.exe`. The user confirmed no label holes/flicker and an in-headset file chooser, then
-reported that keyboard clicks lose field focus. A bounded keyboard-focus fix is
-now built in response; its exact executable is recorded in
-`.local/openxr/keyboard-focus-fix/build.json`. Section-cap picking was only being
-investigated and is not implemented. Keep development paused until the user
-resumes the goal; a requested launch is a test handoff, not a development resume.
+The user resumed the goal and is currently busy. Continue independent development
+without more test questions or replacing their running preview. Their `dfab0e6`
+clean-example session confirmed that virtual-keyboard typing now retains focus.
+They also confirmed no label holes/flicker and an in-headset Save As chooser.
+Exact value movement/undo verification remains pending. Ask future test questions
+one at a time when the user returns and requests testing.
 
-The test profile `.local/openxr/test-ceae626/preferences.ron` copies the last
-session's comfort settings, starts Select with group names visible, hides the
-keyboard, disables additive selection/Exact value initially, and disables cuts.
-That profile was used for the initial test. For the focus-fix restart, use the
-clean-scene helper's default latest-session preferences so any comfort changes
-made during the test are retained.
-Ask verification questions one at a time. Repeat File-box typing on the focus-fix
-build before proceeding to Exact value movement/undo. Occlusion policy (hide
-versus fade behind geometry) awaits discussion. Full parity remains unaccepted.
+Label occlusion policy (hide versus fade behind geometry) explicitly awaits
+user discussion; do not change it in the meantime. Current implementation work
+now includes retained section-cap ownership/picking: grouped caps select, paint
+and transform their owner; cap surfaces anchor drawing without becoming document
+faces, and filled caps block hidden face/edge/annotation targets. Controller and
+nested/scoped cap acceptance remains pending.
+Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
 
@@ -115,7 +111,7 @@ The numbered rows are the checklist for the replacement milestone.
 | 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover | Pending drawing/measurement targets and Exact value modeling use world-based numeric Enter; remaining desktop handles/lock/precision routes need audit |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
-| 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours and controller section handles | Original-face ray hierarchy does not cover cap-only picking/occlusion; audit settings/handle parity and display combinations |
+| 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |
 | 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, joint edit/warning glyphs, owner-aware guides, solid operand feedback and shared boolean/flip commands | Audit all desktop-supported target/edit gestures in immersive space; evaluated-only paint targets remain restricted |
 | 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input | Audit reachable commands, numeric/lock input and native dialogs; immersive inspector/tool layout implemented; remaining input and dialog parity |
 
@@ -153,7 +149,7 @@ or complete-parity claims.
    scene preparation is now independent of painting. Reconcile camera/view commands
    and desktop-only selection/handle gestures with immersive equivalents. Known work includes
    broader reference/alignment behavior, fast erase-sweep interpolation, safe handling of
-   unsupported evaluated targets and cap-only interaction/occlusion semantics.
+   unsupported evaluated targets and nested/scoped cap/controller acceptance.
    Preserve shared operations, bounded queries and retained GPU feedback.
 3. The immersive-first layout is now implemented: when 3D view is enabled, the
    panel hosts the shared inspector, context controls, menus and numeric status,

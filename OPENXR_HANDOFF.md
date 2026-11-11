@@ -1,64 +1,39 @@
 # BenchUp OpenXR development handoff
 
-Updated: 2026-11-10. Status follows the current `feat/openxr-phase1` worktree.
+Updated: 2026-11-11. Status follows the current `feat/openxr-phase1` worktree.
 Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continuing.
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
-## Paused, ready for the requested test
+## Active continuation; user busy
 
-The user paused the goal and asked for another build with specific checks.
-Build `ceae626` is ready: `.local/openxr/preview-builds/ceae626/openxr_editor.exe`,
-built 2026-11-10 14:15:19 local time. Its SHA-256 matches the checked target binary.
-A bounded keyboard-focus fix has since been built for the reported test failure;
-its exact executable is recorded in `.local/openxr/keyboard-focus-fix/build.json`.
-Cap picking was being investigated only; cap-interaction work is not included. Keep development paused
-until the user resumes the goal. Do not interpret a test launch as goal resumption.
+The user resumed the full goal on 2026-11-11 and asked for independent development
+until they return. Do not replace the running preview or keep asking for tests.
+The current tested executable is `dfab0e6`, preserved in
+`.local/openxr/preview-builds/dfab0e6/openxr_editor.exe`; the manifest is
+`.local/openxr/keyboard-focus-fix/build.json`. The clean-example launch on
+2026-11-11 used session `20261111-091524-788-54dc645e`, PID 77372 at launch, and
+reached FOCUSED with stereo and quad frames. Inspect liveness/ownership before
+any later requested replacement; never assume that PID still exists.
 
-The test profile copies the last session's comfort/readability preferences and
-starts Select, group names on, keyboard hidden, additive selection/Exact value off
-and section cuts off. It is separate from the prior session and preserves its
-preferences and edited recovery document. The launcher still copies the exact
-bundled Example and never carries forward an edited model.
+Recorded human feedback:
 
-The following command launches the earlier reproduction build. For the fixed
-build, use the binary path in `keyboard-focus-fix/build.json` and omit
-`-PreferencesFrom` to carry forward the latest session's settings. Launch only when
-requested, through host PowerShell 7:
+1. `ceae626`: no label holes or flicker; Save As chooser appears in the headset.
+2. `ceae626`: keyboard focus failed on each key click. This prompted the scoped
+   focus-policy guard in `dfab0e6`.
+3. `dfab0e6`: the user confirms continuous File-box typing now works without
+   clicking back into the field.
+4. Exact value movement/undo remains pending. The last question was whether the
+   user could enable Exact value, but they became busy before answering. Do not
+   mark that flow accepted or failed.
+5. Label occlusion is an open design decision: the user wants discussion of full
+   hiding versus translucency behind geometry. Do not change that policy before
+   discussion. Ask verification questions one at a time when testing resumes.
 
-```powershell
-./scripts/openxr_preview.ps1 -Binary ".local/openxr/preview-builds/ceae626/openxr_editor.exe" -PreferencesFrom ".local/openxr/test-ceae626/preferences.ron"
-```
-
-Ask for these results explicitly after launch; earlier builds received no feedback
-because the user was not asked. Keep instructions concrete and let the app run
-until the user closes its normal taskbar window:
-
-1. Look at Frame and Desk labels in the immersive scene, including while moving
-   the head. Are the letters complete and readable without holes or flicker?
-2. File > Save As should open a chooser inside the headset. Select the File box,
-   open Keyboard and type a few characters. Do they appear in that field? Cancel
-   the chooser (no file needs saving), then Hide keyboard.
-3. In the Tool dropdown choose Move, enable Exact value, trigger on the stairs,
-   aim a little to the right within the 3D scene and trigger again. Does the
-   keyboard open automatically? Enter 20cm and press Enter. Do the stairs move?
-   Hide keyboard, then Undo: does the original position return?
-
-Ask checks one at a time, as the user requested after launch. Do not claim full
-phase or visual acceptance from these checks.
-
-Current feedback from the `ceae626` session:
-
-1. The user confirms no label holes or flicker. They observe labels showing through
-   geometry and want discussion before choosing full occlusion versus translucency
-   behind other geometry. Keep that policy decision open; do not interpret this
-   feedback as acceptance of the current occlusion behavior.
-2. The user confirms File > Save As opens an in-headset chooser.
-3. Keyboard typing failed: every key click drops field focus and the user has to
-   select the File box again for each character. The fixed build must repeat this
-   check before proceeding. Exact value movement/undo has not been attempted.
-4. Leave the existing preview untouched until a restart is requested. Keep the
-   broader goal paused while addressing this reported keyboard failure.
+Current code work is section-cap ownership and controller picking. Generated caps
+must not become document faces. Use the same retained cap geometry for rendering
+and ray queries; prefer group-level selection/transforms when ownership is known.
+No full phase or visual acceptance has been recorded.
 
 ## User direction
 
@@ -190,8 +165,30 @@ Current feedback from the `ceae626` session:
    cases when linked against this checkout's cached egui dependency. Evidence is
    in `.local/openxr/keyboard-focus-fix/before.log` and `after.log`. These are
    isolated UI tests, not complete app/headset acceptance. The native build passes
-   without warnings in `keyboard-focus-fix/build.log`. Retest the user's actual
-   File-box workflow after the requested restart.
+   without warnings in `keyboard-focus-fix/build.log`. The user confirmed the
+   corrected File-box workflow on 2026-11-11.
+
+## Section-cap interaction
+
+1. The shared `display_scene::SectionCache` retains an optional selectable body
+   owner for every rendered cap triangle. It builds cut contours separately per
+   editable context owner, preserving touching groups instead of merging their
+   cap ownership. Ungrouped/out-of-scope fills have no document entity or face ID.
+2. `xr/section_picking.rs` builds a retained triangle hierarchy when the cap-cache
+   generation changes. Controller selection, edge targets and annotation queries
+   respect the filled triangles; empty cuts/holes remain open. Cap normals are
+   the outward positive model axis. Disabling fill clears cap hits. Flip-plane
+   hit tests now respect visible face/cap occlusion rather than hidden quads.
+3. A grouped cap can select, transform, erase or Group-paint its original group
+   through shared operations. Face paint, Push/Pull and Offset require original
+   document faces and reject cap-face edits. Ungrouped cap points can anchor
+   drawing/measurement planes. Pointer hits carry optional entity ownership and
+   explicit section normals, never fabricated document IDs. Group painting uses
+   the same target helper as the existing desktop face/group paint entry point.
+4. Section geometry and its GPU rendering remain shared; no new label hiding or
+   fading policy is introduced. Cap selection/normal/occlusion controller behavior,
+   nested/scoped contexts and complex overlapping/hollow bodies still need wider
+   acceptance checks. Global origin/reference inference rules are unchanged.
 
 ## World text visibility
 
@@ -258,8 +255,8 @@ Current feedback from the `ceae626` session:
    Close the remaining UI/input dependencies: camera/view commands, desktop-only
    selection gestures and any remaining handle/tool routes identified by the audit. Known limits include
    broader off-face/global references, fast erase-sweep interpolation, evaluated-only paint/edit
-   guards and cap-only picking/occlusion. Original-face occlusion queries do not
-   fully represent rendered section caps. Guide intersections are locally bounded
+   guards and broader nested/scoped cap acceptance. A retained cap hierarchy now
+   supplements original-face occlusion queries using the rendered triangles. Guide intersections are locally bounded
    to 16 candidates/eight exact targets; dense clusters can omit a target.
 3. The duplicate 2D model viewport is now removed from immersive mode. The
    existing 3D-view preference switches between the immersive-first inspector/tool
@@ -319,7 +316,23 @@ Current feedback from the `ceae626` session:
 
 ## Evidence and limits
 
-1. World text: `text-surface-visibility-build.log` passes the native build without
+1. Section caps: `section-cap-tests.log` passes six targeted cases covering touching
+   group ownership, nearest/two-sided hits and fill removal, hierarchy queries with
+   open holes, group selection/movement/undo, Group paint/undo, and read-only cap
+   faces with X/Y/Z drawing anchors. `section-cap-display-regressions.log` passes
+   five shared display/cache cases; `section-cap-tool-regressions.log` passes all
+   thirteen current XR tool cases. `section-cap-input-regressions.log` passes three
+   controller routing cases; `section-cap-paint-regressions.log` passes the existing
+   viewport color/history and face/group-paint undo cases. These checks overlap
+   and are not a full suite or live-controller cap acceptance.
+   The native build passes without warnings in `section-cap-build.log`. RTX 4090
+   Vulkan images `section-cap-eye.png` and `section-cap-cut.png` match the prior
+   checked normal/cut images pixel for pixel. The cap image was inspected. No
+   replacement OpenXR session was launched; the checked executable is preserved
+   under this milestone commit in `.local/openxr/preview-builds/`.
+
+
+2. World text: `text-surface-visibility-build.log` passes the native build without
    warnings. On RTX 4090 Vulkan, the final embedded shader's clean-example image
    `text-surface-visibility-eye.png` matches the successful prototype pixel for
    pixel, restoring 163 incorrectly rejected label pixels in this fixed view.
@@ -328,10 +341,10 @@ Current feedback from the `ceae626` session:
    in `text-depth-probes/` distinguishes the extra scene-depth rejection from
    foreign-face rejection; the active 1.1 m section case exercises cap rejection.
    The clean scene and final cap image were inspected. No OpenXR/headset session
-   was started. The exact executable is preserved under this milestone commit.
+   was started. The exact executable is preserved under commit `ceae626`.
 
 
-2. Exact value modeling: `.local/openxr/precise-modeling-tests.log` passes three
+3. Exact value modeling: `.local/openxr/precise-modeling-tests.log` passes three
    cases covering all five tools, exact transform values, one-step undo, discard
    after tracking/Cancel/tool/document changes, and default trigger-release edits.
    `precise-modeling-tool-regressions.log` passes all ten current XR tool cases;
@@ -347,7 +360,7 @@ Current feedback from the `ceae626` session:
    was launched for this change.
 
 
-3. File chooser: `.local/openxr/file-dialog-tests.log` passes three cases covering
+4. File chooser: `.local/openxr/file-dialog-tests.log` passes three cases covering
    footer placement above the keyboard, folder/type/hidden filtering plus relative
    folder navigation, and final-extension replacement confirmation with Cancel
    preserving the original file. `file-dialog-project-roundtrip.log` exercises the
@@ -359,7 +372,7 @@ Current feedback from the `ceae626` session:
    These checks do not prove a full controller open/edit/save/reopen workflow.
 
 
-4. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
+5. `.local/openxr/precision-panel-tests.log` passes three targeted cases: retained
    line direction plus numeric length/undo and post-commit invalidation; rectangle
    dimensions without desktop projection; and clearing targets after tracking,
    tool, editing-scope, operation-stage or geometry changes. The latest test binary
@@ -370,7 +383,7 @@ Current feedback from the `ceae626` session:
    This is narrow software coverage, not full tool or headset acceptance.
 
 
-5. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
+6. Keyboard milestone: `.local/openxr/virtual-keyboard-tests.log` passes two cases:
    actual rendered-key clicks update a shared text field in both editor and modal
    contexts (including Backspace), and focus loss discards queued input.
    `.local/openxr/keyboard-preference-tests.log` passes immediate persistence,
@@ -380,11 +393,11 @@ Current feedback from the `ceae626` session:
    below the inspector. These are software/GPU checks, not headset confirmation.
 
 
-6. Human feedback confirmed the quad's visibility/readability/upright orientation
+7. Human feedback confirmed the quad's visibility/readability/upright orientation
    and world stability, basic controller cursor/click/scroll, comfort controls and
    Recenter. The user viewed the immersive scene and gave positive two-grip feedback.
    There is no recorded complete overlay/display/tool parity comparison.
-7. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
+8. Latest native build: `.local/openxr/immersive-primary-final-build.log`.
    `.local/openxr/immersive-primary-panel.png` and `immersive-primary-eye.png` were
    inspected: shared inspector/controls without the duplicate model, and the clean
    404-face example in the independent eye renderer. A subsequent requested
@@ -402,14 +415,14 @@ Current feedback from the `ceae626` session:
    spatial/reference and grid checks are in `reference-projection-checks.log` and
    `grid-hit-checks.log` under `.local/openxr/`. The full suite was not run.
 
-8. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
+9. Earlier Vulkan panel/eye snapshots exercised the RTX 4090 rendering paths.
    `openxr_editor --desktop-snapshot <png>` and `--immersive-snapshot <png>` support
    narrow hardware rendering checks without a headset session. They do not prove
    human visual equivalence or all recent controller interactions.
-9. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
+10. Clean graphics validation, end-to-end project/save/dialog workflows, full loss/
    restart coverage, large-scene timings and current desktop/browser compatibility
    remain open. `OPENXR_WINDOWS.md` retains historical runtime/wgpu validation
    findings; validation-disabled preview success does not resolve those findings.
-10. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
+11. Preserve the two-eye-pass decision. Batch/profile later, then assess multiview
    across geometry, visibility, overlays and text with a two-pass fallback. No
    multiview, validation-layer or benchmark detour during this functionality pass.

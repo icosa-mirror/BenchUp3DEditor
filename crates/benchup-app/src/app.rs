@@ -1608,14 +1608,17 @@ impl BenchUpApp {
             self.say(ctx, self.paint_instructions());
             return;
         };
+        let target = if self.paint_target == PaintTarget::Group { self.doc.model.entity_in_context(face).unwrap() } else { face };
+        self.paint_model_target(target, ctx);
+    }
+    fn paint_model_target(&mut self, target: u64, ctx: &egui::Context) {
         let before = self.doc.model.clone();
         let (result, label) = match self.paint_target {
             PaintTarget::Face => (
-                self.doc.model.paint_face(face, self.paint_color),
+                self.doc.model.paint_face(target, self.paint_color),
                 tr!("app.paint_face"),
             ),
             PaintTarget::Group => {
-                let target = self.doc.model.entity_in_context(face).unwrap();
                 (
                     self.doc.model.paint_object(target, self.paint_color),
                     tr!("app.paint_group"),

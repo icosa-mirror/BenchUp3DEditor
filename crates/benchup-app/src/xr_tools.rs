@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Hit {
-    pub entity: u64,
+    pub entity: Option<u64>,
+    pub section: bool,
     pub face: Option<u64>,
     pub edge: Option<u64>,
     pub guide: Option<(DVec3, DVec3)>,
@@ -36,7 +37,9 @@ impl Hit {
         }
     }
     fn inference(&self) -> Inference {
-        if let Some((a,b)) = self.guide {
+        if self.section {
+            Inference::Plane
+        } else if let Some((a,b)) = self.guide {
             if a == b { Inference::GuidePoint } else { Inference::OnGuide }
         } else if self.edge.is_some() {
             Inference::OnEdge
@@ -507,7 +510,7 @@ impl BenchUpApp {
             state.grab_depth = None;
             state.reference = None;
         }
-        self.hover = pointer.hit.map(|hit| hit.entity);
+        self.hover = pointer.hit.and_then(|hit| hit.entity);
         // World references survive desktop UI passes without adopting its cursor.
         self.drawing_reference = state.reference;
         self.drawing_guide = None;
@@ -528,6 +531,16 @@ impl BenchUpApp {
             return;
         }
         let clicked = activate && pointer.activate;
+        if self.paste_preview.is_none() && self.modeling.is_none()
+            && pointer.hit.is_some_and(|hit| hit.section)
+            && (matches!(self.tool, Tool::PushPull | Tool::Offset)
+                || self.tool == Tool::Paint && self.paint_target == PaintTarget::Face)
+        {
+            self.snap = None;
+            self.hover = None;
+            if clicked { self.say(ctx, "Section fills cannot be edited as faces. Choose an original model face."); }
+            return;
+        }
         if self.paste_preview.is_some() {
             state.erasing = false;
             self.xr_erasing.clear();
@@ -570,7 +583,7 @@ impl BenchUpApp {
                 } else {
                     let target = pointer
                         .hit
-                        .map(|hit| hit.entity)
+                        .and_then(|hit| hit.entity)
                         .filter(|id| self.doc.model.contains_entity(id));
                     self.solid_click_at_target(target, ctx);
                 }
@@ -593,7 +606,13 @@ impl BenchUpApp {
                     .filter(|id| self.doc.model.faces.contains_key(id));
             }
             if clicked {
-                self.paint_model_face(pointer.hit.and_then(|hit| hit.face), ctx);
+                if self.paint_target == PaintTarget::Group && pointer.hit.is_some_and(|hit| hit.section) {
+                    if let Some(target) = pointer.hit.and_then(|hit|hit.entity).filter(|id|self.doc.model.objects.contains_key(id)) {
+                        self.paint_model_target(target,ctx);
+                    } else { self.say(ctx, "Choose a group to paint, or an original model face."); }
+                } else {
+                    self.paint_model_face(pointer.hit.and_then(|hit| hit.face), ctx);
+                }
             }
             return;
         }
@@ -619,7 +638,7 @@ impl BenchUpApp {
             if clicked {
                 let hit = pointer
                     .hit
-                    .map(|hit| hit.entity)
+                    .and_then(|hit| hit.entity)
                     .filter(|id| self.doc.model.contains_entity(id));
                 if self.xr_panel.extend_selection || ctx.input(|input|input.modifiers.shift) {
                     if let Some(id) = hit && !self.selected.remove(&id) {
@@ -697,6 +716,7 @@ impl BenchUpApp {
             .or_else(|| self.measurement_plane().map(|p| p.1))
             .or_else(|| self.drawing.as_ref().map(|drawing| drawing.normal))
             .or(state.line_normal)
+            .or_else(|| pointer.hit.filter(|hit| hit.section).map(|hit| hit.normal))
             .unwrap_or(DVec3::Z);
         self.snap = self.xr_ray_snap(pointer, start, normal);
         self.xr_reference_inference(pointer,state,start,normal);
@@ -714,7 +734,7 @@ impl BenchUpApp {
                     })
             });
             if self.tool == Tool::GrainDirection {
-                self.hover = pointer.hit.map(|hit| hit.entity).filter(|id| {
+                self.hover = pointer.hit.and_then(|hit| hit.entity).filter(|id| {
                     self.doc.model.objects.contains_key(id)
                         && !self.doc.model.is_locked(*id)
                         && !self.doc.model.is_hidden(*id)
@@ -770,7 +790,7 @@ impl BenchUpApp {
         } else if self.tool == Tool::GrainDirection {
             let hit = if self.grain_anchor.is_none() {
                 let anchor = pointer.hit.zip(self.snap).and_then(|(hit, snap)| {
-                    self.grain_anchor_at_hit(hit.entity, snap.point, hit.face.map(|_| hit.normal))
+                    hit.entity.and_then(|entity| self.grain_anchor_at_hit(entity, snap.point, (hit.face.is_some() || hit.section).then_some(hit.normal)))
                 });
                 if anchor.is_none() {
                     self.say(
@@ -792,7 +812,7 @@ impl BenchUpApp {
                 );
                 return;
             }
-            self.text_click_at_snap(pointer.hit.map(|hit| hit.entity), ctx);
+            self.text_click_at_snap(pointer.hit.and_then(|hit| hit.entity), ctx);
             if let Some(m) = &mut self.measurement {
                 m.normal = pointer.ray.direction;
             }
@@ -963,16 +983,16 @@ impl BenchUpApp {
                 }
                 (hit.face, direction)
             } else {
-                if !self.doc.model.contains_entity(&hit.entity) {
+                let Some(entity) = hit.entity.filter(|id| self.doc.model.contains_entity(id)) else {
                     self.say(ctx, "Choose an original document entity to transform.");
                     return;
-                }
+                };
                 self.prepare_picking();
                 if !self
                     .entity_cache
-                    .selected(&self.doc.model, hit.entity, &self.selected)
+                    .selected(&self.doc.model, entity, &self.selected)
                 {
-                    self.selected = BTreeSet::from([hit.entity]);
+                    self.selected = BTreeSet::from([entity]);
                 }
                 if self.doc.model.selection_locked(&self.selected) {
                     self.say(ctx, "Unlock the selection before transforming it.");
@@ -1137,7 +1157,7 @@ impl BenchUpApp {
 
     fn xr_begin_shape(&mut self, pointer: &Pointer) {
         let surface = pointer.hit.filter(|hit| {
-            hit.face.is_some()
+            (hit.face.is_some() || hit.section)
                 && self
                     .snap
                     .is_some_and(|snap| (snap.point - hit.point).dot(hit.normal).abs() < 1e-6)
@@ -1400,11 +1420,11 @@ impl BenchUpApp {
         }
         if self.snap_to_face
             && self.doc.snap_to_geometry
-            && let Some(hit) = pointer.hit.filter(|hit| hit.face.is_some())
+            && let Some(hit) = pointer.hit.filter(|hit| hit.face.is_some() || hit.section)
         {
             return Some(Snap {
                 point: hit.point,
-                kind: Inference::OnFace,
+                kind: hit.inference(),
             });
         }
         plane_point(ray, start.unwrap_or(DVec3::ZERO), normal).map(|point| Snap {
@@ -1563,6 +1583,102 @@ mod precision_panel_tests {
 }
 
 #[cfg(test)]
+mod section_cap_tests {
+    use super::*;
+
+    struct Storage;
+    impl eframe::Storage for Storage {
+        fn get_string(&self, _: &str) -> Option<String> { None }
+        fn set_string(&mut self, _: &str, _: String) {}
+        fn remove_string(&mut self, _: &str) {}
+        fn flush(&mut self) {}
+    }
+
+    fn fixture(grouped:bool, axis:usize) -> (BenchUpApp,Pointer,Option<u64>) {
+        let mut doc=Document::default();
+        doc.model.draw_polyline(&[DVec3::ZERO,DVec3::X*2.,DVec3::new(2.,2.,0.),DVec3::Y*2.,DVec3::ZERO],false).unwrap();
+        let face=*doc.model.faces.keys().next().unwrap();
+        doc.model.push_pull(face,2.).unwrap();
+        let owner=if grouped { let selected=doc.model.selectable_entities(); Some(doc.model.make_object(&selected,false,"Box").unwrap()) } else { None };
+        doc.display.section_cuts=true;
+        doc.display.section_fill=true;
+        doc.display.section_axes=[axis==0,axis==1,axis==2];
+        doc.display.section_height=0.75;
+        doc.display.section_offsets=[0.75;2];
+        let mut faces=renderer::FaceCache::default();
+        let mut entities=renderer::EntityCache::default();
+        faces.update(&doc.model);entities.update(&doc.model);
+        let mut section=display_scene::SectionCache::default();
+        section.geometry(&faces,&entities,&doc.display);
+        let mut index=crate::xr::section_picking::Index::default();
+        index.prepare(section.generation,&section.triangles,&section.triangle_owners);
+        let normal=[DVec3::X,DVec3::Y,DVec3::Z][axis];
+        let mut point=DVec3::splat(0.5);point[axis]=0.75;
+        let ray=Ray { origin:point+normal*3.,direction:-normal };
+        let hit=index.nearest(ray,f64::INFINITY).unwrap();
+        assert_eq!(hit.owner,owner);
+        assert_eq!(hit.normal,normal);
+        let pointer=Pointer { ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
+            entity:hit.owner,section:true,face:None,edge:None,guide:None,guide_points:[None;8],
+            flip:None,annotation:None,edge_targets:[None;3],point:hit.point,normal:hit.normal,center:None,
+        }), activate:true,cancel:false,primary_down:true,visible_reference:None };
+        (BenchUpApp::with_document(doc,None,true),pointer,owner)
+    }
+
+    #[test]
+    fn grouped_section_cap_can_be_painted_as_a_group_and_undone() {
+        let (mut app,pointer,_)=fixture(true,2);
+        let original=app.doc.model.clone();
+        let ctx=egui::Context::default();
+        app.tool=Tool::Paint;app.paint_target=PaintTarget::Group;app.paint_color=[12,34,56];
+        app.xr_world_pointer(Some(&pointer),&mut State::default(),true,&ctx,&mut Storage);
+        assert_ne!(app.doc.model,original);
+        app.undo(&ctx,false);
+        assert_eq!(app.doc.model,original);
+    }
+
+    #[test]
+    fn grouped_section_caps_select_and_move_the_group_with_one_undo() {
+        let (mut app,mut pointer,owner)=fixture(true,2);
+        let ctx=egui::Context::default();let mut state=State::default();
+        let original=app.doc.model.clone();
+        app.tool=Tool::Select;
+        app.xr_world_pointer(Some(&pointer),&mut state,true,&ctx,&mut Storage);
+        assert_eq!(app.selected,owner.into_iter().collect());
+        app.tool=Tool::Move;
+        app.xr_world_pointer(Some(&pointer),&mut state,true,&ctx,&mut Storage);
+        assert!(app.modeling.is_some());
+        pointer.activate=false;pointer.primary_down=false;pointer.hit=None;pointer.ray.origin+=DVec3::X*0.25;
+        app.xr_world_pointer(Some(&pointer),&mut state,true,&ctx,&mut Storage);
+        assert_ne!(app.doc.model,original);
+        app.undo(&ctx,false);
+        assert_eq!(app.doc.model,original);
+    }
+
+    #[test]
+    fn section_caps_are_read_only_faces_but_can_anchor_drawing_on_each_axis() {
+        for tool in [Tool::PushPull,Tool::Offset,Tool::Paint] {
+            let (mut app,pointer,_)=fixture(true,2);
+            let original=app.doc.model.clone();app.tool=tool;app.paint_target=PaintTarget::Face;
+            app.xr_world_pointer(Some(&pointer),&mut State::default(),true,&egui::Context::default(),&mut Storage);
+            assert_eq!(app.doc.model,original);assert!(app.modeling.is_none());
+        }
+        for axis in 0..3 {
+            for tool in [Tool::Line,Tool::Rectangle] {
+                let (mut app,pointer,_)=fixture(false,axis);
+                app.tool=tool;
+                app.xr_world_pointer(Some(&pointer),&mut State::default(),true,&egui::Context::default(),&mut Storage);
+                let origin=if tool==Tool::Line { app.line_start.unwrap() } else {
+                    let drawing=app.drawing.as_ref().unwrap();
+                    assert!(drawing.on_surface);assert_eq!(drawing.normal,pointer.hit.unwrap().normal);drawing.origin
+                };
+                assert!((origin[axis]-0.75).abs()<1e-8,"axis={axis}, tool={tool:?}, point={origin:?}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod precise_modeling_tests {
     use super::*;
 
@@ -1587,7 +1703,7 @@ mod precise_modeling_tests {
     fn point(app: &BenchUpApp, position: DVec3, face: Option<u64>, clicked: bool, down: bool) -> Pointer {
         Pointer { ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: face.map(|face| Hit {
-                entity: face, face: Some(face), edge: None, guide: None, guide_points: [None;8],
+                entity: Some(face), section: false, face: Some(face), edge: None, guide: None, guide_points: [None;8],
                 flip: None, annotation: None, edge_targets: [None;3], point: position,
                 normal: DVec3::Z, center: Some(DVec3::new(1.,0.5,0.)),
             }), activate: clicked, cancel: false, primary_down: down, visible_reference: None }
@@ -1711,7 +1827,7 @@ mod erase_stroke_tests {
             ray:Ray {origin:DVec3::new(0.5,0.,1.),direction:-DVec3::Z},
             model:Arc::clone(model),
             hit:entity.map(|entity|Hit {
-                entity,face:None,edge:Some(entity),guide:None,guide_points:[None;8],
+                entity:Some(entity),section:false,face:None,edge:Some(entity),guide:None,guide_points:[None;8],
                 flip:None,annotation:None,edge_targets:[None;3],
                 point:DVec3::new(0.5,0.,0.),normal:DVec3::Z,center:None,
             }),

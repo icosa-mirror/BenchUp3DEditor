@@ -31,19 +31,19 @@ struct Edge {
 }
 
 #[derive(Clone, Copy)]
-struct Bounds {
+pub(super) struct Bounds {
     lo: DVec3,
     hi: DVec3,
 }
 
 impl Bounds {
-    fn empty() -> Self {
+    pub(super) fn empty() -> Self {
         Self {
             lo: DVec3::INFINITY,
             hi: DVec3::NEG_INFINITY,
         }
     }
-    fn include(&mut self, p: DVec3) {
+    pub(super) fn include(&mut self, p: DVec3) {
         self.lo = self.lo.min(p);
         self.hi = self.hi.max(p);
     }
@@ -57,7 +57,7 @@ impl Bounds {
         let radius = (far.min(limit) * slope).max(1e-12);
         self.padded_entry(ray, radius, limit)
     }
-    fn padded_entry(self, ray: Ray, radius: f64, limit: f64) -> Option<f64> {
+    pub(super) fn padded_entry(self, ray: Ray, radius: f64, limit: f64) -> Option<f64> {
         let lo = self.lo - DVec3::splat(radius);
         let hi = self.hi + DVec3::splat(radius);
         let (mut enter, mut exit) = (0_f64, limit);

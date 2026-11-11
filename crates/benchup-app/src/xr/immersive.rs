@@ -67,6 +67,7 @@ pub(super) struct Scene {
     head: DMat4,
     dark: bool,
     sections: crate::app::display_scene::SectionCache,
+    section_picking: super::section_picking::Index,
     surfaces: super::world_surfaces::Surfaces,
     backdrop: super::backdrop::Backdrop,
     grid: super::floor_grid::Grid,
@@ -101,6 +102,7 @@ impl Scene {
             head: DMat4::IDENTITY,
             dark: false,
             sections: Default::default(),
+            section_picking: Default::default(),
             surfaces: super::world_surfaces::Surfaces::new(device, format),
             backdrop: super::backdrop::Backdrop::new(device, format),
             grid: super::floor_grid::Grid::new(device, format),
@@ -130,6 +132,7 @@ impl Scene {
         self.picking.set_display(&display);
         self.sections
             .geometry(&self.faces, &self.entities, &display);
+        self.section_picking.prepare(self.sections.generation, &self.sections.triangles, &self.sections.triangle_owners);
         if let Some(paste) = &source.paste {
             if self
                 .paste_source
@@ -327,11 +330,11 @@ impl Scene {
             && let Some((&entity, (axis, point, _))) = source.selected.first().zip(
                 source.overlays.flip_planes.iter().filter_map(|&(axis,quad)| {
                     let (point,depth) = super::world_picking::quad_point(model_ray,quad)?;
-                    Some((axis,point,depth))
+                    self.unoccluded(model_ray.origin,point).then_some((axis,point,depth))
                 }).min_by(|a,b|a.2.total_cmp(&b.2)))
         {
             return Some(super::input::SceneHit {
-                entity, face:None, edge:None, guide:None, guide_points:[None;8],
+                entity:Some(entity), section_normal:None, face:None, edge:None, guide:None, guide_points:[None;8],
                 flip:Some(axis), annotation:None, point,
                 distance:transform.transform_point3(point).distance(ray.origin),
             });
@@ -360,13 +363,15 @@ impl Scene {
             }, |_,point|self.unoccluded(model_ray.origin,point)));
             if let Some((id,point)) = annotation {
                 return Some(super::input::SceneHit {
-                    entity:self.entities.get(id).context?, annotation:Some(id),
+                    entity:Some(self.entities.get(id).context?), section_normal:None, annotation:Some(id),
                     face:None, edge:None, guide:None, guide_points:[None;8], flip:None, point,
                     distance:transform.transform_point3(point).distance(ray.origin),
                 });
             }
         }
-        let face_hit = self.picking.nearest(&self.faces, &self.entities, model_ray, false);
+        let cap = self.section_picking.nearest(model_ray, f64::INFINITY);
+        let face_hit = self.picking.nearest(&self.faces, &self.entities, model_ray, false)
+            .filter(|(_, distance, _)| cap.is_none_or(|cap| *distance <= cap.distance + 1e-5));
         let face_tool = !placing_copy && matches!(source.tool,benchup_core::Tool::Paint | benchup_core::Tool::PushPull | benchup_core::Tool::Offset);
         let selection_tool = !placing_copy && (matches!(source.tool,benchup_core::Tool::Select | benchup_core::Tool::Move | benchup_core::Tool::Rotate | benchup_core::Tool::Scale | benchup_core::Tool::Erase) || source.tool.is_solid());
         let attachment_tool = !placing_copy && matches!(source.tool,benchup_core::Tool::Text | benchup_core::Tool::GrainDirection);
@@ -393,11 +398,13 @@ impl Scene {
             };
             if selection_tool {
                 (self.guide_picking.query(model_ray, 0.01,
-                    |id, a, b| visible(id).then_some((a, b)), |_, _| true), [None; 8])
+                    |id, a, b| visible(id).then_some((a, b)), |_, point| self.section_picking.unoccluded(model_ray.origin,point)), [None; 8])
             } else {
                 self.guide_picking.guide_query(model_ray, 0.01, visible)
             }
         } else { (None, [None; 8]) };
+        let guide_hit = guide_hit.filter(|hit| self.section_picking.unoccluded(model_ray.origin,hit.point));
+        let guide_points = guide_points.map(|point| point.filter(|point| self.section_picking.unoccluded(model_ray.origin,*point)));
         let (face, edge, guide, point, target) = if let Some(hit) = edge_hit {
             let edge = &source.model.edges[&hit.id];
             let adjacent = self.faces.adjacent_faces(edge.a,edge.b);
@@ -412,6 +419,13 @@ impl Scene {
         } else if let Some(hit) = guide_hit {
             (None,None,Some(hit.id),hit.point,hit.id)
         } else {
+            if face_hit.is_none() && let Some(cap) = cap {
+                return Some(super::input::SceneHit {
+                    entity: cap.owner.filter(|id| !self.entities.get(*id).hidden), section_normal: Some(cap.normal), face: None, edge: None,
+                    guide: None, guide_points: [None;8], flip: None, annotation: None,
+                    point: cap.point, distance: transform.transform_point3(cap.point).distance(ray.origin),
+                });
+            }
             let (face,_,point) = face_hit?;
             (Some(face),None,None,point,face)
         };
@@ -421,7 +435,8 @@ impl Scene {
         }
         let tracking_point = transform.transform_point3(point);
         Some(super::input::SceneHit {
-            entity,
+            entity: Some(entity),
+            section_normal: None,
             face,
             edge,
             guide,
@@ -443,7 +458,7 @@ impl Scene {
         let distance = point.distance(origin);
         if distance < 1e-12 {return false;}
         let ray = benchup_core::Ray {origin,direction:(point-origin)/distance};
-        self.picking.nearest(&self.faces,&self.entities,ray,false)
+        self.section_picking.unoccluded(origin,point) && self.picking.nearest(&self.faces,&self.entities,ray,false)
             .is_none_or(|(_,t,_)|t+1e-5 >= distance)
     }
 
@@ -460,12 +475,12 @@ impl Scene {
             model: source.model.clone(),
             hit: input.hit.map(|hit| {
                 crate::app::xr_tools::Hit {
-                    entity:hit.entity,face:hit.face,edge:hit.edge,point:hit.point,
+                    entity:hit.entity,section:hit.section_normal.is_some(),face:hit.face,edge:hit.edge,point:hit.point,
                     guide:hit.guide.map(|id|placement.guide_frame().segment(&source.model.guides[&id])),
                     guide_points:hit.guide_points,
                     flip:hit.flip,
                     annotation:hit.annotation,
-                    normal:hit.flip.map(|axis|axis.vector()).unwrap_or_else(||hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal)),
+                    normal:hit.section_normal.or_else(||hit.flip.map(|axis|axis.vector())).unwrap_or_else(||hit.face.map_or(DVec3::Z,|face|self.faces.get(face).normal)),
                     center:snapping.then(||hit.face.and_then(|face|self.faces.snap_center(&source.model,face)).filter(|&point|self.point_visible(ray.origin,point))).flatten(),
                     edge_targets:snapping.then_some(hit.edge).flatten().map_or([None;3],|id| {
                         let (a,b) = source.model.points(&source.model.edges[&id]);
@@ -745,7 +760,7 @@ impl Scene {
                         {
                             colors.accent
                         } else if self.input.and_then(|input| input.hit).is_some_and(|hit| {
-                            source.model.entity_in_context(*id) == Some(hit.entity)
+                            hit.entity.is_some() && source.model.entity_in_context(*id) == hit.entity
                         }) {
                             colors.green
                         } else {

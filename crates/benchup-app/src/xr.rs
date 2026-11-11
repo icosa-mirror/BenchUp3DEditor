@@ -57,6 +57,9 @@ mod navigation;
 mod world_picking;
 
 #[cfg(feature = "openxr")]
+pub(crate) mod section_picking;
+
+#[cfg(feature = "openxr")]
 mod desktop;
 
 /// A flat editor surface. Logical size is in egui points, not texture pixels.
