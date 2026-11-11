@@ -424,6 +424,8 @@ pub struct BenchUpApp {
     xr_erasing: BTreeSet<u64>,
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
     xr_scene_model: renderer::ModelSnapshot,
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    xr_project_epoch: u64,
     about: bool,
     release_notes: crate::release_notes::ReleaseNotes,
     shortcut_filter: String,
@@ -536,8 +538,10 @@ impl BenchUpApp {
         self.prepare_picking();
         let context=self.history_preview.as_ref().map_or(self.doc.model.edit_context,|model|model.edit_context);
         self.xr_scene_model.update_scoped_source(self.render_model.shared(),self.render_model.revision(),context);
+        let input_stamp = self.xr_input_stamp(ctx);
         crate::xr::immersive::Source {
             model: self.xr_scene_model.shared(), revision: self.xr_scene_model.revision(),
+            input_stamp,
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
@@ -682,6 +686,8 @@ impl BenchUpApp {
             xr_erasing: BTreeSet::new(),
             #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
             xr_scene_model: Default::default(),
+            #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+            xr_project_epoch: 0,
             about: false,
             release_notes: crate::release_notes::ReleaseNotes::default(),
             shortcut_filter: String::new(),

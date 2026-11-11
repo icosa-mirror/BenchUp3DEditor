@@ -33,7 +33,8 @@ Recorded human feedback:
 Section-cap ownership and controller picking landed in `92b7f8a`. Axis/plane
 locks and host-aware shared precision input landed in `1de74a5`. Destination-folder
 creation landed in `25b514f`; shared immersive View controls landed in `25fd106`.
-Current work adds bounded interpolation to captured erase strokes.
+Bounded captured erase-stroke interpolation landed in `6ca8676`. Current work
+guards all native world-tool callbacks against stale scene input.
 Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
 
@@ -134,8 +135,32 @@ These are software checks, not headset acceptance.
 `erase-sweep-input-regressions.log` passes the three existing pointer-capture,
 focus-loss and held-button rearm cases.
 `erase-sweep-build.log` passes the final native example build without warnings.
-The combined executable is frozen under this milestone commit in
+The combined executable is frozen under `6ca8676` in
 `.local/openxr/preview-builds/`; no replacement headset session was launched.
+
+Native world pointers now carry the committed-document revision, project generation,
+editing context, tool and display settings used to pick them. Every world-tool
+callback validates that stamp before processing the ray; a mismatch follows the
+existing lost-pointer cleanup instead of applying the old target to changed state.
+Production pointers without a stamp are rejected. Direct model-space unit fixtures
+may omit it, while the new guard cases use real scene-source stamps.
+
+Project replacement increments a native XR generation even when the loaded model
+is identical; the erase interpolator checks that generation too. The guard uses
+the cached committed-model revision rather than the evaluated preview revision,
+so continuous modeling previews and ordinary selection remain usable. Snapshot
+capture validates committed data when needed, and normal UI-frame comparisons
+reuse that cached revision. No user preference or serialized project field is added.
+
+`input-revision-tests.log` passes three cases covering stale first clicks after
+model/context/tool/display changes and identical-project reload, rejection before
+an old erase can commit, fresh-input recovery, and valid selection/line/continuous
+Move preview input. `input-revision-source-regressions.log` passes two retained
+snapshot/context cases. `input-revision-erase-regressions.log` passes all eight
+erase cases, including project-generation reset. The native example build passes
+without warnings in `input-revision-build.log`. The executable is preserved under
+this milestone commit in `.local/openxr/preview-builds/`; no headset session was
+launched. Full live transition/capture acceptance remains pending.
 
 ## User direction
 
@@ -360,9 +385,9 @@ The combined executable is frozen under this milestone commit in
    guards and broader nested/scoped cap acceptance. A retained cap hierarchy now
    supplements original-face occlusion queries using the rendered triangles. Guide intersections are locally bounded
    to 16 candidates/eight exact targets; dense clusters can omit a target.
-   Also audit current-ray snapshot validation across same-frame model/project
-   changes: the swept interval's revision/context check is not yet a general
-   guard for every current-ray tool callback.
+   Current-ray source validation is now shared by all world tools. Exercise the
+   full background/project/undo/context transition matrix in the headset later;
+   software checks cover representative transitions rather than that whole matrix.
 3. The duplicate 2D model viewport is now removed from immersive mode. The
    existing 3D-view preference switches between the immersive-first inspector/tool
    panel and the original panel-only editor. Shared inspector visibility, sections,

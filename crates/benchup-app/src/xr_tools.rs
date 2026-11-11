@@ -49,7 +49,19 @@ impl Hit {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct InputStamp {
+    document: u64,
+    pub(crate) project: u64,
+    context: Option<u64>,
+    tool: Tool,
+    display: benchup_core::DisplaySettings,
+}
+
 pub(crate) struct Pointer {
+    // Production pointers must carry a source stamp. Unit fixtures may omit it
+    // when exercising model-space math independently of the rendering host.
+    pub stamp: Option<InputStamp>,
     pub ray: Ray,
     pub model: Arc<Model>,
     pub hit: Option<Hit>,
@@ -195,6 +207,18 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 }
 
 impl BenchUpApp {
+    pub(super) fn xr_input_stamp(&mut self, ctx: &egui::Context) -> InputStamp {
+        InputStamp { document: self.document_revision(ctx), project: self.xr_project_epoch,
+            context: self.doc.model.edit_context, tool: self.tool, display: self.doc.display.clone() }
+    }
+
+    fn xr_pointer_is_current(&mut self, pointer: &Pointer, ctx: &egui::Context) -> bool {
+        let Some(stamp) = &pointer.stamp else { return cfg!(test); };
+        stamp.project == self.xr_project_epoch && stamp.context == self.doc.model.edit_context
+            && stamp.tool == self.tool && stamp.display == self.doc.display
+            && stamp.document == self.document_revision(ctx)
+    }
+
     pub(crate) fn xr_set_erase_sweep(&self, state: &mut State, ids: BTreeSet<u64>) {
         // Reuse the already validated rendered-document revision here. This is
         // outside the UI frame; validating the whole model again would be wasteful.
@@ -499,7 +523,8 @@ impl BenchUpApp {
             state.cancel_precision_modeling(self);
             state.precision_target = None;
         }
-        let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx)) else {
+        let Some(pointer) = pointer.filter(|_| self.xr_scene_interaction_enabled(ctx))
+            .filter(|pointer| self.xr_pointer_is_current(pointer, ctx)) else {
             let retain_precision = state.panel_hover && self.xr_scene_interaction_enabled(ctx)
                 && state.precision_target.is_some()
                 && state.precision_target == self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
@@ -1613,7 +1638,7 @@ mod precision_panel_tests {
             crate::app_host::set_world_input(&ctx, true);
             app.toggle_axis_lock(Axis::X, &ctx);
             assert!(app.snap.is_none(), "panel cursor must not become a scene target");
-            let pointer = Pointer { ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
+            let pointer = Pointer { stamp: None, ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
                 model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
                 primary_down: false, visible_reference: None };
             state.set_panel_hover(false);
@@ -1646,7 +1671,7 @@ mod precision_panel_tests {
         } else {
             app.line_start = Some(DVec3::ZERO);
         }
-        let pointer = Pointer { ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
+        let pointer = Pointer { stamp: None, ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
             primary_down: false, visible_reference: None };
         let mut state = State::default();
@@ -1745,7 +1770,7 @@ mod section_cap_tests {
         let hit=index.nearest(ray,f64::INFINITY).unwrap();
         assert_eq!(hit.owner,owner);
         assert_eq!(hit.normal,normal);
-        let pointer=Pointer { ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
+        let pointer=Pointer { stamp: None, ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
             entity:hit.owner,section:true,face:None,edge:None,guide:None,guide_points:[None;8],
             flip:None,annotation:None,edge_targets:[None;3],point:hit.point,normal:hit.normal,center:None,
         }), activate:true,cancel:false,primary_down:true,visible_reference:None };
@@ -1828,7 +1853,7 @@ mod precise_modeling_tests {
     }
 
     fn point(app: &BenchUpApp, position: DVec3, face: Option<u64>, clicked: bool, down: bool) -> Pointer {
-        Pointer { ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
+        Pointer { stamp: None, ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: face.map(|face| Hit {
                 entity: Some(face), section: false, face: Some(face), edge: None, guide: None, guide_points: [None;8],
                 flip: None, annotation: None, edge_targets: [None;3], point: position,
@@ -1951,6 +1976,7 @@ mod erase_stroke_tests {
 
     fn pointer(model: &Arc<Model>, entity: Option<u64>, down: bool, activate: bool) -> Pointer {
         Pointer {
+            stamp: None,
             ray:Ray {origin:DVec3::new(0.5,0.,1.),direction:-DVec3::Z},
             model:Arc::clone(model),
             hit:entity.map(|entity|Hit {
@@ -2038,6 +2064,128 @@ mod erase_stroke_tests {
             assert!(!state.erasing);
             assert!(state.erase_sweep.is_none());
         }
+    }
+}
+
+#[cfg(test)]
+mod input_revision_tests {
+    use super::*;
+    use crate::test_ui::ContextExt;
+
+    struct Storage;
+    impl eframe::Storage for Storage {
+        fn get_string(&self, _: &str) -> Option<String> { None }
+        fn set_string(&mut self, _: &str, _: String) {}
+        fn remove_string(&mut self, _: &str) {}
+        fn flush(&mut self) {}
+    }
+
+    fn fixture() -> (BenchUpApp, egui::Context, u64, u64) {
+        let mut doc = Document::default();
+        doc.model.add_edge(DVec3::ZERO, DVec3::X).unwrap();
+        let group = doc.model.make_object(&doc.model.selectable_entities(), false, "Part").unwrap();
+        let edge = *doc.model.edges.keys().next().unwrap();
+        let mut app = BenchUpApp::with_document(doc, None, true);
+        app.set_tool(Tool::Select);
+        (app, egui::Context::default(), edge, group)
+    }
+
+    fn pointer(app: &mut BenchUpApp, ctx: &egui::Context, edge: u64) -> Pointer {
+        let mut source = None;
+        let _ = ctx.run_test_ui(Default::default(), |_| { source = Some(app.xr_scene_source(ctx)); });
+        let source = source.unwrap();
+        Pointer {
+            stamp: Some(source.input_stamp), model: source.model,
+            ray: Ray { origin: DVec3::new(0.5, 0., 1.), direction: -DVec3::Z },
+            hit: Some(Hit { entity: app.doc.model.entity_in_context(edge), section: false,
+                face: None, edge: Some(edge), guide: None, guide_points: [None; 8], flip: None,
+                annotation: None, edge_targets: [None; 3], point: DVec3::X * 0.5,
+                normal: DVec3::Z, center: None }),
+            activate: true, cancel: false, primary_down: true, visible_reference: None,
+        }
+    }
+
+    #[test]
+    fn input_revision_rejects_first_click_after_model_context_tool_display_or_project_changes() {
+        for cause in 0..5 {
+            let (mut app, ctx, edge, group) = fixture();
+            let old = pointer(&mut app, &ctx, edge);
+            assert!(app.xr_pointer_is_current(&old, &ctx));
+            match cause {
+                0 => { app.doc.model.add_edge(DVec3::Y * 2., DVec3::X + DVec3::Y * 2.).unwrap(); app.changed(&ctx); }
+                1 => app.doc.model.edit_context = Some(group),
+                2 => app.set_tool(Tool::Line),
+                3 => { app.doc.display.section_cuts = !app.doc.display.section_cuts; app.changed(&ctx); }
+                _ => {
+                    let same = app.doc.clone();
+                    app.replace_project(same, None, &ctx);
+                    assert_ne!(old.stamp.as_ref().unwrap().project, app.xr_project_epoch);
+                }
+            }
+            let model = app.doc.model.clone();
+            let mut state = State::default();
+            assert!(!app.xr_pointer_is_current(&old, &ctx), "cause {cause}");
+            app.xr_world_pointer(Some(&old), &mut state, true, &ctx, &mut Storage);
+            assert_eq!(app.doc.model, model);
+            assert!(app.selected.is_empty());
+            assert!(app.line_start.is_none());
+            assert!(!state.active);
+            let fresh = pointer(&mut app, &ctx, edge);
+            assert!(app.xr_pointer_is_current(&fresh, &ctx));
+            app.xr_world_pointer(Some(&fresh), &mut state, true, &ctx, &mut Storage);
+            assert!(state.active, "fresh source must restore interaction");
+            if app.tool == Tool::Select { assert!(app.selected.contains(&app.doc.model.entity_in_context(edge).unwrap())); }
+            else { assert!(app.line_start.is_some()); }
+        }
+    }
+
+    #[test]
+    fn input_revision_cancels_an_erase_before_a_same_frame_model_edit_can_commit() {
+        let (mut app, ctx, edge, _) = fixture();
+        app.set_tool(Tool::Erase);
+        let mut old = pointer(&mut app, &ctx, edge);
+        let mut state = State::default();
+        app.xr_world_pointer(Some(&old), &mut state, true, &ctx, &mut Storage);
+        assert!(state.erasing);
+        app.doc.model.add_edge(DVec3::Y * 2., DVec3::X + DVec3::Y * 2.).unwrap();
+        app.changed(&ctx);
+        let changed = app.doc.model.clone();
+        old.activate = false;
+        old.primary_down = false;
+        app.xr_world_pointer(Some(&old), &mut state, true, &ctx, &mut Storage);
+        assert_eq!(app.doc.model, changed);
+        assert!(!state.erasing);
+        assert!(app.xr_erasing.is_empty());
+    }
+
+    #[test]
+    fn input_revision_allows_selection_and_pending_preview_changes_with_a_current_model() {
+        let (mut app, ctx, edge, group) = fixture();
+        let mut current = pointer(&mut app, &ctx, edge);
+        let mut state = State::default();
+        app.xr_world_pointer(Some(&current), &mut state, true, &ctx, &mut Storage);
+        assert!(app.selected.contains(&group));
+        current.activate = false;
+        app.xr_world_pointer(Some(&current), &mut state, true, &ctx, &mut Storage);
+        assert!(state.active);
+        app.set_tool(Tool::Line);
+        let line = pointer(&mut app, &ctx, edge);
+        app.xr_world_pointer(Some(&line), &mut state, true, &ctx, &mut Storage);
+        assert!(app.line_start.is_some());
+        assert!(app.xr_pointer_is_current(&line, &ctx), "pending tool state does not change the source model");
+        app.set_tool(Tool::Move);
+        app.selected = BTreeSet::from([group]);
+        let before = app.doc.model.clone();
+        let mut moving = pointer(&mut app, &ctx, edge);
+        app.xr_world_pointer(Some(&moving), &mut state, true, &ctx, &mut Storage);
+        moving.activate = false;
+        moving.ray.origin.x += 0.25;
+        app.xr_world_pointer(Some(&moving), &mut state, true, &ctx, &mut Storage);
+        assert!(app.modeling.as_ref().is_some_and(|edit| edit.preview.is_some()));
+        assert_eq!(app.doc.model, before);
+        assert!(app.xr_pointer_is_current(&moving, &ctx));
+        let preview = pointer(&mut app, &ctx, edge);
+        assert_eq!(preview.stamp, moving.stamp, "rendered preview geometry must not invalidate committed-model input");
     }
 }
 

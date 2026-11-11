@@ -14,6 +14,7 @@ mod view_tests;
 pub(crate) struct Source {
     pub model: Arc<Model>,
     pub revision: u64,
+    pub input_stamp: crate::app::xr_tools::InputStamp,
     pub camera: Camera,
     pub display: DisplaySettings,
     pub selected: BTreeSet<u64>,
@@ -317,6 +318,7 @@ impl Scene {
         (source.tool == benchup_core::Tool::Erase && source.paste.is_none() && !source.modeling)
             .then(|| super::erase_sweep::Key {
                 model: Arc::clone(&source.model), revision: source.revision,
+                project: source.input_stamp.project,
                 transform: self.navigation.matrix() * placement.model_to_tracking(scale as f64),
                 display: source.display.clone(),
             })
@@ -478,6 +480,7 @@ impl Scene {
         };
         let snapping = !source.modeling && (source.tool.is_drawing() || source.tool.is_measuring() || source.tool == benchup_core::Tool::GrainDirection || source.paste.is_some());
         Some(crate::app::xr_tools::Pointer {
+            stamp: Some(source.input_stamp.clone()),
             ray,
             model: source.model.clone(),
             hit: input.hit.map(|hit| {

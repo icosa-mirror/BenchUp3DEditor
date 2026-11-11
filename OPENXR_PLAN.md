@@ -28,6 +28,10 @@ Held-trigger erasing now interpolates between adjacent captured rays through the
 retained picker, including the release interval, and keeps one undo transaction.
 Interpolation is bounded and resets on input/scene discontinuities; thin/near
 targets at the sample limit and hardware interaction/performance still need checking.
+All native world-tool callbacks now reject input picked from a different committed
+model, project generation, editing context, tool or display state. Identical reloads
+are distinguished from the old project; continuous evaluated previews use the
+committed-model revision so valid dragging remains active.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -162,8 +166,8 @@ or complete-parity claims.
    selection/handle gestures with immersive equivalents. Known work includes
    broader reference/alignment behavior, near-field/fast sweep sampling limits, safe handling of
    unsupported evaluated targets and nested/scoped cap/controller acceptance.
-   Audit current-ray source revisions when a model/project changes in the same UI
-   frame; the new swept-interval guards cover the eraser batch, not all tools.
+   Current-ray source guards now cover all native world tools; live project/undo/
+   context transition and capture acceptance still needs the broader matrix.
    Preserve shared operations, bounded queries and retained GPU feedback.
 3. The immersive-first layout is now implemented: when 3D view is enabled, the
    panel hosts the shared inspector, context controls, menus and numeric status,

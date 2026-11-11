@@ -7,13 +7,14 @@ use std::{collections::BTreeSet, sync::Arc};
 pub(super) struct Key {
     pub model: Arc<Model>,
     pub revision: u64,
+    pub project: u64,
     pub transform: DMat4,
     pub display: benchup_core::DisplaySettings,
 }
 
 impl Key {
     fn matches(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.model, &other.model) && self.revision == other.revision
+        Arc::ptr_eq(&self.model, &other.model) && self.revision == other.revision && self.project == other.project
             && self.transform == other.transform && self.display == other.display
     }
 }
@@ -24,7 +25,7 @@ mod tests {
     use glam::DVec3;
 
     fn key(model: &Arc<Model>) -> Key {
-        Key { model: Arc::clone(model), revision: 1, transform: DMat4::IDENTITY, display: Default::default() }
+        Key { model: Arc::clone(model), revision: 1, project: 0, transform: DMat4::IDENTITY, display: Default::default() }
     }
     fn input(ray: Ray, select: bool, down: bool) -> SceneInput {
         SceneInput { owner: 0, ray, hit: None, select, clear: false, pressed: down, primary_down: down }
@@ -68,7 +69,7 @@ mod tests {
     fn erase_sweep_never_bridges_loss_controller_document_view_or_tracking_jumps() {
         let model = Arc::new(Model::default());
         let first = input(Ray { origin: DVec3::ZERO, direction: -DVec3::Z }, true, true);
-        for cause in 0..11 {
+        for cause in 0..12 {
             let mut sweep = EraseSweep::default();
             sweep.update(Some(key(&model)), Some(first), 1., |_| unreachable!());
             let mut next_key = key(&model);
@@ -85,6 +86,7 @@ mod tests {
                 7 => next.ray.origin = DVec3::X,
                 8 => next.ray.direction = DVec3::X,
                 10 => next.pressed = false,
+                11 => next_key.project += 1,
                 _ => {}
             }
             let next = (cause != 9).then_some(next);
