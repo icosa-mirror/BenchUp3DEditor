@@ -17,6 +17,41 @@ struct Entry {
     hidden: bool,
 }
 
+#[derive(Default)]
+struct NewFolder {
+    name: String,
+    creating: Option<mpsc::Receiver<Result<PathBuf, String>>>,
+    error: Option<String>,
+    focus: bool,
+}
+
+impl NewFolder {
+    fn create(&mut self, parent: PathBuf, ctx: &egui::Context) {
+        let name = self.name.clone();
+        let (sender, receiver) = mpsc::channel();
+        let ctx = ctx.clone();
+        self.error = None;
+        self.creating = Some(receiver);
+        std::thread::spawn(move || {
+            let _ = sender.send(create_folder(&parent, &name));
+            ctx.request_repaint();
+        });
+    }
+}
+
+fn create_folder(parent: &Path, name: &str) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if name.is_empty() || name == "." || name == ".." || name.ends_with('.')
+        || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
+        || name.chars().any(char::is_control)
+    {
+        return Err("Enter a folder name without path separators or reserved characters.".into());
+    }
+    let path = parent.join(name);
+    std::fs::create_dir(&path).map_err(|error| format!("Cannot create folder: {error}"))?;
+    Ok(path)
+}
+
 struct Browser {
     request: Request,
     directory: PathBuf,
@@ -27,6 +62,7 @@ struct Browser {
     loading: Option<mpsc::Receiver<Result<Vec<Entry>, String>>>,
     error: Option<String>,
     replace: Option<PathBuf>,
+    new_folder: Option<NewFolder>,
 }
 
 pub(super) struct Dialogs {
@@ -52,7 +88,7 @@ impl Dialogs {
         let Some(browser) = &mut self.browser else {
             return;
         };
-        browser.poll(preferences);
+        browser.poll(ctx, preferences);
         let mut finish: Option<Option<PathBuf>> = None;
         if let Some(path) = browser.replace.clone() {
             let response = Modal::new("benchup.xr.file_replace", 700.).show(ctx, |modal| {
@@ -75,6 +111,40 @@ impl Dialogs {
             if response.should_close() {
                 browser.replace = None;
             }
+        } else if let Some(folder) = &mut browser.new_folder {
+            let busy = folder.creating.is_some();
+            let mut cancel = false;
+            let mut create = false;
+            let response = Modal::new("benchup.xr.new_folder", 700.).show(ctx, |modal| {
+                modal.header(|ui| { ui.heading("New folder"); });
+                modal.body(|ui| {
+                    ui.label(format!("In: {}", browser.directory.display()));
+                    ui.add_enabled_ui(!busy, |ui| {
+                        let response = ui.add(egui::TextEdit::singleline(&mut folder.name)
+                            .id(egui::Id::unique("benchup.xr.new_folder_name"))
+                            .font(egui::FontId::proportional(18.))
+                            .desired_width(f32::INFINITY));
+                        if folder.focus {
+                            response.request_focus();
+                            folder.focus = false;
+                        }
+                        create |= response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                    });
+                    if busy { ui.label("Creating folder..."); }
+                    if let Some(error) = &folder.error { ui.colored_label(ui.visuals().error_fg_color, error); }
+                });
+                modal.footer(|ui| {
+                    ui.add_enabled_ui(!busy, |ui| {
+                        cancel |= action(ui, "Cancel");
+                        ui.add_enabled_ui(!folder.name.trim().is_empty(), |ui| { create |= action(ui, "Create"); });
+                    });
+                });
+            });
+            if !busy && (cancel || response.should_close()) {
+                browser.new_folder = None;
+            } else if !busy && create {
+                folder.create(browser.directory.clone(), ctx);
+            }
         } else {
             let response = Modal::new("benchup.xr.file_chooser", 900.).show(ctx, |modal| {
                 modal.header(|ui| {
@@ -92,6 +162,12 @@ impl Dialogs {
                         }
                         if action(ui, "Refresh") {
                             browser.navigate(browser.directory.clone(), ctx);
+                        }
+                        if ui.add_enabled(browser.loading.is_none(),
+                            egui::Button::new(egui::RichText::new("New folder").size(18.))
+                                .min_size(egui::vec2(110., 42.))).clicked()
+                        {
+                            browser.new_folder = Some(NewFolder { focus: true, ..Default::default() });
                         }
                     });
                     let mut navigate = false;
@@ -219,6 +295,7 @@ impl Browser {
             loading: None,
             error: None,
             replace: None,
+            new_folder: None,
         };
         browser.navigate(directory, ctx);
         browser
@@ -250,7 +327,26 @@ impl Browser {
         self.loading = Some(receiver);
     }
 
-    fn poll(&mut self, preferences: &mut XrFilePreferences) {
+    fn poll(&mut self, ctx: &egui::Context, preferences: &mut XrFilePreferences) {
+        let created = self.new_folder.as_ref().and_then(|folder| folder.creating.as_ref())
+            .and_then(|receiver| match receiver.try_recv() {
+                Ok(result) => Some(result),
+                Err(mpsc::TryRecvError::Disconnected) => Some(Err("Folder creation worker stopped.".into())),
+                Err(mpsc::TryRecvError::Empty) => None,
+            });
+        if let Some(result) = created {
+            match result {
+                Ok(path) => {
+                    self.new_folder = None;
+                    self.navigate(path, ctx);
+                }
+                Err(error) => {
+                    let folder = self.new_folder.as_mut().unwrap();
+                    folder.creating = None;
+                    folder.error = Some(error);
+                }
+            }
+        }
         let result = match self.loading.as_ref().map(|receiver| receiver.try_recv()) {
             Some(Ok(result)) => result,
             Some(Err(mpsc::TryRecvError::Disconnected)) => Err("Folder reader stopped.".into()),
@@ -356,6 +452,56 @@ mod tests {
     use super::*;
     use crate::test_ui::ContextExt as _;
     use std::time::Duration;
+
+    #[test]
+    fn new_folder_rejects_paths_and_preserves_existing_contents() {
+        let directory = tempfile::tempdir().unwrap();
+        let existing = directory.path().join("existing");
+        std::fs::create_dir(&existing).unwrap();
+        std::fs::write(existing.join("keep.txt"), b"unchanged").unwrap();
+        for name in ["", ".", "..", "../escape", "nested/child", "nested\\child", "C:escape", "bad.", "bad\nname", "existing"] {
+            assert!(create_folder(directory.path(), name).is_err(), "{name:?}");
+        }
+        assert_eq!(std::fs::read(existing.join("keep.txt")).unwrap(), b"unchanged");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn new_folder_worker_navigates_and_preserves_the_save_filename() {
+        let ctx = egui::Context::default();
+        let requests = Host::install(&ctx);
+        let host = Host::from_context(&ctx);
+        let worker = std::thread::spawn(move || host.dialog().set_file_name("scene.bup").save_file());
+        let request = requests.recv_timeout(Duration::from_secs(5)).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let mut browser = Browser::new(request, directory.path().to_path_buf(), &ctx);
+        browser.loading.take().unwrap().recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        let mut folder = NewFolder { name: "Project folder".into(), ..Default::default() };
+        folder.create(directory.path().to_path_buf(), &ctx);
+        let result = folder.creating.take().unwrap().recv_timeout(Duration::from_secs(5)).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        sender.send(result).unwrap();
+        folder.creating = Some(receiver);
+        browser.new_folder = Some(folder);
+        let mut preferences = XrFilePreferences::default();
+        browser.poll(&ctx, &mut preferences);
+        let created = directory.path().join("Project folder");
+        assert!(created.is_dir());
+        assert_eq!(browser.directory, created);
+        assert_eq!(browser.filename, "scene.bup");
+        assert!(browser.new_folder.is_none());
+        // Complete the asynchronous listing before persisting the new directory.
+        let entries = browser.loading.take().unwrap().recv_timeout(Duration::from_secs(5)).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        sender.send(entries).unwrap();
+        browser.loading = Some(receiver);
+        browser.poll(&ctx, &mut preferences);
+        assert_eq!(preferences.directory.as_ref(), Some(&created));
+        assert_eq!(browser.submit(), Some(Some(created.join("scene.bup"))));
+        browser.request.respond(None);
+        assert_eq!(worker.join().unwrap(), None);
+        assert!(!created.join("scene.bup").exists());
+    }
 
     #[test]
     fn chooser_footer_stays_above_the_virtual_keyboard() {
@@ -482,7 +628,7 @@ mod tests {
         sender.send(Ok(entries)).unwrap();
         browser.loading = Some(receiver);
         let mut preferences = XrFilePreferences::default();
-        browser.poll(&mut preferences);
+        browser.poll(&ctx, &mut preferences);
         assert_eq!(preferences.directory.as_deref(), Some(directory.path()));
         let names = |browser: &Browser| {
             browser

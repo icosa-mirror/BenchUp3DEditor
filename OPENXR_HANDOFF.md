@@ -30,8 +30,9 @@ Recorded human feedback:
    hiding versus translucency behind geometry. Do not change that policy before
    discussion. Ask verification questions one at a time when testing resumes.
 
-Section-cap ownership and controller picking landed in `92b7f8a`. Current work
-adds controller-accessible axis/plane locks and host-aware shared precision input.
+Section-cap ownership and controller picking landed in `92b7f8a`. Axis/plane
+locks and host-aware shared precision input landed in `1de74a5`. Current work
+adds destination-folder creation to the in-headset file chooser.
 Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
 
@@ -52,8 +53,26 @@ The native example build passes without warnings in `axis-lock-build.log`.
 `axis-lock-controls.png` was rendered on RTX 4090 Vulkan and inspected: the new
 large lock buttons fit alongside the existing controls, with the inspector and
 shared value field retained. This offscreen check started no OpenXR session.
-The executable is frozen under this milestone commit in
+The executable is frozen under `1de74a5` in
 `.local/openxr/preview-builds/`; it has not replaced the user's last preview.
+
+The in-panel file chooser now has New folder. Its shared modal focuses a text
+field usable by the controller keyboard; Cancel returns to the chooser. Create
+runs on a worker, reports failures in place, and navigates into the created
+directory while retaining the save filename. Directory creation rejects paths,
+reserved characters and dot names, and never overwrites an existing directory.
+The existing directory preference updates after a successful listing; no new
+preference or model edit is introduced. Controller-only create/save/reopen
+acceptance remains pending.
+`new-folder-tests.log` passes all five chooser cases, including asynchronous
+folder navigation with the save filename retained, rejection of invalid names
+and existing folders without overwriting contents, existing overwrite-confirmation
+behavior, filtering/directory preferences and keyboard-safe chooser footer layout.
+`axis-lock-final-regressions.log` also passes both XR lock cases against the
+current source, including the final egui ID constructor update.
+`new-folder-build.log` passes the native example build without warnings. The
+combined executable is frozen under this milestone commit in
+`.local/openxr/preview-builds/`. No replacement headset session was launched.
 
 ## User direction
 
