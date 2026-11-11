@@ -1258,6 +1258,8 @@ mod tests {
             sidebar::set_section_open(&ctx, "connections/wood_joinery", false);
             let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(1000., 800.));
             app.doc.camera.fit(app.doc.model.bounds(), dv(rect.size()));
+            // Check navigation-only effects against an explicitly saved fixture.
+            app.project.modified = false;
             let source = app.doc.model.clone();
             let markers = app.joint_markers(rect);
             assert_eq!(markers.len(), 1);
