@@ -31,6 +31,9 @@ impl Line {
             ..Self::new(a, b, color, width)
         }
     }
+    pub fn axis(a: glam::DVec3, b: glam::DVec3, color: [f32; 4], width: f32) -> Self {
+        Self { style: [6.0, 0.0, 0.0, 0.0], ..Self::new(a, b, color, width) }
+    }
 
     pub fn marker(point: glam::DVec3, color: [f32; 4], radius: f32) -> Self {
         Self {
@@ -90,6 +93,14 @@ pub(super) struct Lines {
     pointer_count: u32,
     uniforms: [wgpu::Buffer; 2],
     bindings: [wgpu::BindGroup; 2],
+}
+
+fn reference_origin_depth(matrix: glam::DMat4, origin: glam::DVec3) -> f32 {
+    // Perspective clip W is forward depth. Both numerator and fragment depth
+    // include navigation scale, so their ratio remains in model units. Use the
+    // grid's absolute-depth/minimum convention when the origin passes the eye.
+    let scale = matrix.row(3).truncate().length();
+    (matrix * (-origin).extend(1.0)).w.abs().max(0.005 * scale) as f32
 }
 
 impl Lines {
@@ -196,6 +207,7 @@ impl Lines {
             for axis in 0..3 {
                 data[20 + axis] = limits[axis].map_or(f32::MAX, |v| (v - origin[axis]) as f32);
             }
+            data[23] = reference_origin_depth(matrix, origin);
             queue.write_buffer(&self.uniforms[index], 0, bytemuck::cast_slice(&data));
         }
         self.pointer_count = pointer.len().min(32) as u32;
@@ -311,10 +323,35 @@ impl Lines {
 
 #[cfg(test)]
 mod tests {
+    use super::reference_origin_depth;
+    use glam::{DMat4, DVec3};
+
     #[test]
-    fn world_leader_arrow_shader_validates() {
+    fn world_line_shader_validates() {
         let module = eframe::wgpu::naga::front::wgsl::parse_str(include_str!("world_lines.wgsl")).unwrap();
         eframe::wgpu::naga::valid::Validator::new(Default::default(), Default::default())
             .validate(&module).unwrap();
+    }
+
+    #[test]
+    fn world_axis_depth_fade_matches_shared_opacity_across_scale_and_rebasing() {
+        let projection = DMat4::perspective_rh(1.0, 1.0, 0.03, 200.0);
+        let eye = DVec3::new(2., 3., 5.);
+        for scale in [0.0001, 1., 10000.] {
+            let view = DMat4::look_at_rh(eye * scale, DVec3::ZERO, DVec3::Y);
+            for origin in [DVec3::ZERO, DVec3::new(1e8, -1e8, 3e7)] {
+                let matrix = projection * view * DMat4::from_scale(DVec3::splat(scale))
+                    * DMat4::from_translation(origin);
+                let reference = reference_origin_depth(matrix, origin);
+                for point in [DVec3::ZERO, -eye, -eye * 3.] {
+                    let depth = (matrix * (point - origin).extend(1.)).w;
+                    let expected = crate::renderer::ReferenceFade::opacity(
+                        (point - eye).dot(-eye.normalize()), eye.length());
+                    assert!(((reference as f64 / depth).clamp(0., 1.) - expected as f64).abs() < 1e-5);
+                }
+            }
+            let at_origin = projection * DMat4::from_scale(DVec3::splat(scale));
+            assert!((reference_origin_depth(at_origin, DVec3::ZERO) as f64 / scale - 0.005).abs() < 1e-6);
+        }
     }
 }

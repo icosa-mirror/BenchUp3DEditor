@@ -132,7 +132,8 @@ reconciled. Coding status remains separate from headset/graphics acceptance.
 | A08 | Desktop marks the fixed text attachment while positioning its label; XR omitted that marker | Text measurement anchor now supplies the existing retained billboard circle; native build passed; visual acceptance open |
 | A09 | Desktop projection/Move/Scale inference guides mark their source points, and modeling-start hints use the wider cursor offset; XR omitted those circles and used the normal hint offset before a grab | Existing retained billboard circles and pre-grab hint offset now match the desktop routes; combined marker build passed; visual acceptance open |
 | A10 | Desktop axes include a small depth-tested origin dot; XR previously drew the three axes without that dot | Retained GPU filled-circle instance implemented under the existing axes setting with scene depth/section clipping; shared shader check and native build passed; visual acceptance open |
-| A11 | Desktop axes distinguish positive/negative halves with width/opacity and fade with forward depth; XR currently draws full-colour 2-point axes without that fade | Active axes-display parity gap; keep projection/fading on the GPU |
+| A11 | Desktop axes distinguish positive/negative halves with width/opacity and fade with forward depth; XR previously drew full-colour 2-point axes without that fade | Directional retained instances and GPU reciprocal-depth fade implemented from the live eye matrix; shader/math checks and native build passed; visual acceptance open |
+| A12 | Shared Paste seeds its preview with desktop camera inference, and library insertion uses the desktop camera target, even in immersive mode while the ray is still over the panel | Active command dependency: initialize native paste/component previews without desktop camera placement; retain world-ray placement/commit |
 
 ## Current architecture and boundaries
 

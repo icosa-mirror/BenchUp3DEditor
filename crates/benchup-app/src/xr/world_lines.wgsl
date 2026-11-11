@@ -11,6 +11,7 @@ struct Output {
     @location(3) @interpolate(flat) owners:vec2<u32>,
     @location(4) @interpolate(linear) depth:f32,
     @location(5) @interpolate(flat) width:f32,
+    @location(6) distance:f32,
 }
 
 @vertex
@@ -69,6 +70,7 @@ fn vertex(@builtin(vertex_index) index: u32, @location(0) start: vec3<f32>,
     out.style = style;
     out.owners=owners;out.depth=clip.z/clip.w;
     out.width=width;
+    out.distance=clip.w;
     return out;
 }
 
@@ -92,7 +94,12 @@ fn fragment(input: Output) -> @location(0) vec4<f32> {
         amount=clamp(input.style.z*0.5+0.5-distance,0.0,1.0);
     }
     if amount<=0.0 {discard;}
-    let gamma = input.color;
+    var gamma = input.color;
+    if input.style.x==6.0 {
+        // Perspective interpolation recovers forward depth after near clipping.
+        // Fade premultiplied gamma colour before conversion, as desktop axes do.
+        gamma*=clamp(view.limits.w/max(input.distance,0.0000001),0.0,1.0);
+    }
     let linear = select(gamma.rgb / 12.92, pow((gamma.rgb + 0.055) / 1.055, vec3<f32>(2.4)), gamma.rgb > vec3<f32>(0.04045));
     return vec4(linear, gamma.a)*amount;
 }

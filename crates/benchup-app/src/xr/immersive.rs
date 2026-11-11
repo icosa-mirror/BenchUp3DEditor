@@ -831,13 +831,18 @@ impl Scene {
                         .into_iter()
                         .zip(source.display.axis_colors)
                     {
-                        let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2])
-                            .to_normalized_gamma_f32();
-                        lines.push(Line::new(
+                        let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                        lines.push(Line::axis(
                             -axis * half * 10000.0 - origin,
+                            -origin,
+                            color.gamma_multiply(0.35).to_normalized_gamma_f32(),
+                            0.85,
+                        ));
+                        lines.push(Line::axis(
+                            -origin,
                             axis * half * 10000.0 - origin,
-                            color,
-                            2.0,
+                            color.gamma_multiply(0.8).to_normalized_gamma_f32(),
+                            1.1,
                         ));
                     }
                     lines.push(Line::dot(-origin, colors.muted.to_normalized_gamma_f32(), 2.5));

@@ -485,9 +485,30 @@ guide-marker comfort.
 
 Further row-2 source comparison found A11: desktop axes use separate negative
 (0.85 points, colour multiplied by 0.35) and positive (1.1 points, multiplied by
-0.8) halves, with `ReferenceFade` forward-depth opacity. XR currently uses one
-full-colour 2-point line per axis. Implement the directional styling and native
-view depth fade on the GPU; do not add per-frame CPU-projected axis meshes.
+0.8) halves, with `ReferenceFade` forward-depth opacity. A11 now supplies two
+retained instances per axis and a distinct GPU style which fades premultiplied
+gamma colour before linear conversion, following the desktop colour route.
+Perspective clip W supplies live-eye forward depth after clipping. The origin
+depth ratio includes navigation scale; an absolute-depth/minimum convention
+matches the native grid when the origin crosses the eye. The existing 96-byte
+line uniform uses its final spare component for this reference depth; no new
+CPU-projected axis meshes or saved settings are added. Shader/math evidence is
+recorded in `axis-display-tests.log`: both the complete world-line shader
+parser/validator and the shared-opacity comparison pass. The latter covers three
+navigation scales, ordinary/large rebased coordinates and the origin-at-eye
+minimum. These are shader/math checks, not rendered acceptance.
+`axis-display-build.log` passes the native editor build without warnings. The
+executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched.
+
+The remaining command audit found A12: shared Paste initializes its ghost through
+desktop `infer_snap` even when the panel has immersive input. The native ray
+corrects it after leaving the panel, but the initial ghost depends on the legacy
+camera/canvas. Remove that seed dependency while preserving the shared clipboard,
+current-ray placement, commit, Paste in place and desktop behavior. The component
+library's `PastePreview::new` call also seeds with `doc.camera.target`; include
+that insertion route in A12. Both should start from the clipboard's own anchor
+until the native ray supplies a current placement target.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
