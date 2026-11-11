@@ -592,9 +592,9 @@ impl Editor {
         queue: &wgpu::Queue,
     ) -> Result<()> {
         self.set_input(input);
-        // Rendering can be skipped across a tracking/focus transition. Do not
-        // carry a queued virtual keystroke into a later resumed session.
-        self.keyboard.take_events(&self.ctx, false);
+        // Real focus/tracking loss discards stale keystrokes. A live panel move
+        // only cancels captures; retain the field and a completed queued key.
+        self.keyboard.cancel_input(&self.ctx, self.input.focused);
         self.world_tools.set_panel_hover(false);
         // Cancellation must reach world tools even when rendering is skipped
         // and no panel pointer events need a UI pass.

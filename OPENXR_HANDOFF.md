@@ -7,6 +7,18 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+C23 separates live panel placement changes from real keyboard-focus loss. The
+placement-transition cancellation now carries the runtime focus/head-validity
+state. Keyboard cancellation retains its target and a completed queued key while
+that state remains valid; actual focus/head-tracking loss still clears both.
+Pointer/world captures continue to cancel, with the C21 modal Escape guard.
+The focused GUI regression passes ordinary and modal text fields, completed-key
+delivery, continued typing without refocusing and discard on genuine focus loss
+(`.local/openxr/panel-placement-keyboard-tests.log`). The locked native build
+passes without warnings (`panel-placement-keyboard-build.log`), and the executable
+is frozen under this milestone's source commit. No headset session was started.
+Physical placement/recall keyboard-focus acceptance remains open.
+
 C22 provides recovery when a controller panel's toolbar is hidden by a keyboard
 or modal: the panel hand's existing secondary action recalls it without a ray,
 persists world placement and cancels current pointer/world captures. It is active

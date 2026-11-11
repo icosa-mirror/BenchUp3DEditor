@@ -57,6 +57,14 @@ impl Keyboard {
         if visible { 290.0 } else { 44.0 }
     }
 
+    // A pointer/placement cancellation is not a keyboard-focus transition.
+    // Keep a completed virtual key queued while the host remains focused.
+    pub(super) fn cancel_input(&mut self, ctx: &egui::Context, focused: bool) {
+        if !focused {
+            self.take_events(ctx, false);
+        }
+    }
+
     pub(super) fn take_events(&mut self, ctx: &egui::Context, focused: bool) -> Vec<Event> {
         if !focused {
             self.target = None;
@@ -426,6 +434,33 @@ mod tests {
                 Some(egui::Id::unique("test.field"))
             );
             drop(output);
+        }
+    }
+
+    #[test]
+    fn live_placement_cancellation_keeps_completed_text_but_focus_loss_discards_it() {
+        for modal in [false, true] {
+            for focused in [false, true] {
+                let ctx = egui::Context::default();
+                let mut keyboard = Keyboard::default();
+                let mut preferences = XrPanelPreferences { keyboard_visible: true, ..Default::default() };
+                let mut text = String::new();
+                frame(&ctx, &mut keyboard, &mut preferences, &mut text, vec![], true, modal);
+                frame(&ctx, &mut keyboard, &mut preferences, &mut text, vec![], false, modal);
+                assert!(keyboard.target.is_some());
+                // A completed key click waits for the next editor UI pass.
+                keyboard.text("a");
+                keyboard.cancel_input(&ctx, focused);
+                assert_eq!(keyboard.target.is_some(), focused);
+                frame(&ctx, &mut keyboard, &mut preferences, &mut text, vec![], false, modal);
+                assert_eq!(text, if focused { "a" } else { "" }, "modal={modal}, focused={focused}");
+                if focused {
+                    assert_eq!(ctx.memory(|memory| memory.focused()), Some(egui::Id::unique("test.field")));
+                    keyboard.text("b");
+                    frame(&ctx, &mut keyboard, &mut preferences, &mut text, vec![], false, modal);
+                    assert_eq!(text, "ab", "continued typing must not need refocusing");
+                }
+            }
         }
     }
 

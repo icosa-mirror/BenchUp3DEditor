@@ -142,6 +142,11 @@ record scope changes rather than silently changing an estimate.
     held-button, inactive-action and handedness-change commands. The guard
     regression, locked native build and setup-layout snapshot pass. Physical
     Menu/B delivery and modal/keyboard recovery acceptance remain open.
+23. [x] C23: Treat live panel-placement cancellation separately from keyboard
+    focus loss. Retain the text target and completed queued virtual keys while
+    focused/head-tracked; keep clearing them on actual focus/tracking loss. The
+    editor/modal field regression and locked native build pass. Physical
+    placement/recall keyboard-focus acceptance remains open.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

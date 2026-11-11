@@ -832,7 +832,9 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                 panel_pose,
             );
             if placement.changed {
-                editor.cancel_input(controllers.cancel(), &graphics.device, &graphics.queue)?;
+                let mut cancelled = controllers.cancel();
+                cancelled.focused = focused && head_location.is_some();
+                editor.cancel_input(cancelled, &graphics.device, &graphics.queue)?;
             }
             panel_pose = placement.pose;
             if placement.changed && preferences.controller_panel && !placement.attached {
