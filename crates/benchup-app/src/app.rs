@@ -563,7 +563,7 @@ impl BenchUpApp {
             guide_preview: (self.history_preview.is_none() && self.create_guides
                 && self.measurement.as_ref().is_some_and(|m| !m.complete || !self.length_input.is_empty()))
                 .then(|| self.measurement_guide()).flatten(),
-            tool:self.tool, precise_modeling:self.xr_panel.precise_modeling,hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
+            tool:self.tool, tool_hint:self.xr_tool_hint().to_owned(),hover:if self.history_preview.is_some() {None} else {self.hover},outliner_hover:self.outliner_hover.clone(),
             erasing:{
                 let mut ids=match &self.gesture {Some(Gesture {kind:GestureKind::Erase {ids},..})=>ids.clone(),_=>BTreeSet::new()};
                 ids.extend(self.xr_erasing.iter().copied());

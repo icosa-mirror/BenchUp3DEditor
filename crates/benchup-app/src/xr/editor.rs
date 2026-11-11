@@ -381,8 +381,8 @@ impl Editor {
                 let mut source=self.app.xr_scene_source(&self.ctx);
                 source.tool_target=self.world_tools.pointer_target().or(source.tool_target);
                 self.world_tools.append_window_overlay(&mut source.overlays);
-                if let Some(hint) = self.world_tools.handle_hint() && !source.status.contains(hint) {
-                    source.status = format!("{hint}\n{}", source.status);
+                if let Some(hint) = self.world_tools.handle_hint() {
+                    super::world_hud::override_hint(&mut source.status, &mut source.tool_hint, hint);
                 }
                 self.scene.stage_labels(&self.ctx, &source);
                 self.staged_source=Some(source);

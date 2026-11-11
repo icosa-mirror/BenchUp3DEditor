@@ -432,7 +432,13 @@ No replacement headset session was launched; controller/visual acceptance remain
    context and operation mode. Unchanged roots keep that cache, so head poses/eyes
    do not repeat the scan. History previews suppress highlighting; errors, zero
    face operations, copy-mode changes and cancellation discard stale metadata.
-3. Selection/context source reconciliation includes the enclosing-window and
+3. A03: HUD instructions now come from the app's active XR mode instead of
+   independently reconstructing a generic tool hint. Window selection therefore
+   does not advertise direct-selection double-trigger actions. Joint, section and
+   other controller target hints replace the generic instruction while preserving
+   status/errors. Composition removes repeated instruction lines and retains the
+   navigation hint. No settings or label-occlusion policy changed.
+4. Selection/context source reconciliation includes the enclosing-window and
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
    context acceptance remain open; the broader eight-row audit is still active.
 
@@ -460,6 +466,13 @@ passes selected-group extrusion without opening its context.
 warnings. The executable is frozen under this milestone's commit in
 `.local/openxr/preview-builds/`; no headset session was launched. These checks
 do not establish full rendered/headset parity or large-scene performance.
+
+`world-hud-tests.log` passes three focused cases: shared window-mode source,
+instruction de-duplication with status/navigation, and target overrides retaining
+errors while replacing old actions. `world-hud-build.log` passes the native editor
+example build without warnings. The executable is frozen under this milestone's
+commit in `.local/openxr/preview-builds/`; headset acceptance remains open and no
+session was launched.
 
 ## User direction
 

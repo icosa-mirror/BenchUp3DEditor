@@ -2670,6 +2670,21 @@ mod input_revision_tests {
     }
 
     #[test]
+    fn world_hud_uses_window_mode_from_the_shared_scene_source() {
+        use crate::test_ui::ContextExt as _;
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        app.tool = Tool::Select;
+        app.xr_panel.window_selection = true;
+        let ctx = egui::Context::default();
+        let mut output = None;
+        let _ = ctx.run_test_ui(Default::default(), |_| { output = Some(app.xr_scene_source(&ctx)); });
+        let hud = output.unwrap().hud_text("Both grips navigate.");
+        assert!(hud.contains("drag a window"));
+        assert!(!hud.contains("Double trigger"));
+        assert_eq!(hud.matches("drag a window").count(), 1);
+    }
+
+    #[test]
     fn spatial_reference_controller_refines_only_visible_intersections_on_the_picked_edge() {
         struct References(bool);
         impl crate::xr::world_inference::ReferenceQuery for References {

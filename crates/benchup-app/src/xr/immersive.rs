@@ -21,7 +21,7 @@ pub(crate) struct Source {
     pub overlays: crate::app::viewport_overlays::Overlays,
     pub references: Arc<crate::app::viewport_overlays::Overlays>,
     pub tool: benchup_core::Tool,
-    pub precise_modeling: bool,
+    pub tool_hint: String,
     pub input_captured: bool,
     pub tool_target: Option<DVec3>,
     pub modeling: bool,
@@ -38,6 +38,12 @@ pub(crate) struct Source {
     pub grain_preview: std::collections::BTreeMap<u64, DVec3>,
     pub paste: Option<PasteSource>,
     pub status: String,
+}
+
+impl Source {
+    pub(crate) fn hud_text(&self, navigation: &str) -> String {
+        super::world_hud::text(&self.status, &self.tool_hint, navigation)
+    }
 }
 
 #[derive(Clone)]
@@ -297,7 +303,7 @@ impl Scene {
                 owners: Default::default(),
                 depth: false,
                 shapes: vec![Glyph::Paragraph {
-                    text: format!("{}\n{}\n{}", source.status, crate::app::xr_tools::hint(source.tool, source.precise_modeling), self.navigation.hint()),
+                    text: source.hud_text(self.navigation.hint()),
                     size: 12.0,
                     width: 320.0,
                     color: colors.ink,
