@@ -217,7 +217,7 @@ pub fn infer_move_with_snapping(
 /// Recreate this cache when the source model changes; camera edits invalidate
 /// only its projected data and lazily evaluated reference visibility.
 pub struct MoveSnapCache {
-    geometry: Model,
+    geometry: std::sync::Arc<Model>,
     faces: MoveFaces,
     guides: Option<MoveGuides>,
 }
@@ -273,11 +273,14 @@ impl MoveSnapCache {
         }
         let faces = MoveFaces::new(&geometry);
         Self {
-            geometry,
+            geometry: std::sync::Arc::new(geometry),
             faces,
             guides: None,
         }
     }
+    /// Share the stationary, visibility-resolved target snapshot with other hosts.
+    pub fn shared_geometry(&self) -> std::sync::Arc<Model> { std::sync::Arc::clone(&self.geometry) }
+
     /// Match a transient X-ray viewport without including hidden entities.
     pub fn with_x_ray(mut self, enabled: bool) -> Self {
         self.faces.1 = enabled;

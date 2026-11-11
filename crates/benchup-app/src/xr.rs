@@ -46,6 +46,7 @@ mod world_labels;
 
 #[cfg(feature = "openxr")]
 pub(crate) mod world_inference;
+pub(crate) mod world_move;
 
 #[cfg(feature = "openxr")]
 mod world_surfaces;

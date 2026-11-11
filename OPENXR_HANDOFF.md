@@ -238,9 +238,27 @@ GPU guide overlays. Exact geometry targets and acquired-reference projections
 retain priority. No desktop camera projection or new persistent option is involved.
 C15 remains open: audit manipulation inference, geometry-constrained refinements
 and cases requiring more than the nearest visible reference for each axis.
-The next concrete gap is `xr_model_grab`: Move currently projects its tracking
-delta onto the active constraint and grid, while clearing `edit.snap`/`edit.guides`.
-It does not yet use the shared geometry/reference inference available on desktop.
+Move now shares the immutable stationary geometry from `MoveSnapCache` with its
+world target index. Targets exclude the edited geometry and inherited hidden
+state, retain editing scope and section clipping, and match desktop Move's
+stationary X-ray targeting. Controller Move now supports edge/end/midpoint and
+face/centre targets, axis/plane intersections and global reference guides. Shared
+grid refinement preserves exact geometry targets; no qualifying snap retains the
+existing controller-depth/constraint/grid fallback. The existing model preview,
+commit and single-undo routes remain authoritative. Target indexes persist for
+the gesture instead of following the changing preview. C15 still includes the
+remaining manipulation and geometry-constrained drawing inference audit.
+
+`move-inference-final-tests.log` passes four focused cases: shared stationary
+snapshot/exclusion and exact targets, world-space edge/face constraint
+intersections, face centres/global-guide toggles, and controller endpoint snapping
+with grid enabled followed by a single undoable release commit.
+`move-inference-modeling-regressions.log` passes all four current precise-modeling
+cases, including exact numeric values for all five tools, default release commit
+and cancellation. Controller snapping comfort and broader tool parity remain open.
+`move-inference-build.log` passes the native editor example build without
+warnings. Its executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was started.
 
 `global-inference-checked-tests.log` passes all seven focused reference cases,
 including retained-versus-exhaustive comparisons on oblique/grazing planes,

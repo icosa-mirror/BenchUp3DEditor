@@ -85,6 +85,7 @@ pub(crate) struct State {
     handle_hint: Option<&'static str>,
     window: Option<WindowGesture>,
     selection_click: Option<SelectionClick>,
+    move_targets: Option<crate::xr::world_move::Targets>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
     erase_revision: Option<(u64, Option<u64>)>,
@@ -639,6 +640,7 @@ impl BenchUpApp {
     ) {
         state.pointer_target = None;
         state.handle_hint = None;
+        if self.modeling.is_none() { state.move_targets = None; }
         if state.model_phase == Some(ModelPhase::Typing)
             && (state.precision_target.is_none() || state.precision_target != self.xr_precision_target(ctx, true))
         {
@@ -1284,15 +1286,38 @@ impl BenchUpApp {
             edit.unlocked_direction
         };
         let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
+        let move_target = if self.tool == Tool::Move {
+            let geometry = edit.move_snap.as_ref().map(|cache| cache.shared_geometry());
+            geometry.and_then(|geometry| {
+                let targets = state.move_targets.get_or_insert_with(Default::default);
+                targets.prepare(Arc::clone(&geometry), &self.doc.display);
+                let point = edit.anchor + constraint.map_or(delta, |c| c.project(delta));
+                targets.infer(pointer.ray, edit.anchor, point, constraint,
+                    self.doc.snap_to_geometry, self.snap_to_edge, self.doc.snap_to_axes)
+                    .map(|target| (target, geometry))
+            })
+        } else { None };
         let edit = self.modeling.as_mut().unwrap();
         edit.snap = None;
         edit.guides.clear();
         if self.tool == Tool::Move {
-            if let Some(constraint) = constraint {
-                delta = constraint.project(delta);
-            }
-            if self.snap_to_grid {
-                delta = (delta / spacing).round() * spacing;
+            if let Some((mut target, geometry)) = move_target {
+                if self.snap_to_grid {
+                    let plane = constraint.and_then(|c| match c { AxisConstraint::Plane(axis) => Some(axis.vector()), _ => None });
+                    let axis = constraint.and_then(|c| match c { AxisConstraint::Axis(axis) => Some(axis), _ => None });
+                    target.snap = grid::snap_with_geometry_hint(target.snap, spacing, plane, axis, &geometry,
+                        None, Some((target.edge, target.face)));
+                }
+                delta = target.snap.point - edit.anchor;
+                edit.snap = Some(target.snap);
+                edit.guides = target.guides;
+            } else {
+                if let Some(constraint) = constraint {
+                    delta = constraint.project(delta);
+                }
+                if self.snap_to_grid {
+                    delta = (delta / spacing).round() * spacing;
+                }
             }
             edit.direction = delta;
             edit.value = delta.length();
@@ -2009,6 +2034,31 @@ mod precise_modeling_tests {
         app.tool = tool;
         app.xr_panel.precise_modeling = precise;
         (app, State::default(), egui::Context::default(), face)
+    }
+
+    #[test]
+    fn world_move_controller_snaps_to_stationary_endpoint_and_commits_one_undo() {
+        let (mut app, mut state, ctx, face) = fixture(Tool::Move, false);
+        app.doc.model.add_edge(DVec3::new(3., 0.5, 0.), DVec3::new(3., 1.5, 0.)).unwrap();
+        app.doc.snap_to_geometry = true; app.snap_to_edge = true; app.doc.snap_to_axes = false;
+        app.snap_to_grid = true;
+        let original = app.doc.model.clone();
+        let start = point(&app, DVec3::new(1., 0.5, 0.), Some(face), true, true);
+        app.xr_world_pointer(Some(&start), &mut state, true, &ctx, &mut Storage);
+        let target = DVec3::new(3., 0.5, 0.);
+        let held = point(&app, target, None, false, true);
+        app.xr_world_pointer(Some(&held), &mut state, true, &ctx, &mut Storage);
+        let edit = app.modeling.as_ref().unwrap();
+        assert_eq!(edit.snap.unwrap().kind, Inference::Endpoint);
+        assert!(edit.snap.unwrap().point.distance(target) < 1e-8);
+        assert_eq!(app.doc.model, original);
+        let released = point(&app, target, None, false, false);
+        app.xr_world_pointer(Some(&released), &mut state, true, &ctx, &mut Storage);
+        assert!(app.modeling.is_none());
+        assert_ne!(app.doc.model, original);
+        app.undo(&ctx, false);
+        assert_eq!(app.doc.model, original);
+        assert!(app.doc.history.undo_label().is_none());
     }
 
     fn point(app: &BenchUpApp, position: DVec3, face: Option<u64>, clicked: bool, down: bool) -> Pointer {
