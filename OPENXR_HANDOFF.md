@@ -7,6 +7,14 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+Latest user direction: fix actual bugs and missing functionality; stop speculative
+edge-case work and do not prolong development once the core implementation is
+ready. C01-C23 coding is implemented. There is no currently confirmed unfixed
+defect queued. Keep the remaining acceptance gates open, but do not manufacture
+new coding milestones or expand validation to keep the goal busy. Resume fixes
+when normal use, a requested test or existing evidence demonstrates a concrete
+problem. Do not launch VR or request hardware checks until the user asks to test.
+
 The latest prepared executable is source `591c117`, at
 `.local/openxr/preview-builds/591c117/openxr_editor.exe`; its `build.json` records
 the full source commit, binary hash and passing build/GUI-check artifacts. Later

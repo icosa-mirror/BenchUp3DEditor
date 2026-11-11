@@ -7,6 +7,13 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 
 ## Active continuation
 
+Latest user direction: prioritize actual bugs and missing functionality, not
+speculative edge cases. The core coding checklist C01-C23 is implemented and
+build `591c117` is prepared. No confirmed unfixed defect is currently queued.
+Remaining acceptance is not complete; continue implementation only for concrete
+gaps demonstrated by normal use, requested testing or existing evidence. Do not
+create extra milestones or validation work merely to remain active.
+
 The user resumed the goal and is currently busy. Continue independent development
 without more test questions or replacing their running preview. Their `dfab0e6`
 clean-example session confirmed that virtual-keyboard typing now retains focus.
