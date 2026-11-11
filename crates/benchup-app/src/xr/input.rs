@@ -21,12 +21,19 @@ pub(super) struct SceneHit {
 
 #[derive(Clone, Copy)]
 pub(super) struct SceneInput {
+    pub owner: u8,
     pub ray: Ray,
     pub hit: Option<SceneHit>,
     pub select: bool,
     pub clear: bool,
     pub pressed: bool,
     pub primary_down: bool,
+}
+
+pub(super) fn erase_capture_cancelled(previous: Option<SceneInput>, current: Option<SceneInput>) -> bool {
+    current.is_some_and(|input| input.clear) || previous.is_some_and(|previous|
+        previous.pressed && previous.primary_down && current.is_none_or(|current|
+            current.owner != previous.owner || current.primary_down && !current.pressed))
 }
 
 #[derive(Clone, Copy, Default)]
@@ -495,6 +502,7 @@ impl Controllers {
                     && (self.scene_captured || select || clear);
                 self.scene_owner = Some(index);
                 scene = Some(SceneInput {
+                    owner: index as u8,
                     ray: hands[index].ray.unwrap(),
                     hit: hits[index],
                     select,

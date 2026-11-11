@@ -32,8 +32,8 @@ Recorded human feedback:
 
 Section-cap ownership and controller picking landed in `92b7f8a`. Axis/plane
 locks and host-aware shared precision input landed in `1de74a5`. Destination-folder
-creation landed in `25b514f`. Current work routes shared view controls to immersive
-placement, including standard views, fitting and centering on the origin.
+creation landed in `25b514f`; shared immersive View controls landed in `25fd106`.
+Current work adds bounded interpolation to captured erase strokes.
 Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
 
@@ -102,8 +102,40 @@ controller acceptance remains pending.
 inspected. Compared with the prior checked `section-cap-eye.png`, the 1440 x 900
 default-view image differs in only two pixels, by at most one color level. This
 checks default rendering, not live standard-view/controller acceptance. The
-combined executable is preserved under this milestone commit in
+combined executable is preserved under `25fd106` in
 `.local/openxr/preview-builds/`.
+
+The held-trigger eraser now samples the interval between consecutive tracked rays
+using the existing retained scene picker, including its face/edge/guide/cap
+visibility checks. Sampling handles controller rotation and translation, with
+0.008-radian target spacing and at most 63 extra queries per interval. The release
+interval is included; all targets join the existing one-operation/one-undo stroke.
+Invalid or locked document IDs are rejected before they join the transaction.
+The pending interval carries the validated document revision and editing context;
+the whole collected stroke cancels if the document or context changes before release.
+The collector reuses the existing snapshot revision without another scene scan.
+
+Interpolation requires the same controller, model snapshot/revision, display and
+model-to-tracking transform. Loss, cancellation, a gap over 150 ms, more than
+45 degrees of direction change or 0.5 metres of origin travel drops the interval
+and requires a fresh press to rearm interpolation. Existing point-per-frame input
+and capture semantics remain in place. Capture loss, owner changes and cancellation
+clear the pending erase on input updates even if XR skips rendering the UI; normal
+trigger release is retained as a commit. This bounded sampler can still miss very
+thin/near targets during an interval that reaches the sample cap; controller
+acceptance and large-scene costs remain unverified. No new preference is added.
+
+`erase-sweep-tests.log` passes eight focused cases: retained thin-edge queries
+between missed endpoints for translation/rotation and release, visibility rejection,
+all interpolation reset conditions, swept-target release/undo, document-change
+cancellation, capture-loss handling without a rendered UI frame, existing held-erase/
+loss/cancel behavior and the desktop stroke's intermediate-motion regression.
+These are software checks, not headset acceptance.
+`erase-sweep-input-regressions.log` passes the three existing pointer-capture,
+focus-loss and held-button rearm cases.
+`erase-sweep-build.log` passes the final native example build without warnings.
+The combined executable is frozen under this milestone commit in
+`.local/openxr/preview-builds/`; no replacement headset session was launched.
 
 ## User direction
 
@@ -324,10 +356,13 @@ combined executable is preserved under this milestone commit in
 2. Evaluated-model preparation has been extracted from `paint_evaluated_scene`.
    Close the remaining UI/input dependencies: host/window commands, desktop-only
    selection gestures and any remaining handle/tool routes identified by the audit. Known limits include
-   broader off-face/global references, fast erase-sweep interpolation, evaluated-only paint/edit
+   broader off-face/global references, near-field/fast sweep sampling limits, evaluated-only paint/edit
    guards and broader nested/scoped cap acceptance. A retained cap hierarchy now
    supplements original-face occlusion queries using the rendered triangles. Guide intersections are locally bounded
    to 16 candidates/eight exact targets; dense clusters can omit a target.
+   Also audit current-ray snapshot validation across same-frame model/project
+   changes: the swept interval's revision/context check is not yet a general
+   guard for every current-ray tool callback.
 3. The duplicate 2D model viewport is now removed from immersive mode. The
    existing 3D-view preference switches between the immersive-first inspector/tool
    panel and the original panel-only editor. Shared inspector visibility, sections,

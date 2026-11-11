@@ -24,6 +24,10 @@ The XR panel also exposes persisted axis/plane locks and destination-folder
 creation. Shared View controls now target immersive placement: Fit model/selection,
 Center origin, Reset view and all seven standard directions. Headset projection
 remains runtime-controlled; those commands do not modify the desktop camera.
+Held-trigger erasing now interpolates between adjacent captured rays through the
+retained picker, including the release interval, and keeps one undo transaction.
+Interpolation is bounded and resets on input/scene discontinuities; thin/near
+targets at the sample limit and hardware interaction/performance still need checking.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -113,7 +117,7 @@ The numbered rows are the checklist for the replacement milestone.
 
 | # | Area | Implemented | Remaining audit/gap |
 |---|---|---|---|
-| 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation |
+| 1 | Selection and context | Shared selection/hover and replace/toggle ray selection; context bounds, endpoint/edge cues; shared Edit-menu context actions; held-trigger erase with bounded ray interpolation and one undo | Source audit confirms group/component entry/exit and entity commands are reachable through Edit; box/lasso and remaining selection gestures still need reconciliation; extreme/near-field sweep acceptance remains open |
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired edge references and locked-axis projection; persisted X/Y/Z and Unlock controls in XR, including two-axis planes | Broader off-face/global alignment; references to evaluated-only edges; complete controller lock acceptance |
 | 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover; host-aware lock refresh and shared precision commits | Pending drawing/measurement targets and Exact value modeling use world-based numeric Enter; remaining desktop handles/precision routes need audit |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
@@ -156,8 +160,10 @@ or complete-parity claims.
    scene preparation is now independent of painting. Shared View framing and
    standard directions now have immersive routes; reconcile remaining desktop-only
    selection/handle gestures with immersive equivalents. Known work includes
-   broader reference/alignment behavior, fast erase-sweep interpolation, safe handling of
+   broader reference/alignment behavior, near-field/fast sweep sampling limits, safe handling of
    unsupported evaluated targets and nested/scoped cap/controller acceptance.
+   Audit current-ray source revisions when a model/project changes in the same UI
+   frame; the new swept-interval guards cover the eraser batch, not all tools.
    Preserve shared operations, bounded queries and retained GPU feedback.
 3. The immersive-first layout is now implemented: when 3D view is enabled, the
    panel hosts the shared inspector, context controls, menus and numeric status,

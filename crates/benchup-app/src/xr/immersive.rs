@@ -312,6 +312,16 @@ impl Scene {
 
     pub fn input_head(&mut self, pose: xr::Posef) { self.head = pose_matrix(pose); }
 
+    pub fn erase_sweep_key(&self, scale: f32) -> Option<super::erase_sweep::Key> {
+        let (source, placement) = (self.source.as_ref()?, self.placement.as_ref()?);
+        (source.tool == benchup_core::Tool::Erase && source.paste.is_none() && !source.modeling)
+            .then(|| super::erase_sweep::Key {
+                model: Arc::clone(&source.model), revision: source.revision,
+                transform: self.navigation.matrix() * placement.model_to_tracking(scale as f64),
+                display: source.display.clone(),
+            })
+    }
+
     pub fn pick_ray(&mut self, ray: benchup_core::Ray, preferences: XrPanelPreferences) -> Option<super::input::SceneHit> {
         let (Some(source), Some(placement)) = (&self.source, &self.placement) else {
             return None;

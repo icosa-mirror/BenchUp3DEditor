@@ -70,10 +70,17 @@ pub(crate) struct State {
     pointer_target: Option<DVec3>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
+    erase_revision: Option<(u64, Option<u64>)>,
+    erase_sweep: Option<EraseTargets>,
     panel_hover: bool,
     precision_target: Option<PrecisionTarget>,
     model_phase: Option<ModelPhase>,
     request_precision_input: bool,
+}
+
+struct EraseTargets {
+    revision: (u64, Option<u64>),
+    ids: BTreeSet<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,6 +136,8 @@ impl State {
     }
     pub(crate) fn cancel_erasing(&mut self, app: &mut BenchUpApp) {
         self.erasing = false;
+        self.erase_revision = None;
+        self.erase_sweep = None;
         app.xr_erasing.clear();
     }
 
@@ -186,6 +195,14 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 }
 
 impl BenchUpApp {
+    pub(crate) fn xr_set_erase_sweep(&self, state: &mut State, ids: BTreeSet<u64>) {
+        // Reuse the already validated rendered-document revision here. This is
+        // outside the UI frame; validating the whole model again would be wasteful.
+        state.erase_sweep = (!ids.is_empty() && !self.document_model_dirty).then(|| EraseTargets {
+            revision: (self.document_model.revision(), self.doc.model.edit_context), ids,
+        });
+    }
+
     fn xr_precision_target(&mut self, ctx: &egui::Context, include_modeling: bool) -> Option<PrecisionTarget> {
         let modeling = self.modeling.as_ref().filter(|edit| include_modeling && edit.world_input).map(|edit| ModelingTarget {
             anchor: edit.anchor, direction: edit.direction, center: edit.center, face: edit.face,
@@ -486,8 +503,7 @@ impl BenchUpApp {
             let retain_precision = state.panel_hover && self.xr_scene_interaction_enabled(ctx)
                 && state.precision_target.is_some()
                 && state.precision_target == self.xr_precision_target(ctx, state.model_phase == Some(ModelPhase::Typing));
-            state.erasing = false;
-            self.xr_erasing.clear();
+            state.cancel_erasing(self);
             if state.section.take().is_some() && self.world_section_info().is_some() {
                 self.cancel_section_drag(ctx);
                 self.persist_inspector_changes(ctx, Some(storage), false);
@@ -527,8 +543,7 @@ impl BenchUpApp {
                 self.persist_inspector_changes(ctx, Some(storage), false);
             }
             state.tool = Some(self.tool);
-            state.erasing = false;
-            self.xr_erasing.clear();
+            state.cancel_erasing(self);
             state.line_normal = None;
             state.stroke = false;
             state.grab_depth = None;
@@ -550,7 +565,7 @@ impl BenchUpApp {
             state.stroke = false;
             state.grab_depth = None;
             state.reference = None;
-            state.erasing = false;
+            state.cancel_erasing(self);
             ctx.request_repaint();
             return;
         }
@@ -643,14 +658,26 @@ impl BenchUpApp {
         if self.tool == Tool::Erase {
             self.snap = None;
             self.hover = self.hover.filter(|id|self.doc.model.contains_entity(id) && !self.doc.model.is_locked(*id));
+            let revision = (self.document_revision(ctx), self.doc.model.edit_context);
             if clicked {
                 self.xr_erasing.clear();
                 state.erasing = true;
+                state.erase_revision = Some(revision);
+            }
+            if state.erasing && state.erase_revision != Some(revision) {
+                state.cancel_erasing(self);
+                ctx.request_repaint();
+                return;
             }
             if state.erasing {
+                if activate && let Some(sweep) = state.erase_sweep.take() && sweep.revision == revision {
+                    self.xr_erasing.extend(sweep.ids.into_iter().filter(|id|
+                        self.doc.model.contains_entity(id) && !self.doc.model.is_locked(*id)));
+                }
                 if let Some(id) = self.hover { self.xr_erasing.insert(id); }
                 if activate && !pointer.primary_down {
                     state.erasing = false;
+                    state.erase_revision = None;
                     let mut ids=std::mem::take(&mut self.xr_erasing);
                     ids.retain(|id|self.doc.model.contains_entity(id) && !self.doc.model.is_locked(*id));
                     if !ids.is_empty() { self.erase_entities(&ids,tr!("app.erase_geometry"),ctx); }
@@ -1954,6 +1981,40 @@ mod erase_stroke_tests {
     }
 
     #[test]
+    fn erase_sweep_targets_join_the_release_transaction_and_undo_together() {
+        let (mut app, model, ids) = fixture();
+        let ctx = egui::Context::default();
+        let mut state = State::default();
+        app.xr_world_pointer(Some(&pointer(&model, Some(ids[0]), true, true)), &mut state, true, &ctx, &mut Storage);
+        app.xr_set_erase_sweep(&mut state, BTreeSet::from([ids[1], u64::MAX]));
+        // Repeated egui layout must not consume the pending interval early.
+        app.xr_world_pointer(Some(&pointer(&model, None, true, false)), &mut state, false, &ctx, &mut Storage);
+        assert_eq!(app.xr_erasing, BTreeSet::from([ids[0]]));
+        app.xr_world_pointer(Some(&pointer(&model, None, false, false)), &mut state, true, &ctx, &mut Storage);
+        assert!(app.doc.model.edges.is_empty());
+        assert!(state.erase_sweep.is_none());
+        app.undo(&ctx, false);
+        assert_eq!(app.doc.model, *model);
+    }
+
+    #[test]
+    fn erase_sweep_and_collected_targets_cancel_when_the_document_changes() {
+        let (mut app, model, ids) = fixture();
+        let ctx = egui::Context::default();
+        let mut state = State::default();
+        app.xr_world_pointer(Some(&pointer(&model, Some(ids[0]), true, true)), &mut state, true, &ctx, &mut Storage);
+        app.xr_set_erase_sweep(&mut state, BTreeSet::from([ids[1]]));
+        app.doc.model.add_edge(DVec3::X * 2., DVec3::X * 3.).unwrap();
+        app.changed(&ctx);
+        let changed = app.doc.model.clone();
+        app.xr_world_pointer(Some(&pointer(&model, None, false, false)), &mut state, true, &ctx, &mut Storage);
+        assert_eq!(app.doc.model, changed);
+        assert!(app.xr_erasing.is_empty());
+        assert!(!state.erasing);
+        assert!(state.erase_sweep.is_none());
+    }
+
+    #[test]
     fn lost_pointer_and_cancel_discard_erase_without_later_release_commit() {
         for cancel in 0..3 {
             let (mut app,model,ids)=fixture();
@@ -1961,6 +2022,7 @@ mod erase_stroke_tests {
             let mut state=State::default();
             let mut storage=Storage;
             app.xr_world_pointer(Some(&pointer(&model,Some(ids[0]),true,true)),&mut state,true,&ctx,&mut storage);
+            app.xr_set_erase_sweep(&mut state, BTreeSet::from([ids[1]]));
             if cancel == 1 {
                 let mut input=pointer(&model,Some(ids[1]),true,false);
                 input.cancel=true;
@@ -1974,6 +2036,7 @@ mod erase_stroke_tests {
             assert_eq!(app.doc.model,*model);
             assert!(app.xr_erasing.is_empty());
             assert!(!state.erasing);
+            assert!(state.erase_sweep.is_none());
         }
     }
 }

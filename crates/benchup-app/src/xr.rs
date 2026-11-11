@@ -24,6 +24,9 @@ mod file_dialog;
 mod input;
 
 #[cfg(feature = "openxr")]
+mod erase_sweep;
+
+#[cfg(feature = "openxr")]
 mod cursor;
 
 #[cfg(feature = "openxr")]

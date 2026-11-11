@@ -101,6 +101,7 @@ pub(super) struct Editor {
     scene: super::immersive::Scene,
     view_requested: Option<crate::app_host::WorldView>,
     world_tools: crate::app::xr_tools::State,
+    erase_sweep: super::erase_sweep::EraseSweep,
     native_output: Option<super::desktop::NativeOutput>,
     keyboard_modifiers: egui::Modifiers,
     staged_source: Option<super::immersive::Source>,
@@ -161,6 +162,7 @@ impl Editor {
             scene: super::immersive::Scene::new(device, format),
             view_requested: Some(crate::app_host::WorldView::Scene),
             world_tools: Default::default(),
+            erase_sweep: Default::default(),
             native_output: None,
             keyboard_modifiers: Default::default(),
             staged_source: None,
@@ -226,8 +228,11 @@ impl Editor {
         events.extend(self.keyboard.take_events(&self.ctx, self.input.focused));
         // A keyboard command may undo, replace or hide geometry before the
         // world callback. Never let an earlier erase stroke commit afterward.
-        if events.iter().any(|event|matches!(event,egui::Event::Key {pressed:true,..})) {
+        let cancel_erase = events.iter().any(|event| matches!(event,
+            egui::Event::Key { pressed: true, .. } | egui::Event::WindowFocused(false)));
+        if cancel_erase {
             self.world_tools.cancel_erasing(&mut self.app);
+            self.erase_sweep.reset();
         }
         events.insert(0, egui::Event::ModifiersChanged(self.keyboard_modifiers));
         let raw = egui::RawInput {
@@ -241,6 +246,11 @@ impl Editor {
             ..Default::default()
         };
         let mut preferences = self.app.xr_panel_preferences();
+        let key = self.scene.erase_sweep_key(preferences.scene_scale);
+        let sweep_input = self.input.scene.filter(|_| self.input.focused && !cancel_erase);
+        let targets = self.erase_sweep.update(key, sweep_input, self.start.elapsed().as_secs_f64(),
+            |ray| self.scene.pick_ray(ray, preferences));
+        self.app.xr_set_erase_sweep(&mut self.world_tools, targets);
         let mut file_preferences = self.app.xr_file_preferences();
         let mut recenter = false;
         let mut fit_scene = None;
@@ -412,6 +422,12 @@ impl Editor {
     }
 
     pub(super) fn set_input(&mut self, mut input: super::input::FrameInput) {
+        // Input can keep updating while the runtime skips UI rendering. Do not
+        // let a lost capture survive until a later release callback.
+        if super::input::erase_capture_cancelled(self.input.scene, input.scene) {
+            self.world_tools.cancel_erasing(&mut self.app);
+            self.erase_sweep.reset();
+        }
         if self.input.focused && !input.focused {
             self.input.events.push(egui::Event::WindowFocused(false));
         }
