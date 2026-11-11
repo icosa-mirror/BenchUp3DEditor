@@ -62,6 +62,7 @@ pub(crate) struct Pointer {
     // Production pointers must carry a source stamp. Unit fixtures may omit it
     // when exercising model-space math independently of the rendering host.
     pub stamp: Option<InputStamp>,
+    pub handle: Option<(super::viewport_overlays::HandleAction, DVec3)>,
     pub ray: Ray,
     pub model: Arc<Model>,
     pub hit: Option<Hit>,
@@ -80,6 +81,7 @@ pub(crate) struct State {
     grab_depth: Option<f64>,
     section: Option<SectionGrab>,
     pointer_target: Option<DVec3>,
+    handle_hint: Option<&'static str>,
     reference: Option<drawing_inference::DrawingReference>,
     erasing: bool,
     erase_revision: Option<(u64, Option<u64>)>,
@@ -131,6 +133,10 @@ struct SectionGrab {
 }
 
 impl State {
+    pub(crate) fn capturing(&self) -> bool {
+        self.erasing || self.stroke || self.grab_depth.is_some() || self.section.is_some()
+    }
+    pub(crate) fn handle_hint(&self) -> Option<&'static str> { self.handle_hint }
     pub(crate) fn take_precision_input_request(&mut self) -> bool {
         std::mem::take(&mut self.request_precision_input)
     }
@@ -517,6 +523,7 @@ impl BenchUpApp {
         storage: &mut dyn eframe::Storage,
     ) {
         state.pointer_target = None;
+        state.handle_hint = None;
         if state.model_phase == Some(ModelPhase::Typing)
             && (state.precision_target.is_none() || state.precision_target != self.xr_precision_target(ctx, true))
         {
@@ -595,6 +602,29 @@ impl BenchUpApp {
             return;
         }
         let clicked = activate && pointer.activate;
+        if let Some((action, point)) = pointer.handle.filter(|_| !state.capturing()) {
+            use super::viewport_overlays::HandleAction;
+            self.snap = None;
+            self.hover = None;
+            let available = match action {
+                HandleAction::EditJoint(id) => !self.joinery.open && self.doc.model.connections.get(&id)
+                    .is_some_and(|connection| matches!(connection.operation,
+                        benchup_core::connections::ConnectionOperation::Joinery(_))),
+            };
+            if !available { return; }
+            state.pointer_target = Some(point);
+            state.handle_hint = Some(match action { HandleAction::EditJoint(_) => "Trigger edits this wood joint." });
+            if clicked {
+                self.xr_cancel_action(false, ctx, storage);
+                state.cancel_erasing(self);
+                state.reference = None;
+                state.precision_target = None;
+                state.handle_hint = None;
+                match action { HandleAction::EditJoint(id) => { self.edit_joint_from_marker(id, ctx); } }
+                self.persist_inspector_changes(ctx, Some(storage), false);
+            }
+            return;
+        }
         if self.paste_preview.is_none() && self.modeling.is_none()
             && pointer.hit.is_some_and(|hit| hit.section)
             && (matches!(self.tool, Tool::PushPull | Tool::Offset)
@@ -1638,7 +1668,7 @@ mod precision_panel_tests {
             crate::app_host::set_world_input(&ctx, true);
             app.toggle_axis_lock(Axis::X, &ctx);
             assert!(app.snap.is_none(), "panel cursor must not become a scene target");
-            let pointer = Pointer { stamp: None, ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
+            let pointer = Pointer { stamp: None, handle: None, ray: Ray { origin: DVec3::new(2., 1., 1.), direction: -DVec3::Z },
                 model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
                 primary_down: false, visible_reference: None };
             state.set_panel_hover(false);
@@ -1671,7 +1701,7 @@ mod precision_panel_tests {
         } else {
             app.line_start = Some(DVec3::ZERO);
         }
-        let pointer = Pointer { stamp: None, ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
+        let pointer = Pointer { stamp: None, handle: None, ray: Ray { origin: DVec3::new(2.,1.,1.), direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: None, activate: false, cancel: false,
             primary_down: false, visible_reference: None };
         let mut state = State::default();
@@ -1770,7 +1800,7 @@ mod section_cap_tests {
         let hit=index.nearest(ray,f64::INFINITY).unwrap();
         assert_eq!(hit.owner,owner);
         assert_eq!(hit.normal,normal);
-        let pointer=Pointer { stamp: None, ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
+        let pointer=Pointer { stamp: None, handle: None, ray,model:Arc::new(doc.model.clone()),hit:Some(Hit {
             entity:hit.owner,section:true,face:None,edge:None,guide:None,guide_points:[None;8],
             flip:None,annotation:None,edge_targets:[None;3],point:hit.point,normal:hit.normal,center:None,
         }), activate:true,cancel:false,primary_down:true,visible_reference:None };
@@ -1853,7 +1883,7 @@ mod precise_modeling_tests {
     }
 
     fn point(app: &BenchUpApp, position: DVec3, face: Option<u64>, clicked: bool, down: bool) -> Pointer {
-        Pointer { stamp: None, ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
+        Pointer { stamp: None, handle: None, ray: Ray { origin: position + DVec3::Z * 2., direction: -DVec3::Z },
             model: Arc::new(app.doc.model.clone()), hit: face.map(|face| Hit {
                 entity: Some(face), section: false, face: Some(face), edge: None, guide: None, guide_points: [None;8],
                 flip: None, annotation: None, edge_targets: [None;3], point: position,
@@ -1977,6 +2007,7 @@ mod erase_stroke_tests {
     fn pointer(model: &Arc<Model>, entity: Option<u64>, down: bool, activate: bool) -> Pointer {
         Pointer {
             stamp: None,
+            handle: None,
             ray:Ray {origin:DVec3::new(0.5,0.,1.),direction:-DVec3::Z},
             model:Arc::clone(model),
             hit:entity.map(|entity|Hit {
@@ -2019,6 +2050,22 @@ mod erase_stroke_tests {
         app.xr_world_pointer(Some(&pointer(&model, None, false, false)), &mut state, true, &ctx, &mut Storage);
         assert!(app.doc.model.edges.is_empty());
         assert!(state.erase_sweep.is_none());
+        app.undo(&ctx, false);
+        assert_eq!(app.doc.model, *model);
+    }
+
+    #[test]
+    fn captured_erase_release_over_a_joint_handle_keeps_the_release_transaction() {
+        let (mut app, model, ids) = fixture();
+        let ctx = egui::Context::default();
+        let mut state = State::default();
+        app.xr_world_pointer(Some(&pointer(&model, Some(ids[0]), true, true)), &mut state, true, &ctx, &mut Storage);
+        let mut release = pointer(&model, None, false, false);
+        release.handle = Some((super::viewport_overlays::HandleAction::EditJoint(123), DVec3::ZERO));
+        app.xr_world_pointer(Some(&release), &mut state, true, &ctx, &mut Storage);
+        assert!(!app.doc.model.edges.contains_key(&ids[0]));
+        assert!(app.doc.model.edges.contains_key(&ids[1]));
+        assert!(!app.joinery.open);
         app.undo(&ctx, false);
         assert_eq!(app.doc.model, *model);
     }
@@ -2095,7 +2142,7 @@ mod input_revision_tests {
         let _ = ctx.run_test_ui(Default::default(), |_| { source = Some(app.xr_scene_source(ctx)); });
         let source = source.unwrap();
         Pointer {
-            stamp: Some(source.input_stamp), model: source.model,
+            stamp: Some(source.input_stamp), handle: None, model: source.model,
             ray: Ray { origin: DVec3::new(0.5, 0., 1.), direction: -DVec3::Z },
             hit: Some(Hit { entity: app.doc.model.entity_in_context(edge), section: false,
                 face: None, edge: Some(edge), guide: None, guide_points: [None; 8], flip: None,

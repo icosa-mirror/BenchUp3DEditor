@@ -7,6 +7,7 @@ use openxr as xr;
 
 #[derive(Clone, Copy)]
 pub(super) struct SceneHit {
+    pub handle: Option<crate::app::viewport_overlays::HandleAction>,
     pub entity: Option<u64>,
     pub section_normal: Option<DVec3>,
     pub face: Option<u64>,

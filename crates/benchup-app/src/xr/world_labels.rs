@@ -178,6 +178,7 @@ pub(super) struct Labels {
 }
 
 /// The billboard basis in model coordinates; units is tracking metres per model unit.
+#[derive(Clone, Copy)]
 pub(super) struct View {
     pub head: DVec3,
     pub right: DVec3,

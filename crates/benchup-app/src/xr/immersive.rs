@@ -22,6 +22,7 @@ pub(crate) struct Source {
     pub references: Arc<crate::app::viewport_overlays::Overlays>,
     pub tool: benchup_core::Tool,
     pub precise_modeling: bool,
+    pub input_captured: bool,
     pub tool_target: Option<DVec3>,
     pub modeling: bool,
     pub snap_edges: bool,
@@ -72,6 +73,7 @@ pub(super) struct Scene {
     dark: bool,
     sections: crate::app::display_scene::SectionCache,
     section_picking: super::section_picking::Index,
+    handles: super::world_handles::Handles,
     surfaces: super::world_surfaces::Surfaces,
     backdrop: super::backdrop::Backdrop,
     grid: super::floor_grid::Grid,
@@ -107,6 +109,7 @@ impl Scene {
             dark: false,
             sections: Default::default(),
             section_picking: Default::default(),
+            handles: Default::default(),
             surfaces: super::world_surfaces::Surfaces::new(device, format),
             backdrop: super::backdrop::Backdrop::new(device, format),
             grid: super::floor_grid::Grid::new(device, format),
@@ -123,6 +126,7 @@ impl Scene {
     }
 
     pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: Option<WorldView>) {
+        self.handles.prepare(&source.references);
         self.head = pose_matrix(anchor);
         self.faces
             .update_for_revision(&source.model, source.revision);
@@ -335,6 +339,24 @@ impl Scene {
             direction: inverse.transform_vector3(ray.direction).normalize(),
         };
         let placing_copy = source.paste.is_some();
+        let view = super::world_labels::View {
+            head: inverse.transform_point3(self.head.w_axis.truncate()),
+            right: inverse.transform_vector3(self.head.x_axis.truncate()).normalize(),
+            up: inverse.transform_vector3(self.head.y_axis.truncate()).normalize(),
+            units: transform.x_axis.truncate().length(), font_scale: (preferences.ui_scale / 1.3) as f64,
+        };
+        if !placing_copy && !source.modeling && !source.input_captured
+            && self.input.is_none_or(|input| !input.pressed)
+            && let Some((action, point)) = self.handles.pick(model_ray, view, |handle, point|
+                !handle.depth || source.display.section_contains(handle.point)
+                    && self.owned_marker_visible(view.head, point, &handle.owners))
+        {
+            return Some(super::input::SceneHit {
+                handle: Some(action), entity: None, section_normal: None, face: None, edge: None,
+                guide: None, guide_points: [None; 8], flip: None, annotation: None, point,
+                distance: transform.transform_point3(point).distance(ray.origin),
+            });
+        }
         if source.tool == benchup_core::Tool::Flip && !source.modeling && !placing_copy
             && let Some((&entity, (axis, point, _))) = source.selected.first().zip(
                 source.overlays.flip_planes.iter().filter_map(|&(axis,quad)| {
@@ -343,6 +365,7 @@ impl Scene {
                 }).min_by(|a,b|a.2.total_cmp(&b.2)))
         {
             return Some(super::input::SceneHit {
+                handle: None,
                 entity:Some(entity), section_normal:None, face:None, edge:None, guide:None, guide_points:[None;8],
                 flip:Some(axis), annotation:None, point,
                 distance:transform.transform_point3(point).distance(ray.origin),
@@ -352,13 +375,6 @@ impl Scene {
             | benchup_core::Tool::Erase | benchup_core::Tool::Move
             | benchup_core::Tool::Rotate | benchup_core::Tool::Scale) || source.pick_text;
         if annotation_tool && !placing_copy && !source.modeling {
-            let units = transform.x_axis.truncate().length();
-            let view = super::world_labels::View {
-                head:inverse.transform_point3(self.head.w_axis.truncate()),
-                right:inverse.transform_vector3(self.head.x_axis.truncate()).normalize(),
-                up:inverse.transform_vector3(self.head.y_axis.truncate()).normalize(),
-                units, font_scale:(preferences.ui_scale / 1.3) as f64,
-            };
             let allowed = |id| {
                 let state = self.entities.get(id);
                 !state.hidden && state.context.is_some()
@@ -372,6 +388,7 @@ impl Scene {
             }, |_,point|self.unoccluded(model_ray.origin,point)));
             if let Some((id,point)) = annotation {
                 return Some(super::input::SceneHit {
+                    handle: None,
                     entity:Some(self.entities.get(id).context?), section_normal:None, annotation:Some(id),
                     face:None, edge:None, guide:None, guide_points:[None;8], flip:None, point,
                     distance:transform.transform_point3(point).distance(ray.origin),
@@ -430,6 +447,7 @@ impl Scene {
         } else {
             if face_hit.is_none() && let Some(cap) = cap {
                 return Some(super::input::SceneHit {
+                    handle: None,
                     entity: cap.owner.filter(|id| !self.entities.get(*id).hidden), section_normal: Some(cap.normal), face: None, edge: None,
                     guide: None, guide_points: [None;8], flip: None, annotation: None,
                     point: cap.point, distance: transform.transform_point3(cap.point).distance(ray.origin),
@@ -444,6 +462,7 @@ impl Scene {
         }
         let tracking_point = transform.transform_point3(point);
         Some(super::input::SceneHit {
+            handle: None,
             entity: Some(entity),
             section_normal: None,
             face,
@@ -471,6 +490,16 @@ impl Scene {
             .is_none_or(|(_,t,_)|t+1e-5 >= distance)
     }
 
+    fn owned_marker_visible(&self, origin: DVec3, point: DVec3, owners: &BTreeSet<u64>) -> bool {
+        let distance = point.distance(origin);
+        if distance < 1e-12 { return false; }
+        let ray = benchup_core::Ray { origin, direction: (point - origin) / distance };
+        let face = self.picking.nearest(&self.faces, &self.entities, ray, false)
+            .map(|(id, distance, _)| (Some(id), distance));
+        let cap = self.section_picking.nearest(ray, f64::INFINITY).map(|hit| (hit.owner, hit.distance));
+        super::world_handles::surface_visible(distance, face, cap, owners)
+    }
+
     pub fn tool_pointer(&self, input: super::input::SceneInput, scale: f32) -> Option<crate::app::xr_tools::Pointer> {
         let (source, placement) = (self.source.as_ref()?, self.placement.as_ref()?);
         let inverse = (self.navigation.matrix() * placement.model_to_tracking(scale as f64)).inverse();
@@ -481,9 +510,10 @@ impl Scene {
         let snapping = !source.modeling && (source.tool.is_drawing() || source.tool.is_measuring() || source.tool == benchup_core::Tool::GrainDirection || source.paste.is_some());
         Some(crate::app::xr_tools::Pointer {
             stamp: Some(source.input_stamp.clone()),
+            handle: input.hit.and_then(|hit| hit.handle.map(|action| (action, hit.point))),
             ray,
             model: source.model.clone(),
-            hit: input.hit.map(|hit| {
+            hit: input.hit.filter(|hit| hit.handle.is_none()).map(|hit| {
                 crate::app::xr_tools::Hit {
                     entity:hit.entity,section:hit.section_normal.is_some(),face:hit.face,edge:hit.edge,point:hit.point,
                     guide:hit.guide.map(|id|placement.guide_frame().segment(&source.model.guides[&id])),

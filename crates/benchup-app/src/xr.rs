@@ -27,6 +27,9 @@ mod input;
 mod erase_sweep;
 
 #[cfg(feature = "openxr")]
+mod world_handles;
+
+#[cfg(feature = "openxr")]
 mod cursor;
 
 #[cfg(feature = "openxr")]

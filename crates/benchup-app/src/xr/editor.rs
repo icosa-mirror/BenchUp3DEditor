@@ -369,6 +369,7 @@ impl Editor {
             if preferences.immersive_scene {
                 let mut source=self.app.xr_scene_source(&self.ctx);
                 source.tool_target=self.world_tools.pointer_target().or(source.tool_target);
+                if let Some(hint) = self.world_tools.handle_hint() { source.status = format!("{hint}\n{}", source.status); }
                 self.scene.stage_labels(&self.ctx, &source);
                 self.staged_source=Some(source);
             } else {
@@ -493,6 +494,7 @@ impl Editor {
     pub(super) fn begin_immersive_frame(&mut self, anchor: openxr::Posef) {
         let mut source = self.staged_source.take().unwrap_or_else(||self.app.xr_scene_source(&self.ctx));
         source.tool_target = self.world_tools.pointer_target().or(source.tool_target);
+        source.input_captured = self.world_tools.capturing();
         self.scene.begin_frame(
             source,
             anchor,

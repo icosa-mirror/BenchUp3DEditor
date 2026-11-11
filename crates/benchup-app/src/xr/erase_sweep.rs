@@ -31,7 +31,7 @@ mod tests {
         SceneInput { owner: 0, ray, hit: None, select, clear: false, pressed: down, primary_down: down }
     }
     fn hit(id: u64, point: DVec3, ray: Ray) -> SceneHit {
-        SceneHit { entity: Some(id), section_normal: None, face: None, edge: Some(id), guide: None,
+        SceneHit { handle: None, entity: Some(id), section_normal: None, face: None, edge: Some(id), guide: None,
             guide_points: [None; 8], flip: None, annotation: None, point, distance: point.distance(ray.origin) }
     }
 

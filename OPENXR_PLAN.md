@@ -32,6 +32,10 @@ All native world-tool callbacks now reject input picked from a different committ
 model, project generation, editing context, tool or display state. Identical reloads
 are distinguished from the old project; continuous evaluated previews use the
 committed-model revision so valid dragging remains active.
+Joint edit/warning billboards now have retained controller hit rectangles and
+world hints, using the shared desktop edit action, context navigation and permission
+checks. Captured gestures keep priority over icons. Fastener entry-face controls
+are the next concrete handle gap.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -127,7 +131,7 @@ The numbered rows are the checklist for the replacement milestone.
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |
-| 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, joint edit/warning glyphs, owner-aware guides, solid operand feedback and shared boolean/flip commands | Audit all desktop-supported target/edit gestures in immersive space; evaluated-only paint targets remain restricted |
+| 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, controller joint edit/warning icons and shared editor action, owner-aware guides, solid operand feedback and shared boolean/flip commands | Fastener entry-face controls still need an XR route; audit remaining target/edit gestures; evaluated-only paint targets remain restricted |
 | 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input; shared View framing and standard directions target XR placement | Audit remaining reachable commands, handles and native dialogs; controller acceptance of recent lock/view/file workflows remains pending |
 
 The object-length axis diagram in `entity_gizmo.rs` is inspector UI, not a spatial

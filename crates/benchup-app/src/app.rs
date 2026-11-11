@@ -542,6 +542,7 @@ impl BenchUpApp {
         crate::xr::immersive::Source {
             model: self.xr_scene_model.shared(), revision: self.xr_scene_model.revision(),
             input_stamp,
+            input_captured: false,
             camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),

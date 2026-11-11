@@ -31,6 +31,23 @@ pub(crate) struct Overlays {
     pub overlay_segments: Vec<Segment>,
     pub arrows: Vec<(DVec3, DVec3, Color32)>,
     pub flip_planes: Vec<(Axis, [DVec3; 4])>,
+    pub handles: Vec<Handle>,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HandleAction {
+    EditJoint(u64),
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+#[derive(Clone, PartialEq)]
+pub(crate) struct Handle {
+    pub action: HandleAction,
+    pub point: DVec3,
+    pub bounds: [f64; 4],
+    pub owners: std::sync::Arc<BTreeSet<u64>>,
+    pub depth: bool,
 }
 
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]

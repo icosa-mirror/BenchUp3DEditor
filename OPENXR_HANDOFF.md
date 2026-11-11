@@ -33,8 +33,8 @@ Recorded human feedback:
 Section-cap ownership and controller picking landed in `92b7f8a`. Axis/plane
 locks and host-aware shared precision input landed in `1de74a5`. Destination-folder
 creation landed in `25b514f`; shared immersive View controls landed in `25fd106`.
-Bounded captured erase-stroke interpolation landed in `6ca8676`. Current work
-guards all native world-tool callbacks against stale scene input.
+Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
+guards landed in `466b9f4`. Current work adds controller actions to viewport handles.
 Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
 
@@ -159,8 +159,35 @@ Move preview input. `input-revision-source-regressions.log` passes two retained
 snapshot/context cases. `input-revision-erase-regressions.log` passes all eight
 erase cases, including project-generation reset. The native example build passes
 without warnings in `input-revision-build.log`. The executable is preserved under
-this milestone commit in `.local/openxr/preview-builds/`; no headset session was
+`466b9f4` in `.local/openxr/preview-builds/`; no headset session was
 launched. Full live transition/capture acceptance remains pending.
+
+Joint edit/warning icons now have typed controller hit targets alongside their
+existing GPU billboards. Cached reference overlays own their model-space anchors,
+28-point rectangles and owner sets; a retained spatial index uses the shared
+billboard basis, distance sizing and UI scale. Same-depth overlaps follow draw
+order, and action metadata updates even when rectangle geometry is unchanged.
+Face/cap hit visibility follows the current first-surface owner rule; no text
+shader or label occlusion policy was changed.
+
+An idle primary click opens the existing joint editor through the desktop marker
+operation, including nested context navigation, pair selection and lock/sharing
+guards. Inspector preference changes flush immediately. Hover supplies a world
+instruction hint. Typed handles do not become document faces or erase targets;
+active captured gestures retain their release transaction when crossing an icon.
+Fastener entry-face controls still need the same XR route and remain next work.
+
+`joint-handle-tests.log` contains passing controller scope/permission/preference,
+hit-rectangle/scaling/action-cache and face/cap visibility cases (plus unrelated
+matches from the initial filter). `joint-handle-capture-tests.log` passes captured
+erase release over a joint control. `joint-handle-joint-regressions.log` passes all
+20 joint-related cases, including desktop marker navigation and the new XR route.
+Two pre-existing fixture assumptions were corrected separately: `1716044` gives
+the navigation-only test a saved baseline; `5ee922d` scopes outside-body volume
+queries to their parent assembly. Production behavior was unchanged by those fixes.
+The native example build passes without warnings in `joint-handle-build.log`.
+The executable is frozen under this milestone commit in `.local/openxr/preview-builds/`.
+No replacement headset session was launched; controller/visual acceptance remains open.
 
 ## User direction
 

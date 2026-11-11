@@ -458,7 +458,7 @@ fn warning(ui: &mut egui::Ui, message: impl Into<String>) {
 impl BenchUpApp {
     #[cfg(all(feature="openxr",not(target_arch="wasm32")))]
     pub(super) fn append_spatial_joinery(&self,dark:bool,output:&mut super::viewport_overlays::Overlays) {
-        use super::viewport_overlays::{Billboard,Glyph};
+        use super::viewport_overlays::{Billboard,Glyph,Handle,HandleAction};
         if self.history_preview.is_some() {return;}
         if self.doc.display.wood_joinery {
             let preview=self.active_joint_preview().and_then(|preview|preview.result.as_ref().ok());
@@ -476,7 +476,10 @@ impl BenchUpApp {
                     shapes.push(Glyph::Path {points:path.iter().map(|&(x,y)|[x,y]).collect(),color:Self::joinery_part_color(index),width:1.8});
                 }
             }
-            output.billboards.push(Billboard {point,shapes,owners:std::sync::Arc::new(owners),depth:true});
+            let owners = std::sync::Arc::new(owners);
+            output.handles.push(Handle { action: HandleAction::EditJoint(id), point,
+                bounds: [-14., -14., 14., 14.], owners: std::sync::Arc::clone(&owners), depth: true });
+            output.billboards.push(Billboard {point,shapes,owners,depth:true});
         }
     }
     pub(super) fn joinery_edit_members(&self) -> Option<[u64; 2]> {
@@ -567,7 +570,7 @@ impl BenchUpApp {
             }
         }
     }
-    fn edit_joint_from_marker(&mut self, id: u64, ctx: &egui::Context) -> bool {
+    pub(super) fn edit_joint_from_marker(&mut self, id: u64, ctx: &egui::Context) -> bool {
         let Some(connection) = self.doc.model.connections.get(&id) else { return false; };
         if !matches!(connection.operation, ConnectionOperation::Joinery(_)) { return false; }
         let members = connection.members;
@@ -1298,6 +1301,68 @@ mod tests {
             assert_eq!(app.doc.model, expected, "opening the editor must only navigate");
             assert!(app.doc.history.undo_label().is_none());
             assert!(!app.project.modified);
+        }
+    }
+
+    #[test]
+    #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+    fn xr_joint_handles_open_the_shared_editor_with_scope_permissions_and_immediate_preferences() {
+        use super::super::xr_tools::{Pointer, State};
+        use super::super::viewport_overlays::HandleAction;
+        #[derive(Default)]
+        struct XrStorage(std::collections::BTreeMap<String, String>, usize);
+        impl eframe::Storage for XrStorage {
+            fn get_string(&self, key: &str) -> Option<String> { self.0.get(key).cloned() }
+            fn set_string(&mut self, key: &str, value: String) { self.0.insert(key.into(), value); }
+            fn remove_string(&mut self, key: &str) { self.0.remove(key); }
+            fn flush(&mut self) { self.1 += 1; }
+        }
+        for nested in [false, true] {
+            for locked in [false, true] {
+                let (mut app, ctx, members) = fixture();
+                let joint = app.doc.model.add_connection(Connection { members, entry_face: None,
+                    operation: ConnectionOperation::Joinery(JointSettings::default()) }).unwrap();
+                let roots = if nested {
+                    BTreeSet::from([app.doc.model.make_object(&BTreeSet::from(members), false, "Assembly").unwrap()])
+                } else { BTreeSet::from(members) };
+                let members = app.doc.model.connections[&joint].members;
+                if locked { app.doc.model.locked.insert(members[0]); }
+                app.selected = roots.clone();
+                app.set_tool(Tool::Erase);
+                app.doc.display.wood_joinery = false;
+                app.project.modified = false;
+                let mut source = None;
+                let _ = ctx.run_test_ui(Default::default(), |_| { source = Some(app.xr_scene_source(&ctx)); });
+                let source = source.unwrap();
+                let handle = source.references.handles.iter().find(|handle| handle.action == HandleAction::EditJoint(joint)).unwrap();
+                assert_eq!(handle.bounds, [-14., -14., 14., 14.]);
+                let mut pointer = Pointer { stamp: Some(source.input_stamp.clone()),
+                    handle: Some((handle.action, handle.point)), ray: benchup_core::Ray {
+                        origin: handle.point + DVec3::Z, direction: -DVec3::Z }, model: source.model.clone(),
+                    hit: None, activate: false, cancel: false, primary_down: false, visible_reference: None };
+                let mut state = State::default();
+                let mut storage = XrStorage::default();
+                app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut storage);
+                assert!(state.handle_hint().is_some());
+                assert!(!app.joinery.open);
+                let mut expected = app.doc.model.clone();
+                pointer.activate = true;
+                pointer.primary_down = true;
+                app.xr_world_pointer(Some(&pointer), &mut state, true, &ctx, &mut storage);
+                assert!(app.xr_erasing.is_empty(), "an edit icon is not an erase target");
+                assert!(!app.project.modified);
+                assert!(storage.1 > 0 && !storage.0.is_empty());
+                if locked {
+                    assert!(!app.joinery.open);
+                    assert_eq!(app.selected, roots);
+                } else {
+                    assert!(app.joinery.open);
+                    assert_eq!(app.selected, BTreeSet::from(members));
+                    expected.edit_context = app.doc.model.parent(members[0]);
+                    assert_eq!(app.doc.model.edit_context, expected.edit_context);
+                }
+                assert_eq!(app.doc.model, expected);
+            }
         }
     }
 
