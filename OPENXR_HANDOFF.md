@@ -476,6 +476,12 @@ session was launched.
 
 ## User direction
 
+Controller UI destination (2026-11-11): once the controls are compact enough, put
+the UI panel on the non-dominant controller. The immersive model remains world
+space. See the plan's controller-attached UI section for layout, shared-state,
+handedness, tracking and two-grip navigation work. This is recorded future work;
+the current preview still uses the world panel.
+
 1. Continue immersive viewport replacement autonomously, updating both documents
    with reality as milestones land. Only pause for human verification when the
    user requests it; do not stop merely because a milestone was committed or an

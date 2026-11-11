@@ -290,6 +290,22 @@ or complete-parity claims.
    obtain a suitable fixture before that gate rather than substituting a small
    example or claiming measured performance from code inspection.
 
+## Controller-attached UI direction
+
+1. User direction (2026-11-11): once the 2D controls are compact enough, the UI
+   becomes a panel attached to the non-dominant controller. The immersive scene
+   remains in world space. This is the intended UI destination after compacting
+   the current desktop-derived controls, not an accepted capability of this build.
+2. Reuse the shared app commands, preferences, modal and keyboard routes while
+   reducing the panel layout. Keep the dominant controller available to point at
+   the panel and interact with the scene. Handedness and any new placement or
+   layout preferences must persist through the existing shared preference path.
+3. Before replacing the current world panel, implement tracked non-dominant-hand
+   anchoring and explicitly handle tracking loss, focus changes and two-grip
+   scene navigation. Verify readability and reachability of menus, modals and
+   text entry on the compact panel. The current world panel remains the interim
+   interaction surface until this work is ready.
+
 ## Stereo rendering decision and later optimization
 
 1. Retain two explicit eye passes now. Both eyes share retained scene geometry,
