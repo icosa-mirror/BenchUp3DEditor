@@ -294,6 +294,15 @@ impl BenchUpApp {
         }
     }
 
+    pub(super) fn xr_panel_status(&self, ctx: &egui::Context) -> String {
+        let time = ctx.input(|input| input.time);
+        self.notice.as_ref().filter(|(_, until)| time < *until)
+            .map(|(message, _)| message.clone())
+            .or_else(|| self.shared_status(time))
+            .or_else(|| self.modeling_status_text())
+            .unwrap_or_else(|| self.xr_tool_hint().to_owned())
+    }
+
     pub(super) fn xr_tool_hint(&self) -> &'static str {
         if self.tool == Tool::Select && self.xr_panel.window_selection { return WINDOW_HINT; }
         if let Some(measurement) = &self.measurement {
@@ -674,7 +683,12 @@ impl BenchUpApp {
             } else {
                 hint(self.tool, preferences.precise_modeling)
             };
-            ui.label(egui::RichText::new(hint).size(16.));
+            // The shared status bar already carries this instruction in the
+            // immersive layout. Keep a separate instruction only when that bar
+            // is showing a different notice/value, or in the panel-only editor.
+            if !preferences.immersive_scene || self.xr_panel_status(&ctx).trim() != hint.trim() {
+                ui.label(egui::RichText::new(hint).size(16.));
+            }
         });
     }
 

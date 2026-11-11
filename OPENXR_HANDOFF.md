@@ -7,6 +7,22 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+C20 removes a demonstrated layout duplication: the default controller tool hint
+appeared in both the shared status bar and the XR controls, with the latter's
+tail clipped near the keyboard area. The immersive controls now omit a hint only
+when it exactly matches the current status-bar message. Distinct notices/value
+messages retain their separate tool instruction; panel-only controller help is
+unchanged. The XR status bar exposes its complete message on hover. Both routes
+share the same status-selection helper, retaining notice/shared/modeling/hint
+priority. There are no new preferences or desktop/Web behavior changes. The
+locked build passes without warnings (`.local/openxr/compact-hints-build.log`).
+Paired independent RTX 4090 Vulkan renders of `d01c57a` and the new build show
+the duplicate removed, more inspector content and controls clear of the keyboard
+area (`.local/openxr/compact-hints-render/`). Both logs contain no
+error/warning/panic messages; `renderer-check.json` records the binary hash and
+scope. The executable is frozen under this milestone's source commit. This is
+not headset hover acceptance or complete controller UI readability acceptance.
+
 C19 adds optional controller attachment under View and comfort, with saved
 dominant hand and a separate controller width (default 0.45 m). World placement
 remains the default. The panel follows the other grip and faces the user with

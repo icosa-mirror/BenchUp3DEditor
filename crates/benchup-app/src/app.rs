@@ -3136,11 +3136,7 @@ impl BenchUpApp {
                     let message = self.viewport_status_message(&ctx);
                     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
                     let message = if _immersive {
-                        self.notice.as_ref().filter(|(_,until)|ctx.input(|i|i.time)<*until)
-                            .map(|(message,_)|message.clone())
-                            .or_else(||self.shared_status(ctx.input(|i|i.time)))
-                            .or_else(||self.modeling_status_text())
-                            .unwrap_or_else(||self.xr_tool_hint().to_owned())
+                        self.xr_panel_status(&ctx)
                     } else { message };
                     // Reserve the precision controls before fitting the status message.
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -3224,12 +3220,16 @@ impl BenchUpApp {
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
                             dot(ui, ACCENT);
-                            ui.add(
+                            let tooltip = _immersive.then(|| message.clone());
+                            let response = ui.add(
                                 crate::natural_text::Label::new(
                                     RichText::new(message).size(12.).color(colors.muted),
                                 )
                                 .truncate(),
                             );
+                            if let Some(tooltip) = tooltip {
+                                response.on_hover_text(tooltip);
+                            }
                         },
                     );
                 });

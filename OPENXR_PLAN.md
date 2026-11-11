@@ -127,6 +127,11 @@ record scope changes rather than silently changing an estimate.
     implementation passes two placement checks, immediate preference restoration,
     the locked native build and inspected settings-layout snapshots.
     World placement remains the default pending headset readability acceptance.
+20. [x] C20: Remove repeated immersive-panel instructions when the shared status
+    bar already shows the same text; preserve distinct notices/value messages and
+    panel-only controller help. Expose full truncated XR status text on hover.
+    The locked native build and paired before/after hardware layout snapshots
+    pass. Headset hover/readability acceptance remains open.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
