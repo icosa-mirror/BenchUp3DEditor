@@ -34,7 +34,10 @@ Section-cap ownership and controller picking landed in `92b7f8a`. Axis/plane
 locks and host-aware shared precision input landed in `1de74a5`. Destination-folder
 creation landed in `25b514f`; shared immersive View controls landed in `25fd106`.
 Bounded captured erase-stroke interpolation landed in `6ca8676`; shared stale-input
-guards landed in `466b9f4`. Current work adds controller actions to viewport handles.
+guards landed in `466b9f4`; controller joint icons landed in `d7c05f3`. Current work
+is C13, controller enclosing-window selection. The plan now has stable coding
+milestone IDs and checkboxes, separate from verification. Do not derive an effort
+percentage by counting unequal checklist rows; keep audit-discovered work visible.
 Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
 
@@ -175,7 +178,9 @@ operation, including nested context navigation, pair selection and lock/sharing
 guards. Inspector preference changes flush immediately. Hover supplies a world
 instruction hint. Typed handles do not become document faces or erase targets;
 active captured gestures retain their release transaction when crossing an icon.
-Fastener entry-face controls still need the same XR route and remain next work.
+Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
+Keep that existing gate. Its entry-face XR route is conditional future work;
+controller window selection is the next active interaction gap.
 
 `joint-handle-tests.log` contains passing controller scope/permission/preference,
 hit-rectangle/scaling/action-cache and face/cap visibility cases (plus unrelated
@@ -186,7 +191,7 @@ Two pre-existing fixture assumptions were corrected separately: `1716044` gives
 the navigation-only test a saved baseline; `5ee922d` scopes outside-body volume
 queries to their parent assembly. Production behavior was unchanged by those fixes.
 The native example build passes without warnings in `joint-handle-build.log`.
-The executable is frozen under this milestone commit in `.local/openxr/preview-builds/`.
+The executable is frozen under `d7c05f3` in `.local/openxr/preview-builds/`.
 No replacement headset session was launched; controller/visual acceptance remains open.
 
 ## User direction

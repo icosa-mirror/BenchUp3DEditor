@@ -35,7 +35,8 @@ committed-model revision so valid dragging remains active.
 Joint edit/warning billboards now have retained controller hit rectangles and
 world hints, using the shared desktop edit action, context navigation and permission
 checks. Captured gestures keep priority over icons. Fastener entry-face controls
-are the next concrete handle gap.
+remain conditional on the existing disabled feature gate. Controller window
+selection is the next active interaction gap.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -76,6 +77,37 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 | 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas | Remaining workflow/gesture parity audit |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
 | 2C: immersive editing | World-ray selection, broad tool coverage, annotation picking, guides/reference inference, upright two-grip navigation | Remaining inference/tool/handle parity and remaining workflow/gesture parity; immersive mode no longer duplicates the 2D model view |
+
+## Coding milestone checklist
+
+These stable IDs track committed implementation, separately from the acceptance
+gates below. They are not equal units of effort; their count is not a completion
+percentage. Keep newly discovered work under the relevant open milestone and
+record scope changes rather than silently changing an estimate.
+
+1. [x] C01: Runtime/Vulkan interoperability and the complete editor quad panel.
+2. [x] C02: Independent stereo scene and retained GPU overlay/rendering baseline.
+3. [x] C03: Controller ray selection and the shared drawing/modeling tool baseline.
+4. [x] C04: Two-grip navigation, upright lock, comfort controls and recentering.
+5. [x] C05: Physical and controller keyboards, text focus and readable panel controls.
+6. [x] C06: Native lifetime window and in-headset file chooser with New folder.
+7. [x] C07: World numeric entry, Exact value modeling, saved axis/plane controls.
+8. [x] C08: Retained section-cap ownership and picking (`92b7f8a`).
+9. [x] C09: Shared View commands target immersive placement (`25fd106`).
+10. [x] C10: Captured erase interpolation and cancellation (`6ca8676`).
+11. [x] C11: Current-ray source validation across UI changes (`466b9f4`).
+12. [x] C12: Controller joint edit/warning icons (`d7c05f3`).
+13. [ ] C13: Controller enclosing-window selection; implementation in progress.
+14. [ ] C14: Reconcile remaining active desktop selection/context gestures.
+15. [ ] C15: Close the active global/off-face inference and reference gaps.
+16. [ ] C16: Finish the eight-row tool/overlay/command coding audit and its active gaps.
+
+Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
+Its entry-face XR route is conditional future work, not a reason to enable that
+feature or a current required gap against the active desktop editor. Label
+occlusion policy remains a separate discussion-dependent item. Hardware/browser
+acceptance, validation and performance work remain in the verification gates;
+unchecked audit milestones can still reveal additional implementation work.
 
 ## Current architecture and boundaries
 
@@ -131,7 +163,7 @@ The numbered rows are the checklist for the replacement milestone.
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |
-| 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, controller joint edit/warning icons and shared editor action, owner-aware guides, solid operand feedback and shared boolean/flip commands | Fastener entry-face controls still need an XR route; audit remaining target/edit gestures; evaluated-only paint targets remain restricted |
+| 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, controller joint edit/warning icons and shared editor action, owner-aware guides, solid operand feedback and shared boolean/flip commands | Fastener entry-face controls are deferred under the existing disabled gate; audit remaining active target/edit gestures; evaluated-only paint targets remain restricted |
 | 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input; shared View framing and standard directions target XR placement | Audit remaining reachable commands, handles and native dialogs; controller acceptance of recent lock/view/file workflows remains pending |
 
 The object-length axis diagram in `entity_gizmo.rs` is inspector UI, not a spatial
