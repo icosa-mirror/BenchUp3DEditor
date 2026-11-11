@@ -7,6 +7,29 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+C19 adds optional controller attachment under View and comfort, with saved
+dominant hand and a separate controller width (default 0.45 m). World placement
+remains the default. The panel follows the other grip and faces the user with
+upright text; only the dominant hand points/edits while attachment is enabled.
+Grip poses and actions are sampled once before panel-ray mapping. Scene grabs
+freeze the panel and disable its pointer through the existing navigation owner.
+Tracking/focus loss falls back to a recentered world panel, and placement or
+handedness transitions cancel captures. Unknown reference-space changes clear
+the stored hand anchor. The toolbar Recenter action persists world placement.
+The world scene/navigation transform remains independent. Two focused placement
+checks and the extended immediate preference-save/legacy-default restoration test
+pass (`controller-panel-tests.log`, `controller-panel-preferences-tests.log`).
+The locked native build passes without warnings (`controller-panel-final-build.log`).
+Independent RTX 4090 Vulkan settings snapshots show both world/controller options,
+saved handedness/width and disabled distance buttons in controller mode, with no
+error/warning/panic output (`.local/openxr/controller-panel-render/renderer-check.json`).
+These snapshots exercise the settings UI only, not tracked placement. The recovery
+also keeps recentering pending when head and hand tracking disappear together,
+until a valid head pose returns. The executable is frozen under this milestone's
+source commit in `.local/openxr/preview-builds/`. Readability, reachability,
+modals/keyboard and physical controller behaviour remain unverified; no headset
+preview has been launched.
+
 C18 is compacting the existing XR controls toward the requested non-dominant-
 controller panel direction. View/comfort controls now use a collapsed-by-default
 disclosure with shared inspector section memory; Recenter remains a large visible
@@ -23,8 +46,9 @@ and `open/open.png`; `renderer-check.json` records the binary hash and limits.
 The collapsed view exposes more inspector content. The expanded view retains all
 comfort controls, and Recenter/tool actions remain accessible in both. The build
 is frozen under this milestone's source commit in `.local/openxr/preview-builds/`.
-These checks create no OpenXR session. Further layout reduction and controller
-anchoring remain future work; this is not a controller-panel readiness claim.
+These checks create no OpenXR session. Further layout reduction remains open;
+controller anchoring is tracked separately under C19. C18 alone is not a
+controller-panel readiness claim.
 
 The next lifecycle source audit found C17: the frame loop ignored
 `ReferenceSpaceChangePending`. Its implementation now queues LOCAL changes for

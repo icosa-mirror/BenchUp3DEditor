@@ -331,21 +331,17 @@ impl Controllers {
         })
     }
 
-    pub fn sample(
+    pub fn tracking(
         &mut self,
         session: &xr::Session<xr::Vulkan>,
         space: &xr::Space,
         time: xr::Time,
-        panel: EditorPanel,
-        panel_pose: xr::Posef,
         focused: bool,
-        seconds: f32,
-        scene_enabled: bool,
         navigation_enabled: bool,
-        mut scene_hit: impl FnMut(Ray) -> Option<SceneHit>,
-    ) -> xr::Result<FrameInput> {
+    ) -> xr::Result<super::navigation::Input> {
         if !focused {
-            return Ok(self.cancel());
+            self.grip_down = [false; 2];
+            return Ok(Default::default());
         }
         session.sync_actions(&[(&self.set).into()])?;
         let mut navigation = super::navigation::Input {
@@ -377,7 +373,27 @@ impl Controllers {
                 }
             }
         }
-        if navigation_enabled && navigation.buttons.iter().any(|down| *down == Some(true)) {
+        Ok(navigation)
+    }
+
+    pub fn sample(
+        &mut self,
+        session: &xr::Session<xr::Vulkan>,
+        space: &xr::Space,
+        time: xr::Time,
+        panel: EditorPanel,
+        panel_pose: xr::Posef,
+        focused: bool,
+        seconds: f32,
+        scene_enabled: bool,
+        navigation: super::navigation::Input,
+        pointer_hand: Option<usize>,
+        mut scene_hit: impl FnMut(Ray) -> Option<SceneHit>,
+    ) -> xr::Result<FrameInput> {
+        if !focused {
+            return Ok(self.cancel());
+        }
+        if navigation.enabled && navigation.buttons.iter().any(|down| *down == Some(true)) {
             let mut output = self.cancel_pointers();
             output.focused = true;
             output.navigation = navigation;
@@ -386,6 +402,7 @@ impl Controllers {
         let panel_rotation = rotation(panel_pose.orientation);
         let mut hands = [Hand::default(); 2];
         for (index, hand) in hands.iter_mut().enumerate() {
+            if pointer_hand.is_some_and(|owner| owner != index) { continue; }
             let path = self.paths[index];
             if !self.aim.is_active(session, path)? {
                 continue;

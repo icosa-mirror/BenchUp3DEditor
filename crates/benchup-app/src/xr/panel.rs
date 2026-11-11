@@ -621,6 +621,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
     let mut space =
         session.create_reference_space(xr::ReferenceSpaceType::LOCAL, xr::Posef::IDENTITY)?;
     let mut reference_changes = super::reference_space::Changes::default();
+    let mut panel_anchor = super::panel_anchor::Anchor::default();
     let view_space =
         session.create_reference_space(xr::ReferenceSpaceType::VIEW, xr::Posef::IDENTITY)?;
     let mut editor = if show_editor {
@@ -775,6 +776,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             }
             space = session.create_reference_space(xr::ReferenceSpaceType::LOCAL, rebase.offset)?;
             if rebase.reset_world {
+                panel_anchor.reset();
                 anchored = false;
                 if let Some(editor) = &mut editor {
                     editor.reset_tracking_origin();
@@ -816,6 +818,38 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             })
         } else { None };
         if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
+            let preferences = editor.panel_preferences();
+            let navigation = controllers.tracking(
+                &session, &space, frame.predicted_display_time,
+                focused && head_location.is_some(), editor.navigation_enabled(),
+            )?;
+            let placement = panel_anchor.update(
+                preferences,
+                head_location.as_ref().map(|head| head.pose),
+                navigation.hands[1 - preferences.dominant_hand.index()],
+                navigation.enabled && navigation.buttons.iter().any(|down| *down == Some(true)),
+                panel_pose,
+            );
+            if placement.changed {
+                editor.cancel_input(controllers.cancel(), &graphics.device, &graphics.queue)?;
+            }
+            panel_pose = placement.pose;
+            if placement.changed && preferences.controller_panel && !placement.attached {
+                // Head tracking may be lost at the same time as the hand. Keep
+                // the recovery pending until a valid head pose is available.
+                anchored = false;
+                if let Some(head) = &head_location {
+                    if let Some(pose) = upright_anchor(head.pose) {
+                        anchor = pose;
+                        anchored = true;
+                        panel_pose = panel_from_anchor(anchor, preferences.distance_metres);
+                    }
+                }
+            }
+            panel_size = xr::Extent2Df {
+                width: placement.width,
+                height: placement.width * size.height as f32 / size.width as f32,
+            };
             let logical = editor.logical_size();
             let panel = super::EditorPanel::new(
                 glam::DVec2::new(panel_size.width as f64, panel_size.height as f64),
@@ -836,7 +870,8 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                     focused,
                     now.duration_since(last_input).as_secs_f32(),
                     editor.scene_interaction_enabled(),
-                    editor.navigation_enabled(),
+                    navigation,
+                    placement.pointer_hand,
                     |ray| editor.pick_scene_ray(ray),
                 )?;
                 editor.set_input(input);

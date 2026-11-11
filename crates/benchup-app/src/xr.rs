@@ -27,6 +27,9 @@ mod input;
 mod reference_space;
 
 #[cfg(feature = "openxr")]
+mod panel_anchor;
+
+#[cfg(feature = "openxr")]
 mod erase_sweep;
 
 #[cfg(feature = "openxr")]

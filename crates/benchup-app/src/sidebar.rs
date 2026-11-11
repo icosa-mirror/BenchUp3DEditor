@@ -180,11 +180,14 @@ mod guide_preference_tests {
         assert!(!old.xr_panel.keyboard_caps);
         assert!(!old.xr_panel.keyboard_symbols);
         assert!(!old.xr_panel.precise_modeling);
+        assert!(!old.xr_panel.controller_panel);
+        assert_eq!(old.xr_panel.dominant_hand, crate::app_host::XrHand::Right);
+        assert_eq!(old.xr_panel.controller_width_metres, 0.45);
         assert_eq!(old.xr_files, crate::app_host::XrFilePreferences::default());
         let ctx = egui::Context::default();
         let mut app = BenchUpApp::with_document(Document::default(), None, true);
         let mut storage = Storage::default();
-        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, keep_upright:false, extend_selection:true, window_selection:true, keyboard_visible:true, keyboard_caps:true, keyboard_symbols:true, precise_modeling:true, ..Default::default() };
+        app.xr_panel = crate::app_host::XrPanelPreferences { distance_metres: 0.7, width_metres: 1.6, ui_scale: 1.5, keep_upright:false, extend_selection:true, window_selection:true, keyboard_visible:true, keyboard_caps:true, keyboard_symbols:true, precise_modeling:true, controller_panel:true, dominant_hand:crate::app_host::XrHand::Left, controller_width_metres:0.6, ..Default::default() };
         app.xr_files = crate::app_host::XrFilePreferences { directory: Some(std::path::PathBuf::from("F:/BenchUp Documents")), show_hidden: true, show_all_files: true };
         app.persist_inspector_changes(&ctx, Some(&mut storage), false);
         assert!(storage.flushed);
@@ -194,10 +197,11 @@ mod guide_preference_tests {
         restored.restore_inspector_preferences(&egui::Context::default(), Some(&storage));
         assert_eq!(restored.xr_panel, app.xr_panel);
         assert_eq!(restored.xr_files, app.xr_files);
-        let invalid = crate::app_host::XrPanelPreferences { distance_metres: f32::NAN, width_metres: -2.0, ui_scale: 99.0, ..Default::default() }.sanitized();
+        let invalid = crate::app_host::XrPanelPreferences { distance_metres: f32::NAN, width_metres: -2.0, ui_scale: 99.0, controller_width_metres:f32::NAN, ..Default::default() }.sanitized();
         assert_eq!(invalid.distance_metres, 1.0);
         assert_eq!(invalid.width_metres, 0.6);
         assert_eq!(invalid.ui_scale, 1.6);
+        assert_eq!(invalid.controller_width_metres, 0.45);
     }
 
     #[test]

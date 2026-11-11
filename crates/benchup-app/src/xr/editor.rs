@@ -293,40 +293,59 @@ impl Editor {
                 .show(ui, |ui| {
                         let has_selection = self.app.xr_has_selection();
                         recenter |= self.app.xr_view_comfort_controls(ui, &mut self.preferences, |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.spacing_mut().interact_size.y = 42.;
+                                ui.checkbox(&mut preferences.controller_panel,
+                                    egui::RichText::new("Panel on controller").size(18.))
+                                    .on_hover_text("The other hand holds the panel. Your dominant hand points and edits. Recenter returns the panel to world space.");
+                                ui.label(egui::RichText::new("Dominant hand").size(18.));
+                                egui::ComboBox::from_id_salt("benchup.xr.dominant_hand")
+                                    .selected_text(egui::RichText::new(match preferences.dominant_hand {
+                                        crate::app_host::XrHand::Left => "Left",
+                                        crate::app_host::XrHand::Right => "Right",
+                                    }).size(18.))
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut preferences.dominant_hand, crate::app_host::XrHand::Left, egui::RichText::new("Left").size(18.));
+                                        ui.selectable_value(&mut preferences.dominant_hand, crate::app_host::XrHand::Right, egui::RichText::new("Right").size(18.));
+                                    });
+                            });
+                            let summary = if preferences.controller_panel {
+                                format!("Controller panel   {:.2} m wide   Text {:.0}%",
+                                    preferences.controller_width_metres, preferences.ui_scale * 100.)
+                            } else {
+                                format!("XR panel   {:.1} m away   {:.1} m wide   Text {:.0}%",
+                                    preferences.distance_metres, preferences.width_metres, preferences.ui_scale * 100.)
+                            };
                             ui.label(
-                                egui::RichText::new(format!(
-                                    "XR panel   {:.1} m away   {:.1} m wide   Text {:.0}%",
-                                    preferences.distance_metres,
-                                    preferences.width_metres,
-                                    preferences.ui_scale * 100.0
-                                ))
-                                .size(18.0),
+                                egui::RichText::new(summary).size(18.0),
                             );
                             ui.horizontal_wrapped(|ui| {
-                                let mut button = |label: &str| {
-                                    ui.add_sized(
-                                        [84.0, 42.0],
-                                        egui::Button::new(egui::RichText::new(label).size(18.0)),
+                                let mut button = |label: &str, enabled: bool| {
+                                    ui.add_enabled(
+                                        enabled,
+                                        egui::Button::new(egui::RichText::new(label).size(18.0)).min_size(egui::vec2(84., 42.)),
                                     )
                                     .clicked()
                                 };
-                                if button("Closer") {
+                                if button("Closer", !preferences.controller_panel) {
                                     preferences.distance_metres -= 0.1;
                                 }
-                                if button("Farther") {
+                                if button("Farther", !preferences.controller_panel) {
                                     preferences.distance_metres += 0.1;
                                 }
-                                if button("Text -") {
+                                if button("Text -", true) {
                                     preferences.ui_scale -= 0.1;
                                 }
-                                if button("Text +") {
+                                if button("Text +", true) {
                                     preferences.ui_scale += 0.1;
                                 }
-                                if button("Panel -") {
-                                    preferences.width_metres -= 0.1;
+                                if button("Panel -", true) {
+                                    if preferences.controller_panel { preferences.controller_width_metres -= 0.05; }
+                                    else { preferences.width_metres -= 0.1; }
                                 }
-                                if button("Panel +") {
-                                    preferences.width_metres += 0.1;
+                                if button("Panel +", true) {
+                                    if preferences.controller_panel { preferences.controller_width_metres += 0.05; }
+                                    else { preferences.width_metres += 0.1; }
                                 }
                             });
                             ui.horizontal_wrapped(|ui| {
@@ -390,6 +409,8 @@ impl Editor {
                 self.staged_source=None;
             }
         });
+        // Recenter is also the always-visible escape from controller attachment.
+        if recenter { preferences.controller_panel = false; }
         preferences = preferences.sanitized();
         if file_preferences != self.app.xr_file_preferences() {
             self.app.update_xr_file_preferences(&self.ctx, &mut self.preferences, file_preferences);

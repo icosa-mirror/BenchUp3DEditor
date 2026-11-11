@@ -121,7 +121,12 @@ record scope changes rather than silently changing an estimate.
     Keep Recenter and everyday tool actions accessible, wrap rows at narrow widths
     and persist a collapsed-by-default View and comfort section. The focused
     persistence check, locked build and inspected open/closed hardware snapshots
-    pass. Further layout reduction and controller anchoring remain future work.
+    pass. Further layout reduction and headset/controller acceptance remain open.
+19. [x] C19: Optional non-dominant-controller panel, saved handedness/width,
+    dominant-hand pointing, grab freezing and tracking/focus fallbacks. The
+    implementation passes two placement checks, immediate preference restoration,
+    the locked native build and inspected settings-layout snapshots.
+    World placement remains the default pending headset readability acceptance.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
@@ -372,12 +377,16 @@ or complete-parity claims.
    the panel and interact with the scene. Handedness and any new placement or
    layout preferences must persist through the existing shared preference path.
    C18 starts this reduction with readable wrapping control rows and a saved
-   View and comfort disclosure; the current world panel remains the host.
+   View and comfort disclosure. C19 adds an explicit controller-attachment option;
+   world placement remains the default while the new path awaits acceptance.
 3. Before replacing the current world panel, implement tracked non-dominant-hand
    anchoring and explicitly handle tracking loss, focus changes and two-grip
    scene navigation. Verify readability and reachability of menus, modals and
-   text entry on the compact panel. The current world panel remains the interim
-   interaction surface until this work is ready.
+   text entry on the compact panel. The C19 path follows the non-dominant grip,
+   faces its text toward the head and freezes in place during scene grabs. Losing
+   the host hand returns to a recentered world panel and cancels input captures.
+   Recenter explicitly detaches and persists world placement. These routes need
+   headset verification before replacing the default interaction surface.
 
 ## Stereo rendering decision and later optimization
 

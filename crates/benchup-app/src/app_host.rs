@@ -9,6 +9,22 @@ pub(crate) struct XrFilePreferences {
     pub show_all_files: bool,
 }
 
+/// The other hand hosts the panel when controller attachment is enabled.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum XrHand {
+    Left,
+    #[default]
+    Right,
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+impl XrHand {
+    pub fn index(self) -> usize {
+        match self { Self::Left => 0, Self::Right => 1 }
+    }
+}
+
 /// Tracking-relative XR preferences are retained by every host, including builds
 /// without OpenXR. Never store absolute runtime tracking-space coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -26,6 +42,9 @@ pub(crate) struct XrPanelPreferences {
     pub keyboard_caps: bool,
     pub keyboard_symbols: bool,
     pub precise_modeling: bool,
+    pub controller_panel: bool,
+    pub dominant_hand: XrHand,
+    pub controller_width_metres: f32,
 }
 
 impl Default for XrPanelPreferences {
@@ -43,6 +62,9 @@ impl Default for XrPanelPreferences {
             keyboard_caps: false,
             keyboard_symbols: false,
             precise_modeling: false,
+            controller_panel: false,
+            dominant_hand: XrHand::Right,
+            controller_width_metres: 0.45,
         }
     }
 }
@@ -70,6 +92,9 @@ impl XrPanelPreferences {
             keyboard_caps: self.keyboard_caps,
             keyboard_symbols: self.keyboard_symbols,
             precise_modeling: self.precise_modeling,
+            controller_panel: self.controller_panel,
+            dominant_hand: self.dominant_hand,
+            controller_width_metres: clamp(self.controller_width_metres, defaults.controller_width_metres, 0.25, 0.8),
         }
     }
 }
