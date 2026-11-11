@@ -423,10 +423,15 @@ No replacement headset session was launched; controller/visual acceptance remain
    the overlay edge pipeline exposes target edges. Geometry buffers are retained;
    this changes uniforms and shader interpretation. Other tools and the saved
    X-ray setting retain their routes. General label-occlusion policy is unchanged.
-2. A02: `xr_scene_source` still supplies raw document selection, whereas desktop
-   derives the selected Move copy or new Push/Pull cap from its preview. This is
-   a confirmed pending highlight/feedback gap. Share the prepared preview selection
-   at model preparation time rather than scanning the scene in every XR frame.
+2. A02: Move-copy roots and the Push/Pull cap returned by the model operation are
+   now retained with the preview. Desktop and XR use `viewport_selection.rs` for
+   their render selection, including the resident key and CPU face styling. The
+   committed document selection stays unchanged until commit. Normal previews use
+   those operation IDs directly. If evaluation replaces them, the previous desktop
+   policy supplies compatible rendered IDs, cached by rendered revision/model,
+   context and operation mode. Unchanged roots keep that cache, so head poses/eyes
+   do not repeat the scan. History previews suppress highlighting; errors, zero
+   face operations, copy-mode changes and cancellation discard stale metadata.
 3. Selection/context source reconciliation includes the enclosing-window and
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
    context acceptance remain open; the broader eight-row audit is still active.
@@ -443,6 +448,18 @@ The one-line fixture correction is isolated in `01d89ec`.
 `move-display-build.log` passes the native editor example build without warnings.
 The executable is frozen under the Move display milestone's commit in
 `.local/openxr/preview-builds/`; no headset session was launched.
+
+`preview-selection-tests.log` passes four cases covering copied-root positions,
+history/mode changes/cancellation, both extrusion modes in root/scoped contexts,
+evaluated-ID revision invalidation and operation-error cleanup without document
+selection/history edits. `preview-selection-modeling-regressions.log` passes all
+nine current modeling cases. `preview-selection-copy-regression.log` passes the
+desktop Windows/Mac live copy modifier case, and `preview-selection-group-regression.log`
+passes selected-group extrusion without opening its context.
+`preview-selection-build.log` passes the native editor example build without
+warnings. The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched. These checks
+do not establish full rendered/headset parity or large-scene performance.
 
 ## User direction
 

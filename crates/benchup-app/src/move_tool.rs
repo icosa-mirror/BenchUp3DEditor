@@ -81,6 +81,7 @@ impl BenchUpApp {
         if let Some(edit) = &mut self.modeling {
             edit.copy = self.move_copy;
             edit.preview = None;
+            edit.preview_selection = None;
             edit.preview_delta = None;
         }
         if let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) {

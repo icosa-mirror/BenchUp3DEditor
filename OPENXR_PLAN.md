@@ -123,7 +123,7 @@ reconciled. Coding status remains separate from headset/graphics acceptance.
 | ID | Confirmed finding | State |
 |---|---|---|
 | A01 | Desktop Move fades unselected faces and overlays edges; the retained XR renderer previously used ordinary opaque styling | GPU uniform/selection-mask route implemented; visual acceptance open |
-| A02 | `xr_scene_source` uses document selection while desktop derives Move-copy/new extrusion-cap selection from preview geometry | Open: share prepared preview selection without a scene scan in every XR frame |
+| A02 | XR previously used document selection while desktop highlighted preview copies/caps | Operation-returned preview selection is shared by desktop/XR; evaluated-ID fallback cached per rendered snapshot; visual acceptance open |
 
 ## Current architecture and boundaries
 
@@ -175,7 +175,7 @@ The numbered rows are the checklist for the replacement milestone.
 |---|---|---|---|
 | 1 | Selection and context | Shared selection/hover, replace/toggle ray selection, enclosing windows and direct group/text/context shortcuts; context bounds, endpoint/edge cues; shared Edit-menu context actions; held-trigger erase with bounded ray interpolation and one undo | Controller window/context/cancellation acceptance and extreme/near-field sweep coverage remain open |
 | 2 | Axes, grid and inference | Saved axis colors; analytic finite/infinite GPU grid; construction lines/points; endpoint/midpoint/face-center/axis/plane targets; guide intersections; acquired displayed-edge references, 3D edge-constrained guide pairs and locked-axis projection; persisted X/Y/Z and Unlock controls in XR, including two-axis planes | Complete controller lock/reference acceptance and display/workflow audit |
-| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover; host-aware lock refresh and shared precision commits | Correct Move-copy/new-cap preview selection (A02); finish remaining desktop handle/precision source audit |
+| 3 | Drawing/modeling feedback | Shared drawing previews; move/scale directions; rotation/protractor graphics; numeric values/errors; retained GPU paste ghost; flip-plane hover; host-aware lock refresh, shared precision commits and prepared copy/cap preview selection | Preview-selection rendered acceptance; finish remaining desktop handle/precision source audit |
 | 4 | Dimensions and measurements | Saved dimensions, values/units, leaders/extension lines, ticks; Tape/Protractor/Dimensions previews; direct label/stroke picking | Compare placement, occlusion, formatting and editing workflows across hosts |
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray and derived GPU Move transparency (A01), hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |

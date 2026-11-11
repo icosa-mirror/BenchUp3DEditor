@@ -61,6 +61,8 @@ mod finish_settings;
 pub(crate) mod grid;
 #[path = "viewport_overlays.rs"]
 pub(crate) mod viewport_overlays;
+#[path = "viewport_selection.rs"]
+mod viewport_selection;
 #[path = "grain_direction.rs"]
 mod grain_direction;
 #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
@@ -249,6 +251,7 @@ struct Modeling {
     copy: bool,
     keep_starting_face: bool,
     preview: Option<Model>,
+    preview_selection: Option<viewport_selection::PreparedSelection>,
     move_snap: Option<benchup_core::inference::MoveSnapCache>,
     snap_excluded: BTreeSet<u64>,
     move_preview: Option<benchup_core::modeling::MovePreview>,
@@ -542,11 +545,13 @@ impl BenchUpApp {
         let context=self.history_preview.as_ref().map_or(self.doc.model.edit_context,|model|model.edit_context);
         self.xr_scene_model.update_scoped_source(self.render_model.shared(),self.render_model.revision(),context);
         let input_stamp = self.xr_input_stamp(ctx);
+        let model = self.xr_scene_model.shared();
+        let selected = self.viewport_selection(&model, self.render_model.revision());
         crate::xr::immersive::Source {
-            model: self.xr_scene_model.shared(), revision: self.xr_scene_model.revision(),
+            model, revision: self.xr_scene_model.revision(),
             input_stamp,
             input_captured: false,
-            camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected:if self.history_preview.is_some() {BTreeSet::new()} else {self.selected.clone()},
+            camera: self.doc.camera.clone(), display: self.doc.display.clone(), selected,
             overlays: self.spatial_tool_overlays(Palette::for_painter(&ctx.debug_painter())),
             references: self.xr_reference_overlays(ctx),
             tool_target: self.snap.or_else(|| self.modeling_preview_snap()).map(|snap| snap.point),
@@ -1777,6 +1782,7 @@ impl BenchUpApp {
             copy: self.tool == Tool::Move && self.move_copy,
             keep_starting_face: self.tool == Tool::PushPull && self.push_pull_new_faces,
             preview: None,
+            preview_selection: None,
             move_snap: matches!(self.tool, Tool::Move | Tool::Rotate | Tool::Scale)
                 .then(|| {
                     if self.tool == Tool::Rotate {
@@ -2052,6 +2058,7 @@ impl BenchUpApp {
             && self.length_input.trim().is_empty()
         {
             edit.preview = None;
+            edit.preview_selection = None;
             edit.error = None;
             return;
         }
@@ -2071,9 +2078,13 @@ impl BenchUpApp {
                 match plan.update(&mut preview, delta) {
                     Ok(()) => {
                         edit.preview = Some(preview);
+                        if edit.preview_selection.is_none() {
+                            edit.preview_selection = Some(viewport_selection::PreparedSelection::new(edit.entities.clone()));
+                        }
                         edit.error = None;
                     }
                     Err(error) => {
+                        edit.preview_selection = None;
                         edit.error = Some(error);
                     }
                 }
@@ -2081,13 +2092,15 @@ impl BenchUpApp {
                 return;
             }
         }
-        match Self::modeling_result(self.tool, edit, value) {
-            Ok(model) => {
+        match Self::modeling_result_with_selection(self.tool, edit, value) {
+            Ok((model, selected)) => {
                 edit.preview = Some(model);
+                viewport_selection::PreparedSelection::update(&mut edit.preview_selection, selected);
                 edit.error = None;
             }
             Err(error) => {
                 edit.preview = None;
+                edit.preview_selection = None;
                 edit.error = Some(error);
             }
         }
@@ -2121,18 +2134,29 @@ impl BenchUpApp {
     }
 
     fn modeling_result(tool: Tool, edit: &Modeling, value: f64) -> Result<Model, &'static str> {
+        Self::modeling_result_with_selection(tool, edit, value).map(|(model, _)| model)
+    }
+
+    fn modeling_result_with_selection(tool: Tool, edit: &Modeling, value: f64) -> Result<(Model, BTreeSet<u64>), &'static str> {
+        if tool == Tool::Move && edit.copy {
+            let delta = Self::move_delta(edit, value)?;
+            let source = edit.base.copy_entities(&edit.entities);
+            return Self::move_copies(&edit.base, &source, delta, CopyArray::default());
+        }
         let mut model = edit.base.clone();
+        let mut selected = edit.entities.clone();
         match tool {
             Tool::PushPull => {
                 let face = &model.faces[&edit.face.unwrap()];
                 let face_id = face.id;
                 let context = model.edit_context;
                 model.edit_context = model.parent(face_id);
-                if edit.keep_starting_face {
-                    model.push_pull_along_with_new_faces(face_id, edit.direction * value)?;
+                let cap = if edit.keep_starting_face {
+                    model.push_pull_along_with_new_faces(face_id, edit.direction * value)?
                 } else {
-                    model.push_pull_along(face_id, edit.direction * value)?;
-                }
+                    model.push_pull_along(face_id, edit.direction * value)?
+                };
+                selected = BTreeSet::from([cap]);
                 model.edit_context = context;
             }
             Tool::Offset => {
@@ -2158,16 +2182,11 @@ impl BenchUpApp {
             )?,
             Tool::Move => {
                 let delta = Self::move_delta(edit, value)?;
-                if edit.copy {
-                    let source = edit.base.copy_entities(&edit.entities);
-                    return Self::move_copies(&edit.base, &source, delta, CopyArray::default())
-                        .map(|(model, _)| model);
-                }
                 model.move_selection(&edit.entities, delta)?;
             }
             _ => return Err(tr!("app.choose_a_modeling_tool")),
         }
-        Ok(model)
+        Ok((model, selected))
     }
 
     fn commit_modeling(&mut self, ctx: &egui::Context) {
@@ -5179,12 +5198,8 @@ impl BenchUpApp {
         let model = joint_preview.as_ref().and_then(|_|self.joinery_dialog.preview_model())
             .unwrap_or_else(||if model.connections.is_empty() {model}
                 else {&self.joinery_geometry.result.as_ref().unwrap().model});
-        let empty_selection = BTreeSet::new();
-        let selected = if self.history_preview.is_some() {
-            &empty_selection
-        } else {
-            &self.selected
-        };
+        let viewport_selected = self.viewport_selection(model, model_revision);
+        let selected = &viewport_selected;
         let hover = if self.history_preview.is_some() {
             None
         } else {
@@ -5293,34 +5308,7 @@ impl BenchUpApp {
             } else {
                 BTreeSet::new()
             };
-            let selected_entities = if self.history_preview.is_some() {
-                BTreeSet::new()
-            } else if let Some(edit) = self
-                .modeling
-                .as_ref()
-                .filter(|_| self.tool == Tool::PushPull)
-            {
-                let cap = model
-                    .faces
-                    .keys()
-                    .filter(|id| {
-                        !edit.base.faces.contains_key(id)
-                            && model.parent(**id) == model.edit_context
-                    })
-                    .next_back()
-                    .copied()
-                    .or(edit.face);
-                cap.into_iter().collect()
-            } else if let Some(edit) = self.modeling.as_ref().filter(|edit| edit.copy) {
-                let copies = model
-                    .selectable_entities()
-                    .into_iter()
-                    .filter(|id| !edit.base.contains_entity(id))
-                    .collect();
-                model.expand_entities(&copies)
-            } else {
-                model.expand_entities(selected)
-            };
+            let selected_entities = model.expand_entities(selected);
             // Keep the moving selection solid while exposing surrounding geometry.
             // Derive this every frame so selecting after entering Move works too.
             let move_x_ray = self.tool == Tool::Move && !selected_entities.is_empty();

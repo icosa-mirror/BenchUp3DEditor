@@ -222,6 +222,7 @@ impl BenchUpApp {
         edit.value = 0.;
         edit.error = None;
         edit.preview = None;
+        edit.preview_selection = None;
         let Some(reference) = rotation.reference else {
             return;
         };
@@ -245,8 +246,11 @@ impl BenchUpApp {
             self.doc.display.units,
         )
         .unwrap_or(edit.value);
-        match Self::modeling_result(Tool::Rotate, edit, value) {
-            Ok(model) => edit.preview = Some(model),
+        match Self::modeling_result_with_selection(Tool::Rotate, edit, value) {
+            Ok((model, selected)) => {
+                edit.preview = Some(model);
+                edit.preview_selection = Some(viewport_selection::PreparedSelection::new(selected));
+            }
             Err(message) => edit.error = Some(message),
         }
     }
