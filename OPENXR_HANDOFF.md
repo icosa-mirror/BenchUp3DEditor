@@ -596,10 +596,35 @@ The frozen binary loaded the standalone Khronos layer (API 1.4.368), rendered
 default repeated-message cap, with no other VUID category. Total occurrences are
 not established. Synchronization validation was requested. This reproduces the
 known Naga 30.0.1 Function-layout issue independently of OpenXR; image/exit success
-does not make validation clean. The upstream issue remains open and a candidate
-fork patch is linked in the Windows notes, but no dependency/cache change or
-application-side diagnostic suppression was made. No headset session was created, and historical
-runtime copy/layout/lifetime findings remain unverified on this build.
+does not make stock-build validation clean. The candidate compiler fix now passes
+an isolated full-app offscreen render: zero validation errors, Khronos layer
+confirmed loaded, 404 faces and a visually unchanged image versus the stock build
+(3 of 1,296,000 pixels differ by at most 1/255).
+The only two warnings identify the explicitly forced layer. Artifacts are in
+`.local/openxr/naga-layout-experiment/full-render/`; the stock/fixed module probes
+also reproduce/remove the error in world-line and edge shaders.
+
+`Cargo.toml` now pins Naga and its shared types to immutable fork commit
+`30580e4fa17a195d4746e8525028a04f90c2d3cc`. The 156 source files in those two
+crates match the tested local candidate exactly; the release-base comparison
+contains four changed Naga SPIR-V files. wgpu/HAL retain registry sources, so the
+fork's unrelated DX12 changes are not selected. Remove this compiler pin when
+an upstream release includes the fix. Scratch path overrides remain ignored and
+uncommitted; no package-cache edits or diagnostic suppression were used.
+No headset session was created, and historical runtime copy/layout/lifetime
+findings remain unverified. This does not close the phase 1 graphics gate.
+
+The final remote-pinned build also passes `cargo build --locked --offline` for
+the editor example. Both its independent immersive snapshot and full editor-panel
+snapshot load the Khronos layer and report zero validation errors/no VUIDs;
+each has only two explicit-layer loader notices. The immersive image loads all
+404 faces and retains the same three-pixel, one-level difference measured above.
+Evidence: `.local/openxr/naga-layout-experiment/pinned-render-summary.json` and
+`pinned-{immersive,editor}/validation.log`. Windows-filtered locked metadata
+resolves successfully. Only the two compiler source entries change in the
+lockfile; all original transitive resolutions are preserved. The candidate was
+built in a separate target directory and has not replaced or launched a headset
+session. Non-Windows backend validation remains open.
 
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid

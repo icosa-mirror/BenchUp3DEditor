@@ -14,6 +14,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 glam = { version = "0.32", features = ["serde"] }
 
+# Naga 30.0.1 emits invalid explicit layouts for SPIR-V 1.6 Function values.
+# Keep both crates on the same source to preserve shared shader type identity.
+# Remove when an upstream release includes https://github.com/gfx-rs/wgpu/issues/7696.
+[patch.crates-io]
+naga = { git = "https://github.com/sargunv/wgpu", rev = "30580e4fa17a195d4746e8525028a04f90c2d3cc" }
+naga-types = { git = "https://github.com/sargunv/wgpu", rev = "30580e4fa17a195d4746e8525028a04f90c2d3cc" }
+
 # Keep the development UI responsive without disabling debugger symbols,
 # debug assertions, or overflow checks. Optimize third-party rendering/UI code
 # more heavily than frequently edited application code.

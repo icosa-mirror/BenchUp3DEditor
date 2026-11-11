@@ -19,10 +19,27 @@ The lockfile pins wgpu/Naga 30.0.1. The local HAL selects SPIR-V 1.6 for Vulkan
 1.3+ devices. The current [upstream issue #7696](https://github.com/gfx-rs/wgpu/issues/7696)
 still records the same Function-layout failure on Naga 30.0.1. A
 [candidate fork patch](https://github.com/sargunv/wgpu/commit/30580e4fa17a195d4746e8525028a04f90c2d3cc)
-addresses layout-free types, but has not been adopted or verified against this
-checkout. No package-cache edits, dependency changes or application-side diagnostic
-suppression were applied. Loader warnings identify the explicitly forced layer;
-the layer also reports reaching its default duplicate-message limit.
+addresses layout-free types. An isolated app build with that patch renders the
+same 404-face Example with zero validation errors and a visually unchanged image
+(3 of 1,296,000 pixels differ by at most 1/255).
+The layer is confirmed loaded; the only two warnings identify the explicitly
+forced layer. Evidence: `.local/openxr/naga-layout-experiment/full-render/`.
+The stock/fixed shader-module probes also reproduce/remove the error for the
+world-line and edge shaders. No package-cache edits or diagnostic suppression
+were used. These checks created no OpenXR session.
+
+The workspace now pins `naga` and `naga-types` to the immutable candidate commit;
+wgpu/HAL remain on the registry release. Both shader crates must share a source
+to preserve type identity. The fork is three commits ahead of the release base;
+only four SPIR-V backend files differ within Naga, and its unrelated DX12/HAL
+changes are not selected. This is a deliberate compiler compatibility pin, not a
+local path override. Remove the pin when an upstream release includes the fix.
+The final remote-pinned editor example builds with `--locked --offline` and its
+independent immersive and editor-panel snapshots both report zero errors/no
+VUIDs with the layer loaded. See
+`.local/openxr/naga-layout-experiment/pinned-render-summary.json` for hashes and
+counts. Original transitive lockfile resolutions are preserved. Desktop/web
+backend compatibility and OpenXR runtime validation are still separate gates.
 
 This check created no OpenXR session. The historical runtime image/copy/lifetime
 findings below therefore remain separate and unverified on the current build.
@@ -83,7 +100,7 @@ panel placement, colors, orientation, or usability.
 3. The plain command compiled, then failed to discover the OpenXR loader.
    Adding SteamVR's installed loader directory to the process `PATH` resolved it.
 4. Preflight passed: SteamVR/OpenXR in Meta compatibility mode 2.18.4;
-   `Vive OpenXR: Vive SRanipal`; two recommended 2112 × 2304 views;
+   `Vive OpenXR: Vive SRanipal`; two recommended 2112 Ã— 2304 views;
    Vulkan requirements 1.0.0 through 1.2.0. Orientation and position tracking
    were both reported unavailable at that time. This is capability evidence,
    not successful rendering or live tracking evidence.
@@ -105,7 +122,7 @@ as `cargo run -p benchup-app --locked --features openxr --example openxr_panel`
 when the loader is already discoverable. It runs for 60 seconds, requests session
 exit, and waits for the runtime's STOPPING state before ending the session.
 
-The quad uses a 1440 × 900 sRGB image and measures 1.2 × 0.75 metres, positioned
+The quad uses a 1440 Ã— 900 sRGB image and measures 1.2 Ã— 0.75 metres, positioned
 1.5 metres along negative Z in LOCAL space. Expected quadrants are red/green on
 top and blue/white below. This is an isolated graphics probe, without a document,
 controller actions, editor UI, or saved settings.
@@ -182,7 +199,7 @@ renderer when the headset is unavailable.
 
 The editor example compiled successfully after the workspace drive returned.
 An independent Vulkan snapshot rendered the bundled Example project through the
-shared UI and GPU viewport on the RTX 4090; the resulting 1440 × 900 PNG was
+shared UI and GPU viewport on the RTX 4090; the resulting 1440 Ã— 900 PNG was
 visually inspected. It contains the model, toolbars, inspector and startup release
 notes. This is a diagnostic image, not a release/README screenshot.
 A second run restored the saved preferences/read state and produced
@@ -217,7 +234,7 @@ for that result. Logs are `.local/openxr/editor-desktop-snapshot.log`,
 
 After reconnection, preflight passed again with SteamVR/OpenXR 2.18.4 and the
 Vive headset identity. The `openxr_editor` example selected the RTX 4090, created
-the 1440 × 900 three-image sRGB swapchain and submitted the complete editor quad.
+the 1440 Ã— 900 three-image sRGB swapchain and submitted the complete editor quad.
 The session reached VISIBLE and FOCUSED. The user confirmed that the editor was
 visible, readable, upright and stable in the world during head movement.
 
@@ -322,7 +339,7 @@ Y up. The first path renders opaque materials/edges and selection appearance;
 annotations, special display previews and editing tools remain on the panel.
 
 The native executable built. A ten-second run selected the RTX 4090, created
-2112 × 2304 targets per eye, fitted the 404-face model, submitted head-tracked
+2112 Ã— 2304 targets per eye, fitted the 404-face model, submitted head-tracked
 stereo frames, reached VISIBLE/FOCUSED and stopped cleanly after 650 frames. The
 user's preview reached STOPPING/IDLE/EXITING and exited successfully after 16,257
 editor frames, with stereo scene submission active at startup. Human visual

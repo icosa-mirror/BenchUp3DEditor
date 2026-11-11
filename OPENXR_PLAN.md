@@ -315,7 +315,7 @@ or complete-parity claims.
    regression remain recorded. These checks do not constitute a full suite or
    headset confirmation of all recent interactions; broad validation is deferred.
 
-   Current build `138d7f4` also passed three isolated RTX 4090 Vulkan snapshots
+   Renderer build `138d7f4` also passed three isolated RTX 4090 Vulkan snapshots
    without OpenXR: clean Example and matched Guides off/on fixtures, each with
    404 faces. The inspected guide image shows the dashed line and point cross;
    the pair differs by 2,216 pixels (guide-colour pixels: 0 off, 852 on). This
@@ -337,8 +337,12 @@ or complete-parity claims.
    A current isolated validation-enabled snapshot of build `138d7f4` reproduces
    10 reported shader errors (the default duplicate cap), all
    `VUID-StandaloneSpirv-None-10684`, with the Khronos layer
-   loaded. This matches the still-open Naga 30.0.1 issue and does not retest the
-   separate OpenXR runtime image/resource findings. Dependencies remain unchanged.
+   loaded. An isolated compiler-patch build removes those errors with the layer
+   loaded and produces a 404-face Example snapshot differing in only 3 of
+   1,296,000 pixels by at most 1/255. The workspace
+   now pins Naga and its shared types to the reviewed immutable fix; wgpu/HAL
+   stay on the registry release. This clears the reproduced compiler failure in
+   that offscreen path, not the separate OpenXR runtime image/resource findings.
 4. Phase 2 acceptance remains open: immersive/desktop/panel document and tool
    equivalence; all eight spatial parity rows; no required 2D model-view fallback;
    focus/tracking/reference-space changes and scale extremes. Latest desktop/web
