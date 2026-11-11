@@ -447,7 +447,11 @@ No replacement headset session was launched; controller/visual acceptance remain
    3-pixel half-width and 1-pixel stroke. Each eye projects its direction in the
    shader. Clipped attachments discard the head rather than moving it onto a
    section or near-plane boundary; the existing leader and label routes remain.
-6. Selection/context source reconciliation includes the enclosing-window and
+6. A06: controller joint-marker hints now include the targeted joint's ID and its
+   own evaluation error, independently of the HUD's bounded four-error summary.
+   Multiline target hints compose without repeating their action lines, and
+   switching targets discards the previous target's instruction/warning block.
+7. Selection/context source reconciliation includes the enclosing-window and
    double-trigger/empty-click routes from C13/C14. Their hardware cancellation and
    context acceptance remain open; the broader eight-row audit is still active.
 
@@ -514,6 +518,34 @@ additional desktop window commands.
 warnings. Its executable is frozen under this milestone's commit in
 `.local/openxr/preview-builds/`. No headset session was launched; arrowhead visual
 acceptance, including near/section clipping and clipboard placement, remains open.
+
+C16 grain/joinery source reconciliation: committed and preview grain axes pass
+through the shared resident grain cache/shader. `prepare_render_model` includes
+the active joint's evaluated preview before XR snapshots it; the native resident
+key's empty `joint_preview` does not discard that geometry. XR reference overlays
+use `append_spatial_joinery` and owner-aware dashed cut contours; marker anchors,
+warning glyphs, visibility and edit commands share desktop data. A06 closes the
+confirmed marker-tooltip gap. Controller acceptance, nested/scoped visibility and
+display combinations remain open; disabled Automatic Fasteners stays deferred.
+
+`joint-target-hud-tests.log` passes six focused HUD cases, including a targeted
+sixth diagnostic absent from the global four-error summary, warning-free joint
+identity, multiline action de-duplication and removal of the prior target block.
+`joint-target-hud-build.log` passes the native preview build without warnings.
+The executable is frozen under this milestone's commit in
+`.local/openxr/preview-builds/`; no headset session was launched. A07 remains a small
+confirmed Flip outline discrepancy: XR uses 1.5 points for both states, while
+desktop uses 1 point idle and 2 points on hover.
+
+C16 section source reconciliation: the native scene uses the shared effective
+display and `SectionCache` geometry, and feeds that cache's exact triangles and
+owner array to its retained ray index with the same generation. Cap contours are
+partitioned by selectable body before triangulation and clipped by all active
+limits; Wireframe suppresses cap fills. Native picking chooses the closest cap
+and uses the same index for guide/reference/marker occlusion. Section settings
+remain shared preferences and the world handles use the same anchor/offset
+operations. This establishes source routing only; overlapping/nested cap and
+display-combination rendered/controller acceptance remains open.
 
 ## User direction
 

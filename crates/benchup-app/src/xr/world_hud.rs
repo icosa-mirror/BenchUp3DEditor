@@ -1,19 +1,19 @@
 //! Compose world instructions from the actual XR mode, without duplicate actions.
 pub(super) fn text<'a>(status: &'a str, instruction: &'a str, navigation: &'a str) -> String {
     let mut parts: Vec<&str> = Vec::with_capacity(3);
-    for part in [status, instruction, navigation].map(str::trim) {
-        if !part.is_empty() && !parts.iter().any(|old| *old == part || old.lines().any(|line| line.trim() == part)) {
-            parts.push(part);
+    for block in [status, instruction, navigation] {
+        for line in block.lines().map(str::trim).filter(|line| !line.is_empty()) {
+            if !parts.contains(&line) { parts.push(line); }
         }
     }
     parts.join("\n")
 }
 
 pub(super) fn override_hint(status: &mut String, instruction: &mut String, hint: &str) {
-    let previous = instruction.trim();
-    *status = status.lines().filter(|line| previous.is_empty() || line.trim() != previous).collect::<Vec<_>>().join("\n");
+    *status = status.lines().filter(|line| !instruction.lines().any(|old| old.trim() == line.trim()))
+        .collect::<Vec<_>>().join("\n");
     *instruction = hint.trim().to_owned();
-    if !instruction.is_empty() && !status.lines().any(|line| line.trim() == instruction.as_str()) {
+    if !instruction.is_empty() {
         *status = if status.is_empty() { instruction.clone() } else { format!("{instruction}\n{status}") };
     }
 }
@@ -38,6 +38,11 @@ mod tests {
         assert_eq!(output, "Trigger edits this wood joint.\nUnlock the object first.\nBoth grips navigate.");
         override_hint(&mut status, &mut instruction, "Trigger selects the section handle.");
         assert!(!text(&status, &instruction, "").contains("wood joint"));
+        override_hint(&mut status, &mut instruction, "Wood joint #9: no overlap\nTrigger edits this wood joint.");
+        assert_eq!(text(&status, &instruction, "Both grips navigate."),
+            "Wood joint #9: no overlap\nTrigger edits this wood joint.\nUnlock the object first.\nBoth grips navigate.");
+        override_hint(&mut status, &mut instruction, "Trigger selects the section handle.");
+        assert!(!text(&status, &instruction, "").contains("#9"));
     }
 
 }

@@ -82,7 +82,7 @@ pub(crate) struct State {
     grab_depth: Option<f64>,
     section: Option<SectionGrab>,
     pointer_target: Option<DVec3>,
-    handle_hint: Option<&'static str>,
+    handle_hint: Option<String>,
     window: Option<WindowGesture>,
     selection_click: Option<SelectionClick>,
     move_targets: Option<crate::xr::world_move::Targets>,
@@ -156,7 +156,7 @@ impl State {
     pub(crate) fn capturing(&self) -> bool {
         self.erasing || self.stroke || self.grab_depth.is_some() || self.section.is_some() || self.window.is_some()
     }
-    pub(crate) fn handle_hint(&self) -> Option<&'static str> { self.handle_hint }
+    pub(crate) fn handle_hint(&self) -> Option<&str> { self.handle_hint.as_deref() }
     pub(crate) fn cancel_window(&mut self) -> bool {
         let cancelled = self.window.take().is_some();
         if cancelled { self.cancel_selection_click(); }
@@ -249,6 +249,15 @@ fn plane_point(ray: Ray, origin: DVec3, normal: DVec3) -> Option<DVec3> {
 }
 
 impl BenchUpApp {
+    fn xr_joint_hint(&self, id: u64) -> String {
+        let error = self.joinery_geometry.result.as_ref()
+            .and_then(|evaluation| evaluation.errors.iter().find(|(key, _)| *key == id));
+        match error {
+            Some((_, message)) => format!("Wood joint #{id}: {message}\nTrigger edits this wood joint."),
+            None => format!("Wood joint #{id}\nTrigger edits this wood joint."),
+        }
+    }
+
     pub(super) fn xr_tool_hint(&self) -> &'static str {
         if self.tool == Tool::Select && self.xr_panel.window_selection { return WINDOW_HINT; }
         if let Some(measurement) = &self.measurement {
@@ -288,7 +297,7 @@ impl BenchUpApp {
             return;
         };
         state.pointer_target = Some(point);
-        state.handle_hint = Some(WINDOW_HINT);
+        state.handle_hint = Some(WINDOW_HINT.to_owned());
         if pointer.primary_down || !activate { state.window = Some(window); return; }
         if window.frame.end.length() <= 4. {
             self.xr_select_click(pointer, state, ctx);
@@ -758,7 +767,7 @@ impl BenchUpApp {
             };
             if !available { return; }
             state.pointer_target = Some(point);
-            state.handle_hint = Some(match action { HandleAction::EditJoint(_) => "Trigger edits this wood joint." });
+            state.handle_hint = Some(match action { HandleAction::EditJoint(id) => self.xr_joint_hint(id) });
             if clicked {
                 self.xr_cancel_action(false, ctx, storage);
                 state.cancel_erasing(self);
@@ -1106,7 +1115,7 @@ impl BenchUpApp {
             self.snap = None;
             self.hover = None;
             self.flip_hover = None;
-            state.handle_hint = Some("Move the controller to slide the section plane; release trigger to keep it. Cancel restores it.");
+            state.handle_hint = Some("Move the controller to slide the section plane; release trigger to keep it. Cancel restores it.".to_owned());
             if !self.doc.display.section_planes
                 || !self.doc.display.section_axes[axis]
                 || activate && pointer.cancel
@@ -1157,7 +1166,7 @@ impl BenchUpApp {
         self.hover = None;
         self.flip_hover = None;
         state.pointer_target = Some(point);
-        state.handle_hint = Some("Hold trigger and move the controller to slide this section plane. Cancel restores it.");
+        state.handle_hint = Some("Hold trigger and move the controller to slide this section plane. Cancel restores it.".to_owned());
         if activate && pointer.activate {
             self.begin_world_section(axis, point);
             state.section = Some(SectionGrab {
@@ -2704,6 +2713,21 @@ mod input_revision_tests {
         assert!(hud.contains("drag a window"));
         assert!(!hud.contains("Double trigger"));
         assert_eq!(hud.matches("drag a window").count(), 1);
+    }
+
+    #[test]
+    fn world_hud_targeted_joint_message_is_not_limited_to_first_four_errors() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut evaluation = app.doc.model.evaluate_joinery();
+        evaluation.errors = (1..=6).map(|id| (id, format!("diagnostic {id}"))).collect();
+        app.joinery_geometry.result = Some(evaluation);
+        assert!(!app.xr_scene_status(&ctx).contains("diagnostic 6"));
+        let hint = app.xr_joint_hint(6);
+        assert!(hint.contains("Wood joint #6: diagnostic 6"));
+        assert!(hint.contains("Trigger edits"));
+        assert!(!hint.contains("diagnostic 1"));
+        assert_eq!(app.xr_joint_hint(7), "Wood joint #7\nTrigger edits this wood joint.");
     }
 
     #[test]
