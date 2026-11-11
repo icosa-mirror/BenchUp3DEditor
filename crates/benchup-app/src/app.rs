@@ -1098,6 +1098,7 @@ impl BenchUpApp {
         self.say(ctx, tr!("app.new_project_ready"));
     }
     fn fit(&mut self, ctx: &egui::Context) {
+        if crate::app_host::request_world_view(ctx, crate::app_host::WorldView::Scene) { return; }
         self.doc.camera.fit(
             self.doc.model.bounds(),
             dv(self.viewport.size().max(Vec2::splat(1.))),
@@ -1105,6 +1106,8 @@ impl BenchUpApp {
         self.changed(ctx);
     }
     fn fit_selection(&mut self, ctx: &egui::Context) {
+        if self.selected.is_empty() { return; }
+        if crate::app_host::request_world_view(ctx, crate::app_host::WorldView::Selection) { return; }
         let Some(bounds) = self.doc.model.selection_bounds(&self.selected) else {
             return;
         };
@@ -1115,6 +1118,7 @@ impl BenchUpApp {
         self.changed(ctx);
     }
     fn fit_origin(&mut self, ctx: &egui::Context) {
+        if crate::app_host::request_world_view(ctx, crate::app_host::WorldView::Origin) { return; }
         self.doc.camera.target = DVec3::ZERO;
         self.changed(ctx);
     }

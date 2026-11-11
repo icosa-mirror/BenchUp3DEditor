@@ -5,7 +5,27 @@ use benchup_core::StandardView;
 impl BenchUpApp {
     pub(super) fn view_contents(&mut self, ui: &mut egui::Ui) {
         let before = self.doc.camera.clone();
+        let immersive = crate::app_host::world_input(ui.ctx());
         inspector_section(ui, tr!("view_controls.camera"), "view_camera", false, |ui| {
+            if immersive {
+                ui.label("Projection and field of view follow the headset. Hold both grips to move, turn and scale the scene.");
+                ui.horizontal_wrapped(|ui| {
+                    for (label, action) in [
+                        ("Fit model", crate::app_host::WorldView::Scene),
+                        ("Fit selection", crate::app_host::WorldView::Selection),
+                        ("Center origin", crate::app_host::WorldView::Origin),
+                        ("Reset view", crate::app_host::WorldView::Reset),
+                    ] {
+                        let enabled = action != crate::app_host::WorldView::Selection || !self.selected.is_empty();
+                        if ui.add_enabled(enabled, egui::Button::new(egui::RichText::new(label).size(18.))
+                            .min_size(egui::vec2(120., 42.))).clicked()
+                        {
+                            crate::app_host::request_world_view(ui.ctx(), action);
+                        }
+                    }
+                });
+                return;
+            }
             ui.text_label(tr!("view_controls.projection"));
             let button_width = (ui.available_width() - ui.spacing().item_spacing.x) / 2.;
             ui.horizontal(|ui| {
@@ -82,7 +102,14 @@ impl BenchUpApp {
             });
         });
         inspector_section(ui, tr!("view_controls.standard_views"), "view_standard_views", false, |ui| {
-            standard_view_picker(ui, &mut self.doc.camera);
+            if immersive {
+                ui.label("Turn the scene to view it from one of these directions. Reset view restores the upright starting orientation.");
+                if let Some(view) = standard_view_cards(ui, None, true) {
+                    crate::app_host::request_world_view(ui.ctx(), crate::app_host::WorldView::Standard(view));
+                }
+            } else {
+                standard_view_picker(ui, &mut self.doc.camera);
+            }
         });
         if before != self.doc.camera {
             self.changed(ui.ctx());
@@ -93,6 +120,14 @@ impl BenchUpApp {
 // Match the face-style cards: responsive columns, cube preview, caption,
 // selected background, and a radio-button accessibility description.
 fn standard_view_picker(ui: &mut egui::Ui, camera: &mut Camera) {
+    if let Some(view) = standard_view_cards(ui, camera.standard_view(), false) {
+        camera.set_standard_view(view);
+    }
+}
+
+fn standard_view_cards(ui: &mut egui::Ui, current: Option<StandardView>, actions: bool) -> Option<StandardView> {
+    let mut chosen = None;
+    let mut current = current;
     let colors = Palette::for_ui(ui);
     let faces = FacePalette::for_ui(ui);
     let spacing = ui.spacing().item_spacing.x;
@@ -105,7 +140,7 @@ fn standard_view_picker(ui: &mut egui::Ui, camera: &mut Camera) {
                 (ui.available_width() - spacing * (row.len() - 1) as f32) / row.len() as f32;
             ui.horizontal(|ui| {
                 for &view in row {
-                    let selected = camera.standard_view() == Some(view);
+                    let selected = current == Some(view);
                     let mut response = ui
                         .add_sized(
                             egui::vec2(width, 100.),
@@ -113,14 +148,15 @@ fn standard_view_picker(ui: &mut egui::Ui, camera: &mut Camera) {
                         )
                         .on_hover_text(tr!("view_controls.view", view.label()));
                     if response.clicked() && !selected {
-                        camera.set_standard_view(view);
+                        chosen = Some(view);
+                        if !actions { current = Some(view); }
                         response.mark_changed();
                     }
                     response.widget_info(|| {
                         egui::WidgetInfo::selected(
-                            egui::Role::RadioButton,
+                            if actions { egui::Role::Button } else { egui::Role::RadioButton },
                             ui.is_enabled(),
-                            camera.standard_view() == Some(view),
+                            !actions && current == Some(view),
                             view.label(),
                         )
                     });
@@ -140,7 +176,7 @@ fn standard_view_picker(ui: &mut egui::Ui, camera: &mut Camera) {
                             egui::pos2(rect.center().x, rect.bottom() - 21.),
                             egui::Align2::CENTER_CENTER,
                             view.label(),
-                            FontId::proportional(11.),
+                            FontId::proportional(if actions { 18. } else { 11. }),
                             colors.ink,
                         );
                     }
@@ -148,6 +184,75 @@ fn standard_view_picker(ui: &mut egui::Ui, camera: &mut Camera) {
             });
         }
     });
+    chosen
+}
+
+#[cfg(all(test, feature = "openxr", not(target_arch = "wasm32")))]
+mod xr_view_tests {
+    use super::*;
+    use crate::{app_host::{self, WorldView}, test_ui::ContextExt};
+
+    fn frame(app: &mut BenchUpApp, ctx: &egui::Context, events: Vec<egui::Event>) -> egui::FullOutput {
+        ctx.run_test_ui(egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1400., 1000.))),
+            focused: true, events, ..Default::default()
+        }, |ui| {
+            app_host::set_world_input(ctx, true);
+            app.view_contents(ui);
+        })
+    }
+
+    fn position(output: &egui::FullOutput, label: &str) -> Pos2 {
+        fn find(shape: &egui::Shape, label: &str) -> Option<Pos2> {
+            match shape {
+                egui::Shape::Text(text) if text.galley.text() == label => Some(text.pos + text.galley.rect.center().to_vec2()),
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| find(shape, label)),
+                _ => None,
+            }
+        }
+        output.shapes.iter().find_map(|shape| find(&shape.shape, label)).expect("visible view action")
+    }
+
+    #[test]
+    fn xr_view_controls_route_actions_without_changing_the_desktop_camera() {
+        let ctx = egui::Context::default();
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        set_section_open(&ctx, "view_camera", true);
+        set_section_open(&ctx, "view_standard_views", true);
+        let camera = app.doc.camera.clone();
+        let mut output = frame(&mut app, &ctx, Vec::new());
+        for (label, expected) in [
+            ("Fit selection", None),
+            ("Fit model", Some(WorldView::Scene)),
+            ("Center origin", Some(WorldView::Origin)),
+            ("Reset view", Some(WorldView::Reset)),
+            (StandardView::Top.label(), Some(WorldView::Standard(StandardView::Top))),
+        ] {
+            let pos = position(&output, label);
+            for pressed in [true, false] {
+                output = frame(&mut app, &ctx, vec![egui::Event::PointerMoved(pos), egui::Event::PointerButton {
+                    pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE,
+                }]);
+            }
+            assert_eq!(app_host::take_world_view(&ctx), expected);
+            assert_eq!(app_host::take_world_view(&ctx), None, "commands must not replay");
+            assert_eq!(app.doc.camera, camera);
+            assert!(!app.project.modified);
+        }
+        // Shared commands invoked by keyboard/menu consumers use the same route.
+        let _ = ctx.run_test_ui(egui::RawInput::default(), |_| {
+            app_host::set_world_input(&ctx, true);
+            app.selected.insert(1);
+            app.fit_selection(&ctx);
+        });
+        assert_eq!(app_host::take_world_view(&ctx), Some(WorldView::Selection));
+        assert_eq!(app.doc.camera, camera);
+        // Outside the immersive host these remain normal desktop commands.
+        app.doc.camera.target = DVec3::ONE;
+        app.fit_origin(&ctx);
+        assert_eq!(app.doc.camera.target, DVec3::ZERO);
+        assert_eq!(app_host::take_world_view(&ctx), None);
+    }
 }
 
 fn standard_view_preview(

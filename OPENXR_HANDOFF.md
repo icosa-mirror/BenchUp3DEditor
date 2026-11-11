@@ -31,8 +31,9 @@ Recorded human feedback:
    discussion. Ask verification questions one at a time when testing resumes.
 
 Section-cap ownership and controller picking landed in `92b7f8a`. Axis/plane
-locks and host-aware shared precision input landed in `1de74a5`. Current work
-adds destination-folder creation to the in-headset file chooser.
+locks and host-aware shared precision input landed in `1de74a5`. Destination-folder
+creation landed in `25b514f`. Current work routes shared view controls to immersive
+placement, including standard views, fitting and centering on the origin.
 Generated caps remain read-only surfaces with optional editable group ownership.
 No full phase or visual acceptance has been recorded.
 
@@ -71,8 +72,38 @@ behavior, filtering/directory preferences and keyboard-safe chooser footer layou
 `axis-lock-final-regressions.log` also passes both XR lock cases against the
 current source, including the final egui ID constructor update.
 `new-folder-build.log` passes the native example build without warnings. The
-combined executable is frozen under this milestone commit in
+combined executable is frozen under `25b514f` in
 `.local/openxr/preview-builds/`. No replacement headset session was launched.
+
+Shared View controls now issue XR placement commands while immersive mode is
+active. The Camera section describes headset-controlled projection/FOV and offers
+Fit model, Fit selection, Center origin and Reset view. The seven existing
+standard-view cards turn the scene toward the user, with larger captions in XR;
+their desktop selection behavior remains unchanged. Existing section keys and
+preference restoration are retained. These are transient placement actions like
+two-grip navigation, not new saved option states.
+
+Standard directions preserve the target's physical position and size, including
+after two-grip navigation, and use the desktop camera's analytic right/up basis
+for stable Top and Bottom directions. Fit model/selection retain world orientation;
+Center origin retains physical scale and orientation; Reset view restores the
+upright initial orientation. All routes leave document geometry, undo history and
+the saved desktop camera unchanged. Shared fit commands also request XR framing
+when called by menus/keyboard/project consumers during immersive UI frames.
+`world-view-tests.log` passes three focused cases: actual XR View controls queue
+commands without modifying the desktop camera or project; all seven standard
+directions match desktop right/up bases and remain invertible for picking; and
+framing preserves orientation/scale/target through navigation, with an upright
+reset matching the original placement. `world-view-desktop-regression.log` passes
+the existing shared projection/all-standard-views/no-resize UI case. Live
+controller acceptance remains pending.
+`world-view-build.log` passes the native example build without warnings.
+`world-view-eye.png` was rendered on RTX 4090 Vulkan without an OpenXR session and
+inspected. Compared with the prior checked `section-cap-eye.png`, the 1440 x 900
+default-view image differs in only two pixels, by at most one color level. This
+checks default rendering, not live standard-view/controller acceptance. The
+combined executable is preserved under this milestone commit in
+`.local/openxr/preview-builds/`.
 
 ## User direction
 
@@ -291,7 +322,7 @@ combined executable is frozen under this milestone commit in
    desktop consumers and immersive input routes: editing context/context actions,
    remaining handles, precision/locks, joinery/fastener targeting and display modes.
 2. Evaluated-model preparation has been extracted from `paint_evaluated_scene`.
-   Close the remaining UI/input dependencies: camera/view commands, desktop-only
+   Close the remaining UI/input dependencies: host/window commands, desktop-only
    selection gestures and any remaining handle/tool routes identified by the audit. Known limits include
    broader off-face/global references, fast erase-sweep interpolation, evaluated-only paint/edit
    guards and broader nested/scoped cap acceptance. A retained cap hierarchy now

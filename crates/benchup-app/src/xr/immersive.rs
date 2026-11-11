@@ -1,10 +1,14 @@
 //! Head-tracked stereo scene views. Both eyes share retained world geometry.
-use crate::{app_host::XrPanelPreferences, renderer};
+use crate::{app_host::{WorldView, XrPanelPreferences}, renderer};
 use benchup_core::{Camera, DisplaySettings, Model};
 use eframe::{egui, egui_wgpu, wgpu};
 use glam::{DMat4, DQuat, DVec2, DVec3, DVec4};
 use openxr as xr;
 use std::{collections::BTreeSet, sync::Arc};
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod view_tests;
 
 #[derive(Clone)]
 pub(crate) struct Source {
@@ -44,10 +48,9 @@ struct Placement {
     center: DVec3,
     fit_scale: f64,
     anchor: xr::Posef,
+    orientation: DQuat,
+    offset: DVec3,
 }
-
-#[derive(Clone, Copy)]
-pub(super) enum FitTarget { Scene, Selection }
 
 pub(super) struct Scene {
     ctx: egui::Context,
@@ -118,10 +121,7 @@ impl Scene {
         }
     }
 
-    pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: Option<FitTarget>) {
-        if fit.is_some() {
-            self.navigation.reset();
-        }
+    pub fn begin_frame(&mut self, source: Source, anchor: xr::Posef, fit: Option<WorldView>) {
         self.head = pose_matrix(anchor);
         self.faces
             .update_for_revision(&source.model, source.revision);
@@ -157,7 +157,7 @@ impl Scene {
         }
         self.picking.update(&self.faces);
         if self.placement.is_none() || fit.is_some() {
-            let selected = matches!(fit,Some(FitTarget::Selection))
+            let selected = matches!(fit,Some(WorldView::Selection))
                 .then(||source.model.selection_bounds(&source.selected)).flatten();
             let bounds = selected.or_else(||source.model.bounds()).or_else(|| {
                 source
@@ -165,20 +165,17 @@ impl Scene {
                     .as_ref()
                     .and_then(|p| p.model.bounds().map(|(a, b)| (a + p.offset, b + p.offset)))
             });
-            let (center, fit_scale) = bounds.map_or((DVec3::ZERO,1.0),|(min,max)| {
-                let extent = (max-min).max_element();
-                ((min+max)*0.5,if extent > 0.0 {1.6/extent.max(0.001)} else {1.0})
-            });
-                self.placement = Some(Placement {
-                    center,
-                    fit_scale,
-                    anchor,
-                });
-                println!(
-                    "[BenchUpXR] Immersive scene fitted: {} faces, scale {:.5} metres per model metre",
-                    source.model.faces.len(),
-                    fit_scale
-                );
+            let previous = self.placement.as_ref().map(|placement|
+                (placement.center, self.navigation.matrix() * placement.model_to_tracking(1.)));
+            let placement = Placement::fitted(bounds, anchor, fit.unwrap_or(WorldView::Reset), previous);
+            let fit_scale = placement.fit_scale;
+            self.placement = Some(placement);
+            self.navigation.reset();
+            println!(
+                "[BenchUpXR] Immersive scene fitted: {} faces, scale {:.5} metres per model metre",
+                source.model.faces.len(),
+                fit_scale
+            );
         }
         self.source = Some(source);
     }
@@ -1107,6 +1104,50 @@ fn paste_display(source: &DisplaySettings, offset: DVec3) -> DisplaySettings {
 }
 
 impl Placement {
+    const OFFSET: DVec3 = DVec3::new(2.05, -0.2, -1.43);
+
+    fn fitted(bounds: Option<(DVec3, DVec3)>, anchor: xr::Posef, action: WorldView, previous: Option<(DVec3, DMat4)>) -> Self {
+        let (mut center, mut fit_scale) = bounds.map_or((DVec3::ZERO, 1.), |(min, max)| {
+            let extent = (max - min).max_element();
+            ((min + max) * 0.5, if extent > 0. { 1.6 / extent.max(0.001) } else { 1. })
+        });
+        let mut offset = Self::OFFSET;
+        let previous_matrix = previous.map(|(_, matrix)| matrix);
+        if matches!(action, WorldView::Standard(_)) && let Some((previous_center, matrix)) = previous {
+            // Standard directions rotate around the existing target without
+            // fitting, resizing or moving it, just like the desktop controls.
+            center = previous_center;
+            fit_scale = matrix.x_axis.truncate().length();
+            offset = pose_matrix(anchor).inverse().transform_point3(matrix.transform_point3(center));
+        }
+        let default = DQuat::from_rotation_x(-std::f64::consts::FRAC_PI_2);
+        let orientation = match action {
+            WorldView::Standard(view) => {
+                let mut camera = Camera::default();
+                camera.set_standard_view(view);
+                let normal = (camera.eye() - camera.target).normalize();
+                let model_basis = DMat4::from_cols(camera.right().extend(0.), camera.up().extend(0.), normal.extend(0.), DVec4::W);
+                // Face the user horizontally, retaining tracking-space up. The
+                // model sits beside the panel, rather than on its forward axis.
+                let facing = DVec3::new(-offset.x, 0., -offset.z).try_normalize().unwrap_or(DVec3::Z);
+                let right = DVec3::Y.cross(facing);
+                let tracking_basis = DMat4::from_cols(right.extend(0.), DVec3::Y.extend(0.), facing.extend(0.), DVec4::W);
+                DQuat::from_mat4(&(tracking_basis * model_basis.transpose())).normalize()
+            }
+            WorldView::Reset => default,
+            _ => previous_matrix.map_or(default, |matrix| {
+                let (_, rotation, _) = matrix.to_scale_rotation_translation();
+                let (_, anchor_rotation, _) = pose_matrix(anchor).to_scale_rotation_translation();
+                (anchor_rotation.conjugate() * rotation).normalize()
+            }),
+        };
+        if action == WorldView::Origin {
+            center = DVec3::ZERO;
+            if let Some(matrix) = previous_matrix { fit_scale = matrix.x_axis.truncate().length(); }
+        }
+        Self { center, fit_scale, anchor, orientation, offset }
+    }
+
     fn guide_frame(&self) -> super::world_picking::GuideFrame {
         super::world_picking::GuideFrame {
             center: self.center,
@@ -1115,11 +1156,11 @@ impl Placement {
     }
 
     fn model_to_tracking(&self, scale: f64) -> DMat4 {
-        // Model Z is up; OpenXR Y is up. Put the fitted model to the right of
-        // the editor so the opaque UI panel does not cover the 3D scene.
+        // The default orientation maps model Z to OpenXR Y. Standard views
+        // replace that orientation. Keep the scene beside the opaque UI panel.
         pose_matrix(self.anchor)
-            * DMat4::from_translation(DVec3::new(2.05, -0.2, -1.43))
-            * DMat4::from_rotation_x(-std::f64::consts::FRAC_PI_2)
+            * DMat4::from_translation(self.offset)
+            * DMat4::from_quat(self.orientation)
             * DMat4::from_scale(DVec3::splat(self.fit_scale * scale))
             * DMat4::from_translation(-self.center)
     }

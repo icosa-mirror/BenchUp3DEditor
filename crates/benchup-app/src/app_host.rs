@@ -83,6 +83,27 @@ pub(crate) fn world_input(ctx: &egui::Context) -> bool {
         .is_some_and(|(saved_frame, enabled)| saved_frame == frame && enabled)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WorldView {
+    Scene,
+    Selection,
+    Origin,
+    Reset,
+    Standard(benchup_core::StandardView),
+}
+
+pub(crate) fn request_world_view(ctx: &egui::Context, action: WorldView) -> bool {
+    if !world_input(ctx) { return false; }
+    ctx.data_mut(|data| data.insert_temp(egui::Id::unique("benchup.host.world_view"), Some(action)));
+    ctx.request_repaint();
+    true
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+pub(crate) fn take_world_view(ctx: &egui::Context) -> Option<WorldView> {
+    ctx.data_mut(|data| data.remove_temp::<Option<WorldView>>(egui::Id::unique("benchup.host.world_view"))).flatten()
+}
+
 pub(crate) enum UiHost<'a> {
     Desktop(&'a mut Frame),
     #[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]

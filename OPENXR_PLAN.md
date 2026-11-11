@@ -20,6 +20,10 @@ now includes retained section-cap ownership/picking: grouped caps select, paint
 and transform their owner; cap surfaces anchor drawing without becoming document
 faces, and filled caps block hidden face/edge/annotation targets. Controller and
 nested/scoped cap acceptance remains pending.
+The XR panel also exposes persisted axis/plane locks and destination-folder
+creation. Shared View controls now target immersive placement: Fit model/selection,
+Center origin, Reset view and all seven standard directions. Headset projection
+remains runtime-controlled; those commands do not modify the desktop camera.
 Full phase/visual acceptance remains open.
 
 ## Outcome and working rules
@@ -96,7 +100,10 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
    rotation to yaw while retaining vertical translation and scaling. Navigation
    reserves pointing input and requires release-to-rearm after loss/cancellation.
    Fit 3D and Fit selection reframe the immersive placement from scene/selected
-   rendered bounds; they do not move the desktop camera.
+   rendered bounds; they do not move the desktop camera. Shared View controls
+   now route to the same placement system. Standard views turn the scene using
+   desktop right/up bases without resizing or moving its target; Center origin
+   preserves physical scale, and Reset view restores the upright starting pose.
 
 ## Spatial parity inventory
 
@@ -113,7 +120,7 @@ The numbered rows are the checklist for the replacement milestone.
 | 5 | Names and attached text | Group labels with owner-aware GPU face/cap visibility; stroke depth no longer clips glyphs; saved text and leaders; shared-basis glyphs; world text creation and editing | Compare wrapping/angular readability and layered occluders behind owner surfaces against desktop; headset text-entry acceptance pending |
 | 6 | Sections and display/environment | Shared effective display, face styles/X-Ray, hidden/profile/depth/endpoint/extension cues, fog, cached shadows; GPU sky/ground/horizon/sun; clipped faces, caps/contours, retained cap picking with scoped body ownership and controller section handles | Audit nested/scoped and overlapping cap cases, settings/handle parity and display combinations |
 | 7 | Joinery, fasteners and solids | Evaluated geometry, connection axes/markers/arrows, joint edit/warning glyphs, owner-aware guides, solid operand feedback and shared boolean/flip commands | Audit all desktop-supported target/edit gestures in immersive space; evaluated-only paint targets remain restricted |
-| 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input | Audit reachable commands, numeric/lock input and native dialogs; immersive inspector/tool layout implemented; remaining input and dialog parity |
+| 8 | Instructions and tool UI | World HUD/status/errors, inference labels/vector glyphs; docked readable controls; shared inspectors/modals; native keyboard input; shared View framing and standard directions target XR placement | Audit remaining reachable commands, handles and native dialogs; controller acceptance of recent lock/view/file workflows remains pending |
 
 The object-length axis diagram in `entity_gizmo.rs` is inspector UI, not a spatial
 manipulation gizmo. Classify remaining painter paths by function rather than filename.
@@ -146,8 +153,9 @@ or complete-parity claims.
    display combinations. Do not substitute repeated minor snap refinements for
    this replacement-viewport checklist.
 2. Close the remaining UI/input dependencies on the 2D model view; evaluated
-   scene preparation is now independent of painting. Reconcile camera/view commands
-   and desktop-only selection/handle gestures with immersive equivalents. Known work includes
+   scene preparation is now independent of painting. Shared View framing and
+   standard directions now have immersive routes; reconcile remaining desktop-only
+   selection/handle gestures with immersive equivalents. Known work includes
    broader reference/alignment behavior, fast erase-sweep interpolation, safe handling of
    unsupported evaluated targets and nested/scoped cap/controller acceptance.
    Preserve shared operations, bounded queries and retained GPU feedback.

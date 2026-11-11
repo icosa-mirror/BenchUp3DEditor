@@ -99,7 +99,7 @@ pub(super) struct Editor {
     cursor: super::cursor::Cursor,
     recenter_requested: bool,
     scene: super::immersive::Scene,
-    fit_scene_requested: Option<super::immersive::FitTarget>,
+    view_requested: Option<crate::app_host::WorldView>,
     world_tools: crate::app::xr_tools::State,
     native_output: Option<super::desktop::NativeOutput>,
     keyboard_modifiers: egui::Modifiers,
@@ -159,7 +159,7 @@ impl Editor {
             cursor: super::cursor::Cursor::new(device, format),
             recenter_requested: false,
             scene: super::immersive::Scene::new(device, format),
-            fit_scene_requested: Some(super::immersive::FitTarget::Scene),
+            view_requested: Some(crate::app_host::WorldView::Scene),
             world_tools: Default::default(),
             native_output: None,
             keyboard_modifiers: Default::default(),
@@ -325,7 +325,7 @@ impl Editor {
                                     .clicked()
                                 };
                                 if button("Fit 3D") {
-                                    fit_scene = Some(super::immersive::FitTarget::Scene);
+                                    fit_scene = Some(crate::app_host::WorldView::Scene);
                                     preferences.scene_scale = 1.0;
                                 }
                                 if button("3D -") {
@@ -337,7 +337,7 @@ impl Editor {
                                 if ui.add_enabled(self.app.xr_has_selection(),
                                     egui::Button::new(egui::RichText::new("Fit selection").size(18.0))
                                         .min_size(egui::vec2(132.0,42.0))).clicked() {
-                                    fit_scene = Some(super::immersive::FitTarget::Selection);
+                                    fit_scene = Some(crate::app_host::WorldView::Selection);
                                     preferences.scene_scale = 1.0;
                                 }
                             });
@@ -375,7 +375,7 @@ impl Editor {
             self.ctx.set_zoom_factor(preferences.ui_scale);
         }
         self.recenter_requested |= recenter;
-        self.fit_scene_requested = fit_scene.or(self.fit_scene_requested);
+        self.view_requested = crate::app_host::take_world_view(&self.ctx).or(fit_scene).or(self.view_requested);
         // Immediate preference persistence uses the same shared capture/restore
         // path as desktop, even without document edits or framework autosave.
         self.preferences.flush();
@@ -480,7 +480,7 @@ impl Editor {
         self.scene.begin_frame(
             source,
             anchor,
-            std::mem::take(&mut self.fit_scene_requested),
+            std::mem::take(&mut self.view_requested),
         );
     }
 
