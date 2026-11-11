@@ -3,6 +3,34 @@
 Run these commands from this checkout in a host PowerShell terminal. The default
 desktop application remains independent of the OpenXR loader.
 
+## Current validation status (2026-11-11)
+
+An isolated RTX 4090 Vulkan snapshot of frozen build `138d7f4` loaded the
+standalone Khronos layer (advertised API 1.4.368) and the clean 404-face Example.
+Synchronization validation was requested through the existing layer settings.
+It wrote the image but reported **10** validation errors, all
+`VUID-StandaloneSpirv-None-10684`, at the layer's default repeated-message cap;
+the total occurrence count is not established. No other VUID category appeared. Validation is
+not clean. Artifacts are in `.local/openxr/offscreen-validation-138d7f4-b90cda7c/`,
+including `validation.log` and `validation-summary.json`. Exit success/image
+creation alone is not a passed validation gate.
+
+The lockfile pins wgpu/Naga 30.0.1. The local HAL selects SPIR-V 1.6 for Vulkan
+1.3+ devices. The current [upstream issue #7696](https://github.com/gfx-rs/wgpu/issues/7696)
+still records the same Function-layout failure on Naga 30.0.1. A
+[candidate fork patch](https://github.com/sargunv/wgpu/commit/30580e4fa17a195d4746e8525028a04f90c2d3cc)
+addresses layout-free types, but has not been adopted or verified against this
+checkout. No package-cache edits, dependency changes or application-side diagnostic
+suppression were applied. Loader warnings identify the explicitly forced layer;
+the layer also reports reaching its default duplicate-message limit.
+
+This check created no OpenXR session. The historical runtime image/copy/lifetime
+findings below therefore remain separate and unverified on the current build.
+The current application has its queue drain before normal XR-resource teardown;
+source inspection alone does not clear runtime validation. Ordinary previews
+remain validation-disabled. Earlier probe sections below retain their historical
+evidence; current implementation status is in the plan and handoff.
+
 ## Prerequisites and loader discovery
 
 Use Rust/MSVC, a Vulkan-capable GPU driver, SteamVR selected as the active OpenXR

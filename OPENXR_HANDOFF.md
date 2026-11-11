@@ -589,6 +589,18 @@ restoration into a new app, and no model edit/dirty state. Physical controller,
 keyboard/file-picker and process-restart acceptance remain open. These changes
 add test coverage only; the ready production executable remains `138d7f4`.
 
+Current validation triage is recorded in `OPENXR_WINDOWS.md` and
+`.local/openxr/offscreen-validation-138d7f4-b90cda7c/validation-summary.json`.
+The frozen binary loaded the standalone Khronos layer (API 1.4.368), rendered
+404 faces and reported 10 `VUID-StandaloneSpirv-None-10684` errors at the layer's
+default repeated-message cap, with no other VUID category. Total occurrences are
+not established. Synchronization validation was requested. This reproduces the
+known Naga 30.0.1 Function-layout issue independently of OpenXR; image/exit success
+does not make validation clean. The upstream issue remains open and a candidate
+fork patch is linked in the Windows notes, but no dependency/cache change or
+application-side diagnostic suppression was made. No headset session was created, and historical
+runtime copy/layout/lifetime findings remain unverified on this build.
+
 `move-display-tests.log` passes cross-platform WGSL parsing/validation and the
 Move/valid-selection activation cases, including group selection, empty/invalid
 selection and other tools. The inherited appearance regression initially failed

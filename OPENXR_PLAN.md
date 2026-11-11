@@ -334,6 +334,11 @@ or complete-parity claims.
    immediate preference restoration and clean graphics validation. Historical
    validation findings are in `OPENXR_WINDOWS.md`; they have not been cleared by
    the current validation-disabled previews.
+   A current isolated validation-enabled snapshot of build `138d7f4` reproduces
+   10 reported shader errors (the default duplicate cap), all
+   `VUID-StandaloneSpirv-None-10684`, with the Khronos layer
+   loaded. This matches the still-open Naga 30.0.1 issue and does not retest the
+   separate OpenXR runtime image/resource findings. Dependencies remain unchanged.
 4. Phase 2 acceptance remains open: immersive/desktop/panel document and tool
    equivalence; all eight spatial parity rows; no required 2D model-view fallback;
    focus/tracking/reference-space changes and scale extremes. Latest desktop/web
