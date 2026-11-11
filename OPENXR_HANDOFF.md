@@ -7,6 +7,25 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Active continuation; user busy
 
+C18 is compacting the existing XR controls toward the requested non-dominant-
+controller panel direction. View/comfort controls now use a collapsed-by-default
+disclosure with shared inspector section memory; Recenter remains a large visible
+button. Tool, lock and option rows wrap at narrower widths. The disclosure saves
+through `persist_inspector_changes` on a change, without per-frame extra preference
+capture. The existing world panel, commands, keyboard/modal routes and button
+sizes are retained. The focused disclosure test passes click-driven immediate
+save, reopen in another UI scope, close/save/reopen and Recenter while collapsed,
+without a model edit (`.local/openxr/compact-controls-tests.log`). The locked
+editor build passes without warnings (`compact-controls-build.log`). Both
+1440x900 independent RTX 4090 Vulkan panel snapshots are inspected, with no
+error/warning/panic messages: `.local/openxr/compact-controls-render/closed.png`
+and `open/open.png`; `renderer-check.json` records the binary hash and limits.
+The collapsed view exposes more inspector content. The expanded view retains all
+comfort controls, and Recenter/tool actions remain accessible in both. The build
+is frozen under this milestone's source commit in `.local/openxr/preview-builds/`.
+These checks create no OpenXR session. Further layout reduction and controller
+anchoring remain future work; this is not a controller-panel readiness claim.
+
 The next lifecycle source audit found C17: the frame loop ignored
 `ReferenceSpaceChangePending`. Its implementation now queues LOCAL changes for
 the current session and applies them at the first predicted display time at or

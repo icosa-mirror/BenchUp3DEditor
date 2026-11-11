@@ -291,6 +291,8 @@ impl Editor {
                 .resizable(false)
                 .frame(egui::Frame::new().fill(ui.visuals().panel_fill).inner_margin(8))
                 .show(ui, |ui| {
+                        let has_selection = self.app.xr_has_selection();
+                        recenter |= self.app.xr_view_comfort_controls(ui, &mut self.preferences, |ui| {
                             ui.label(
                                 egui::RichText::new(format!(
                                     "XR panel   {:.1} m away   {:.1} m wide   Text {:.0}%",
@@ -300,7 +302,7 @@ impl Editor {
                                 ))
                                 .size(18.0),
                             );
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 let mut button = |label: &str| {
                                     ui.add_sized(
                                         [84.0, 42.0],
@@ -326,11 +328,8 @@ impl Editor {
                                 if button("Panel +") {
                                     preferences.width_metres += 0.1;
                                 }
-                                if button("Recenter") {
-                                    recenter = true;
-                                }
                             });
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 ui.checkbox(
                                     &mut preferences.immersive_scene,
                                     egui::RichText::new("3D view (look right)").size(18.0),
@@ -354,14 +353,15 @@ impl Editor {
                                 if button("3D +") {
                                     preferences.scene_scale *= 1.25;
                                 }
-                                if ui.add_enabled(self.app.xr_has_selection(),
+                                if ui.add_enabled(has_selection,
                                     egui::Button::new(egui::RichText::new("Fit selection").size(18.0))
                                         .min_size(egui::vec2(132.0,42.0))).clicked() {
                                     fit_scene = Some(crate::app_host::WorldView::Selection);
                                     preferences.scene_scale = 1.0;
                                 }
                             });
-                            self.app.xr_tool_controls(ui, &mut self.preferences, &mut self.world_tools, &mut preferences);
+                        });
+                        self.app.xr_tool_controls(ui, &mut self.preferences, &mut self.world_tools, &mut preferences);
                 });
             }
             self.app

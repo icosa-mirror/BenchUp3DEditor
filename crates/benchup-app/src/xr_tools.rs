@@ -3,6 +3,41 @@ use super::*;
 use benchup_core::Ray;
 use std::sync::Arc;
 
+const VIEW_COMFORT_SECTION: &str = "xr/view_comfort";
+
+// Keep a large recovery button visible even with the secondary controls closed.
+// This disclosure shares the inspector's persistent section memory.
+fn view_comfort_section(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) -> (bool, bool) {
+    let ctx = ui.ctx().clone();
+    let id = ui.make_persistent_id(VIEW_COMFORT_SECTION);
+    super::sidebar::restore_section(&ctx, id, VIEW_COMFORT_SECTION, false);
+    let state = egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id, false);
+    let was_open = state.is_open();
+    let mut toggle = false;
+    let mut recenter = false;
+    let mut header = state.show_header(ui, |ui| {
+        toggle = ui
+            .add_sized(
+                [190., 42.],
+                egui::Button::new(egui::RichText::new("View and comfort").size(18.)),
+            )
+            .clicked();
+        recenter = ui
+            .add_sized(
+                [104., 42.],
+                egui::Button::new(egui::RichText::new("Recenter").size(18.)),
+            )
+            .clicked();
+    });
+    if toggle {
+        header.toggle();
+    }
+    let is_open = header.is_open();
+    header.body(contents);
+    super::sidebar::remember_section(&ctx, id, VIEW_COMFORT_SECTION);
+    (recenter, was_open != is_open)
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct Hit {
     pub entity: Option<u64>,
@@ -386,6 +421,19 @@ impl BenchUpApp {
         })
     }
 
+    pub(crate) fn xr_view_comfort_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        storage: &mut dyn eframe::Storage,
+        contents: impl FnOnce(&mut egui::Ui),
+    ) -> bool {
+        let (recenter, changed) = view_comfort_section(ui, contents);
+        if changed {
+            self.persist_inspector_changes(ui.ctx(), Some(storage), false);
+        }
+        recenter
+    }
+
     pub(crate) fn xr_tool_controls(
         &mut self,
         ui: &mut egui::Ui,
@@ -396,7 +444,7 @@ impl BenchUpApp {
         let ctx = ui.ctx().clone();
         crate::app_host::set_world_input(&ctx, preferences.immersive_scene);
         ui.add_enabled_ui(self.xr_scene_interaction_enabled(&ctx), |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().interact_size.y = 42.;
                 egui::ComboBox::from_id_salt("benchup.xr.tool_picker")
                     .width(240.)
@@ -432,7 +480,7 @@ impl BenchUpApp {
                             Tool::GrainDirection,
                         ];
                         for row in tools.chunks(4) {
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 for &tool in row {
                                     if ui
                                         .add_sized(
@@ -501,7 +549,7 @@ impl BenchUpApp {
             });
             let mut changed = false;
             if self.supports_axis_locks() {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(egui::RichText::new("Locks").size(18.));
                     for (axis, label) in [(Axis::X, "X"), (Axis::Y, "Y"), (Axis::Z, "Z")] {
                         let active = self.lock == Some(axis) || self.second_lock == Some(axis);
@@ -539,7 +587,7 @@ impl BenchUpApp {
                         state.cancel_window();
                         state.cancel_selection_click();
                     }
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.checkbox(&mut preferences.extend_selection,
                             egui::RichText::new("Add/remove selection").size(18.));
                         ui.label(egui::RichText::new(format!("{} selected",self.selected.len())).size(18.));
@@ -554,7 +602,7 @@ impl BenchUpApp {
                         .changed();
                 }
                 Tool::Polygon => {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(
                             egui::RichText::new(format!("{} sides", self.polygon_sides)).size(18.),
                         );
@@ -578,7 +626,7 @@ impl BenchUpApp {
                     });
                 }
                 Tool::Paint => {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(egui::RichText::new("Colour").size(18.));
                         changed |= ui
                             .scope(|ui| {
@@ -1910,6 +1958,139 @@ impl BenchUpApp {
             self.measurement.as_mut().unwrap().offset = offset;
         }
         offset.is_some()
+    }
+}
+
+#[cfg(test)]
+mod compact_controls_tests {
+    use super::*;
+    use crate::test_ui::ContextExt;
+
+    #[derive(Default)]
+    struct Storage {
+        values: std::collections::BTreeMap<String, String>,
+        flushed: bool,
+    }
+    impl eframe::Storage for Storage {
+        fn get_string(&self, key: &str) -> Option<String> {
+            self.values.get(key).cloned()
+        }
+        fn set_string(&mut self, key: &str, value: String) {
+            self.values.insert(key.to_owned(), value);
+        }
+        fn remove_string(&mut self, key: &str) {
+            self.values.remove(key);
+        }
+        fn flush(&mut self) {
+            self.flushed = true;
+        }
+    }
+
+    fn render(
+        app: &mut BenchUpApp,
+        ctx: &egui::Context,
+        storage: &mut Storage,
+        events: Vec<egui::Event>,
+        moved: bool,
+    ) -> (bool, bool) {
+        let mut body_visible = false;
+        let mut recenter = false;
+        let _ = ctx.run_test_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(600., 900.))),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                ui.push_id(if moved { "controller" } else { "world" }, |ui| {
+                    recenter = app.xr_view_comfort_controls(ui, storage, |ui| {
+                        body_visible = true;
+                        ui.label("Comfort controls");
+                    });
+                });
+            },
+        );
+        (body_visible, recenter)
+    }
+
+    fn click(
+        app: &mut BenchUpApp,
+        ctx: &egui::Context,
+        storage: &mut Storage,
+        position: Pos2,
+        moved: bool,
+    ) -> bool {
+        let mut recenter = false;
+        for pressed in [true, false] {
+            recenter |= render(
+                app,
+                ctx,
+                storage,
+                vec![
+                    egui::Event::PointerMoved(position),
+                    egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                moved,
+            )
+            .1;
+        }
+        recenter
+    }
+
+    #[test]
+    fn comfort_disclosure_clicks_save_immediately_restore_in_another_layout_and_keep_recenter_available()
+     {
+        let ctx = egui::Context::default();
+        ctx.style_mut_of(ctx.theme(), |style| style.animation_time = 0.);
+        let mut app = BenchUpApp::with_document(Document::default(), None, true);
+        let mut storage = Storage::default();
+        app.restore_inspector_preferences(&ctx, Some(&storage));
+        assert!(!render(&mut app, &ctx, &mut storage, vec![], false).0);
+        let model = app.doc.model.clone();
+        click(&mut app, &ctx, &mut storage, egui::pos2(100., 25.), false);
+        assert!(render(&mut app, &ctx, &mut storage, vec![], false).0);
+        assert!(
+            storage.flushed,
+            "Opening controls must save without a model edit"
+        );
+        assert!(!app.project.modified);
+        assert_eq!(app.doc.model, model);
+
+        let next_ctx = egui::Context::default();
+        next_ctx.style_mut_of(next_ctx.theme(), |style| style.animation_time = 0.);
+        let mut next = BenchUpApp::with_document(Document::default(), None, true);
+        next.restore_inspector_preferences(&next_ctx, Some(&storage));
+        assert!(render(&mut next, &next_ctx, &mut storage, vec![], true).0);
+        storage.flushed = false;
+        click(
+            &mut next,
+            &next_ctx,
+            &mut storage,
+            egui::pos2(100., 25.),
+            true,
+        );
+        assert!(!render(&mut next, &next_ctx, &mut storage, vec![], true).0);
+        assert!(storage.flushed);
+        assert!(click(
+            &mut next,
+            &next_ctx,
+            &mut storage,
+            egui::pos2(270., 25.),
+            true
+        ));
+        assert!(!render(&mut next, &next_ctx, &mut storage, vec![], true).0);
+        assert!(!next.project.modified);
+        assert_eq!(next.doc.model, model);
+
+        let last_ctx = egui::Context::default();
+        let mut last = BenchUpApp::with_document(Document::default(), None, true);
+        last.restore_inspector_preferences(&last_ctx, Some(&storage));
+        assert!(!render(&mut last, &last_ctx, &mut storage, vec![], false).0);
     }
 }
 

@@ -117,6 +117,11 @@ record scope changes rather than silently changing an estimate.
     frame time, preserve physical placement with a valid origin transform and
     cancel/refit safely when that transform is unknown. Two focused checks and
     the locked native build pass. Runtime recenter acceptance remains open.
+18. [x] C18: Start compacting XR controls toward the requested controller-panel layout.
+    Keep Recenter and everyday tool actions accessible, wrap rows at narrow widths
+    and persist a collapsed-by-default View and comfort section. The focused
+    persistence check, locked build and inspected open/closed hardware snapshots
+    pass. Further layout reduction and controller anchoring remain future work.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
@@ -366,6 +371,8 @@ or complete-parity claims.
    reducing the panel layout. Keep the dominant controller available to point at
    the panel and interact with the scene. Handedness and any new placement or
    layout preferences must persist through the existing shared preference path.
+   C18 starts this reduction with readable wrapping control rows and a saved
+   View and comfort disclosure; the current world panel remains the host.
 3. Before replacing the current world panel, implement tracked non-dominant-hand
    anchoring and explicitly handle tracking loss, focus changes and two-grip
    scene navigation. Verify readability and reachability of menus, modals and
