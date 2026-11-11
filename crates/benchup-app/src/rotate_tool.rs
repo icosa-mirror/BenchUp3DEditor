@@ -9,8 +9,11 @@ pub(super) struct Rotation {
 }
 
 impl Rotation {
+    pub(super) fn normal_for_lock(&self, lock: Option<Axis>) -> DVec3 {
+        lock.map_or(self.surface_normal, Axis::vector)
+    }
     pub(super) fn set_lock(&mut self, lock: Option<Axis>) {
-        self.normal = lock.map_or(self.surface_normal, Axis::vector);
+        self.normal = self.normal_for_lock(lock);
     }
 }
 

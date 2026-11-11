@@ -268,6 +268,32 @@ continue to use opaque faces even when face snapping itself is disabled.
 `modeling-snap-preferences-tests.log` passes the independent face/centre toggle
 combinations and rejects an off-centre hit when only centre snapping is enabled.
 
+Rotate now uses the shared stationary target service. It prefers in-plane targets
+and compatible world guides; eligible off-plane geometry is projected onto the
+unchanged rotation plane, matching the desktop route. The target service clips
+edges and intersects faces against arbitrary world planes, not only axis locks.
+Projected targets drop their original geometry hint so grid refinement cannot
+pull them back out of the rotation plane. Edge/face/centre toggles and visibility
+remain active. Free rotation uses a forward ray/plane intersection where possible,
+retaining the original depth-based projected fallback for parallel rays. Shared
+grid refinement preserves plane tilt/elevation; exact targets retain priority.
+The existing pivot/reference, exact numeric entry, preview, commit and undo paths
+remain authoritative. Push/Pull, Offset and the remaining drawing refinements
+are still under C15 audit; no full parity acceptance is implied.
+
+`rotate-inference-tests.log` passes the controller off-plane projection case
+with snaps enabled/disabled, fixed Z axis, grid-enabled exact target, release
+and one undo; it also passes arbitrary-plane/target-preference/pivot rejection.
+`rotate-inference-modeling-regressions.log` passes all six current precise-modeling
+cases, including Move/Scale targets and exact values for all five tools.
+`rotate-inference-target-regressions.log` passes all seven stationary-target
+cases, including independent face/centre preferences and opaque-face/cap
+visibility. These checks do not establish headset comfort or complete parity.
+`rotate-inference-build.log` passes the native editor example build without
+warnings, including the preceding snap-preference fix. The executable is frozen
+under this Rotate milestone's commit in `.local/openxr/preview-builds/`; no
+replacement headset session was launched.
+
 `scale-inference-final-tests.log` passes three focused cases: controller scaling
 to an exact target with grid enabled, in free and X-locked modes, with one undo;
 stationary opaque-face occlusion/X-ray preference; and filled-section-cap

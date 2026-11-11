@@ -1286,18 +1286,21 @@ impl BenchUpApp {
             edit.unlocked_direction
         };
         let spacing = grid::configured_spacing(&self.doc.camera, &self.doc.display);
-        let model_target = if matches!(self.tool, Tool::Move | Tool::Scale) {
+        let model_target = if matches!(self.tool, Tool::Move | Tool::Scale | Tool::Rotate) {
             let geometry = edit.move_snap.as_ref().map(|cache| cache.shared_geometry());
             geometry.and_then(|geometry| {
                 let targets = state.move_targets.get_or_insert_with(Default::default);
                 targets.prepare(Arc::clone(&geometry), &self.doc.display);
-                let point = edit.anchor + constraint.map_or(delta, |c| c.project(delta));
-                targets.infer_with_options(pointer.ray, edit.anchor, point, constraint,
-                    crate::xr::world_move::Options { geometry: self.doc.snap_to_geometry,
+                let point = edit.anchor + if self.tool == Tool::Rotate { delta } else { constraint.map_or(delta, |c| c.project(delta)) };
+                let options = crate::xr::world_move::Options { geometry: self.doc.snap_to_geometry,
                         targets: benchup_core::inference::SnapTargets { edges: self.snap_to_edge,
                             faces: self.snap_to_face, face_centers: self.snap_to_face_center },
-                        axes: self.doc.snap_to_axes, x_ray: self.tool == Tool::Move || self.doc.display.x_ray })
-                    .map(|target| (target, geometry))
+                        axes: self.doc.snap_to_axes, x_ray: self.tool == Tool::Move || self.doc.display.x_ray };
+                let target = if self.tool == Tool::Rotate {
+                    let normal = edit.rotation.as_ref().unwrap().normal_for_lock(rotation_lock);
+                    targets.rotation(pointer.ray, edit.anchor, normal, point, options)
+                } else { targets.infer_with_options(pointer.ray, edit.anchor, point, constraint, options) };
+                target.map(|target| (target, geometry))
             })
         } else { None };
         let edit = self.modeling.as_mut().unwrap();
@@ -1328,6 +1331,27 @@ impl BenchUpApp {
             let rotation = edit.rotation.as_mut().unwrap();
             rotation.set_lock(rotation_lock);
             let normal = rotation.normal;
+            let (mut snap, edge, face, guides) = if let Some((target, _)) = model_target {
+                (target.snap, target.edge, target.face, target.guides)
+            } else {
+                let denominator = pointer.ray.direction.dot(normal);
+                if denominator.abs() > 1e-8 {
+                    let depth = (edit.anchor - pointer.ray.origin).dot(normal) / denominator;
+                    if depth > 0. { delta = pointer.ray.origin + pointer.ray.direction * depth - edit.anchor; }
+                }
+                let point = edit.anchor + delta - normal * delta.dot(normal);
+                (Snap { point, kind: Inference::Plane }, None, None, Vec::new())
+            };
+            if self.snap_to_grid {
+                let plane_axis = [Axis::X, Axis::Y, Axis::Z].into_iter()
+                    .find(|axis| normal.cross(axis.vector()).length() < 1e-7).map(AxisConstraint::Plane);
+                let axis = grid::movement_axis(snap.point, Some(edit.anchor), plane_axis, self.doc.snap_to_axes);
+                snap = grid::snap_with_geometry_hint(snap, spacing, Some(normal), axis, &edit.base,
+                    Some(&edit.snap_excluded), Some((edge, face)));
+            }
+            delta = snap.point - edit.anchor;
+            edit.snap = Some(snap);
+            edit.guides = guides;
             let reference = rotation.reference.unwrap();
             let reference = reference - normal * reference.dot(normal);
             let target = delta - normal * delta.dot(normal);
@@ -2050,6 +2074,37 @@ mod precise_modeling_tests {
         app.tool = tool;
         app.xr_panel.precise_modeling = precise;
         (app, State::default(), egui::Context::default(), face)
+    }
+
+    #[test]
+    fn world_rotate_controller_projects_off_plane_targets_without_changing_axis() {
+        for snapping in [false, true] {
+            let (mut app, mut state, ctx, face) = fixture(Tool::Rotate, false);
+            let target = DVec3::new(2., 1.5, 1.);
+            app.doc.model.add_edge(target, target + DVec3::Y).unwrap();
+            app.lock = Some(Axis::Z);
+            app.doc.snap_to_geometry = true; app.snap_to_edge = snapping;
+            app.snap_to_face = false; app.snap_to_face_center = false; app.doc.snap_to_axes = false;
+            app.snap_to_grid = snapping;
+            let original = app.doc.model.clone();
+            let start = point(&app, DVec3::new(2., 0.5, 0.), Some(face), true, true);
+            app.xr_world_pointer(Some(&start), &mut state, true, &ctx, &mut Storage);
+            let held = point(&app, target, None, false, true);
+            app.xr_world_pointer(Some(&held), &mut state, true, &ctx, &mut Storage);
+            let edit = app.modeling.as_ref().unwrap();
+            assert_eq!(edit.rotation.as_ref().unwrap().normal, DVec3::Z);
+            assert_eq!(edit.snap.unwrap().kind, if snapping { Inference::Endpoint } else { Inference::Plane });
+            assert!(edit.snap.unwrap().point.z.abs() < 1e-8);
+            assert!((edit.value - 45.).abs() < 1e-8, "snapping {snapping}: {}", edit.value);
+            assert_eq!(app.doc.model, original);
+            let released = point(&app, target, None, false, false);
+            app.xr_world_pointer(Some(&released), &mut state, true, &ctx, &mut Storage);
+            assert!(app.modeling.is_none());
+            assert_ne!(app.doc.model, original);
+            app.undo(&ctx, false);
+            assert_eq!(app.doc.model, original);
+            assert!(app.doc.history.undo_label().is_none());
+        }
     }
 
     #[test]

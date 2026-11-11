@@ -4,6 +4,7 @@ use benchup_core::{Axis, AxisGuide, DVec3, DisplaySettings, Inference, Model, Ra
 use std::sync::Arc;
 use crate::renderer;
 
+#[derive(Clone, Copy)]
 pub(crate) struct Options {
     pub geometry: bool,
     pub targets: benchup_core::inference::SnapTargets,
@@ -67,11 +68,33 @@ impl Targets {
     pub fn infer_with_options(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,
         options: Options) -> Option<Target>
     {
+        self.infer_on_plane(ray, anchor, point, constraint, None, options)
+    }
+
+    pub fn rotation(&self, ray: Ray, pivot: DVec3, normal: DVec3, point: DVec3, options: Options) -> Option<Target> {
+        let in_plane = self.infer_on_plane(ray, pivot, point, None, Some((pivot, normal)), options)
+            .filter(|target| target.snap.point.distance_squared(pivot) > 1e-12);
+        if in_plane.is_some() { return in_plane; }
+        if !options.geometry { return None; }
+        let mut projected = self.infer_with_options(ray, pivot, point, None, Options { axes: false, ..options })?;
+        projected.snap.point -= normal * (projected.snap.point - pivot).dot(normal);
+        if projected.snap.point.distance_squared(pivot) < 1e-12 { return None; }
+        // The projected point is not on the original edge/face. Grid refinement
+        // must not pull it back out of the rotation plane through that geometry.
+        projected.edge = None;
+        projected.face = None;
+        Some(projected)
+    }
+
+    fn infer_on_plane(&self, ray: Ray, anchor: DVec3, point: DVec3, constraint: Option<AxisConstraint>,
+        plane_override: Option<(DVec3, DVec3)>, options: Options) -> Option<Target>
+    {
         let Options { geometry, targets, axes, x_ray } = options;
         let edges = targets.edges;
         let model = self.source.as_ref()?;
         let allowed = |point: DVec3| self.display.section_contains(point)
-            && constraint.is_none_or(|c| c.contains(point - anchor));
+            && constraint.is_none_or(|c| c.contains(point - anchor))
+            && plane_override.is_none_or(|(origin, normal)| (point - origin).dot(normal).abs() < 1e-7);
         let near = |point: DVec3| {
             let delta = point - ray.origin;
             let depth = delta.dot(ray.direction);
@@ -85,7 +108,8 @@ impl Targets {
             let state = self.entities.get(id);
             if state.hidden || state.context.is_none() { return None; }
             let (a, b) = self.display.section_segment(a, b)?;
-            constrained_segment(a, b, anchor, constraint)
+            let (a, b) = constrained_segment(a, b, anchor, constraint)?;
+            if let Some((origin, normal)) = plane_override { plane_segment(a, b, origin, normal) } else { Some((a, b)) }
         }, |_, point| allowed(point) && self.visible(ray.origin, point, x_ray)) {
             let (a, b) = model.points(&model.edges[&hit.id]);
             let exact = [(a, Inference::Endpoint), (b, Inference::Endpoint), ((a + b) * 0.5, Inference::Midpoint)]
@@ -99,7 +123,10 @@ impl Targets {
         if geometry && (targets.faces || targets.face_centers)
             && let Some((id, _, hit)) = self.picking.nearest(&self.faces, &self.entities, ray, true) {
             let face = self.faces.get(id);
-            if let Some(point) = constrained_face(ray, anchor, constraint, face.normal, hit)
+            let point = if let Some((origin, normal)) = plane_override {
+                plane_face(ray, origin, normal, face.normal, hit)
+            } else { constrained_face(ray, anchor, constraint, face.normal, hit) };
+            if let Some(point) = point
                 && face.contains_point(point) && near(point).is_some() {
                 let center = targets.face_centers.then(|| self.faces.snap_center(model, id)).flatten()
                     .filter(|&center| near(center).is_some());
@@ -110,7 +137,7 @@ impl Targets {
             }
         }
         if !axes { return face_target; }
-        let plane = if let Some(target) = &face_target {
+        let plane = if let Some(plane) = plane_override { plane } else if let Some(target) = &face_target {
             (target.snap.point, self.faces.get(target.face.unwrap()).normal)
         } else { match constraint {
             Some(AxisConstraint::Plane(normal)) => (anchor, normal.vector()),
@@ -165,22 +192,55 @@ fn constrained_face(ray: Ray, anchor: DVec3, constraint: Option<AxisConstraint>,
             } else { Some(anchor + axis.vector() * (hit - anchor).dot(normal) / denominator) }
         }
         Some(AxisConstraint::Plane(axis)) => {
-            let n = axis.vector();
-            let direction = n.cross(normal);
-            if direction.length_squared() < 1e-18 {
-                ((hit - anchor).dot(n).abs() < 1e-7).then_some(hit)
-            } else {
-                let tangent = normal - n * normal.dot(n);
-                let origin = anchor + tangent * (hit - anchor).dot(normal) / tangent.length_squared();
-                ray.axis(origin, direction.normalize())
-            }
+            plane_face(ray, anchor, axis.vector(), normal, hit)
         }
+    }
+}
+
+fn plane_segment(a: DVec3, b: DVec3, origin: DVec3, normal: DVec3) -> Option<(DVec3, DVec3)> {
+    let first = (a - origin).dot(normal);
+    let last = (b - origin).dot(normal);
+    if first.abs() < 1e-7 && last.abs() < 1e-7 { return Some((a, b)); }
+    if (last - first).abs() < 1e-12 { return None; }
+    let t = -first / (last - first);
+    (0.0..=1.0).contains(&t).then(|| { let point = a.lerp(b, t); (point, point) })
+}
+
+fn plane_face(ray: Ray, origin: DVec3, n: DVec3, normal: DVec3, hit: DVec3) -> Option<DVec3> {
+    let direction = n.cross(normal);
+    if direction.length_squared() < 1e-18 {
+        ((hit - origin).dot(n).abs() < 1e-7).then_some(hit)
+    } else {
+        let tangent = normal - n * normal.dot(n);
+        let origin = origin + tangent * (hit - origin).dot(normal) / tangent.length_squared();
+        ray.axis(origin, direction.normalize())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn world_rotate_targets_support_arbitrary_world_planes_and_preferences() {
+        let normal = DVec3::new(1., 0., 1.).normalize();
+        let point = DVec3::new(1., 1., -1.);
+        let mut model = Model::default();
+        let edge = model.add_edge(point, point + DVec3::Y).unwrap();
+        let mut targets = Targets::default();
+        targets.prepare(Arc::new(model), &DisplaySettings::default());
+        let ray = Ray { origin: point + normal * 2., direction: -normal };
+        let options = Options { geometry: true, targets: benchup_core::inference::SnapTargets::default(), axes: false, x_ray: false };
+        let target = targets.rotation(ray, DVec3::ZERO, normal, point, options).unwrap();
+        assert_eq!(target.edge, Some(edge));
+        assert_eq!(target.snap.kind, Inference::Endpoint);
+        assert!(target.snap.point.distance(point) < 1e-8);
+        assert!(target.snap.point.dot(normal).abs() < 1e-8);
+        let disabled = Options { targets: benchup_core::inference::SnapTargets { edges: false, faces: false, face_centers: false }, ..options };
+        assert!(targets.rotation(ray, DVec3::ZERO, normal, point, disabled).is_none());
+        let off_plane = point + normal;
+        let ray = Ray { origin: off_plane + normal * 2., direction: -normal };
+        assert!(targets.rotation(ray, point, normal, point, options).is_none());
+    }
     #[test]
     fn modeling_target_preferences_keep_faces_and_face_centres_independent() {
         let mut model = Model::default();
