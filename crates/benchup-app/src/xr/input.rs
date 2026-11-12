@@ -367,6 +367,10 @@ impl Controllers {
         })
     }
 
+    pub fn grip_space(&self, hand: usize) -> &xr::Space {
+        &self.grip_spaces[hand]
+    }
+
     pub fn tracking(
         &mut self,
         session: &xr::Session<xr::Vulkan>,
@@ -442,7 +446,7 @@ impl Controllers {
             output.recenter_panel = true;
             return Ok(output);
         }
-        if navigation.enabled && navigation.buttons.iter().any(|down| *down == Some(true)) {
+        if navigation.enabled && navigation.buttons == [Some(true), Some(true)] {
             let mut output = self.cancel_pointers();
             output.focused = true;
             output.navigation = navigation;

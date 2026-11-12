@@ -1,23 +1,37 @@
 # BenchUp OpenXR development handoff
 
-Updated: 2026-11-11. Status follows the current `feat/openxr-phase1` worktree.
+Updated: 2026-11-12. Status follows the current `feat/openxr-phase1` worktree.
 Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continuing.
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+Current actual bug from the requested test: the controller panel did not feel
+attached. The earlier implementation billboarded toward the head and froze for
+any held grip, including before attachment began. The user explicitly requests
+ordinary rigid parenting. C25 removes both behaviours, submits the quad directly
+in the non-dominant grip space with a fixed local translation `(0, 0.15, 0)` and
+identity local rotation, and uses the matching composed pose only for ray input.
+Only both grips suspend pointer input; a single held grip no longer blocks it.
+Two focused transform/fallback checks pass (`rigid-controller-panel-tests.log`);
+the locked native build passes without warnings (`rigid-controller-panel-build.log`).
+The replacement is identified by `.local/openxr/rigid-controller-panel-build.json`;
+its frozen executable is under that manifest source commit in preview-builds.
+Physical rigid-following acceptance is pending.
+
 Latest user direction: fix actual bugs and missing functionality; stop speculative
 edge-case work and do not prolong development once the core implementation is
-ready. C01-C24 coding is implemented. There is no currently confirmed unfixed
-defect queued. Keep the remaining acceptance gates open, but do not manufacture
+ready. C01-C24 coding is implemented; C25 addresses the confirmed controller-
+attachment defect from the current requested test. Keep the remaining acceptance gates open, but do not manufacture
 new coding milestones or expand validation to keep the goal busy. Resume fixes
 when normal use, a requested test or existing evidence demonstrates a concrete
 problem. Do not launch VR or request hardware checks until the user asks to test.
 
-The latest prepared executable is source `591c117`, at
-`.local/openxr/preview-builds/591c117/openxr_editor.exe`; its `build.json` records
-the full source commit, binary hash and passing build/GUI-check artifacts. Later
+The latest prepared executable is the C25 rigid-parent build identified by
+`.local/openxr/rigid-controller-panel-build.json`. Its manifest records the frozen
+path, full source commit, binary hash and passing checks. The earlier `591c117`
+executable is retained for comparison and is superseded for this attachment test. Later
 documentation-only commits do not require replacing that executable. The user
 requested a launch on 2026-11-11. The first `591c117` session restored panel-only
 mode from carried preferences; the user correctly reported no immersive view.
@@ -51,7 +65,7 @@ Ask only one check at a time; do not present this whole queue to a busy user:
 
 This typing check does not require saving a file; use Cancel afterward.
 
-Keep handedness reversal, grip freezing, loss/restart and broader overlay parity
+Keep handedness reversal, rigid following during grips, loss/restart and broader overlay parity
 in the remaining acceptance matrix. The earlier Exact value movement/undo check
 is still unanswered and must also be completed later. None of the new controller
 panel or recall behaviours has human acceptance yet.
@@ -120,10 +134,8 @@ not headset hover acceptance or complete controller UI readability acceptance.
 
 C19 adds optional controller attachment under View and comfort, with saved
 dominant hand and a separate controller width (default 0.45 m). World placement
-remains the default. The panel follows the other grip and faces the user with
-upright text; only the dominant hand points/edits while attachment is enabled.
-Grip poses and actions are sampled once before panel-ray mapping. Scene grabs
-freeze the panel and disable its pointer through the existing navigation owner.
+remains the default. C25 corrects this to a rigid child of the other grip, with its position and rotation following that grip; only the dominant hand points/edits while attachment is enabled.
+Grip poses and actions are sampled once before panel-ray mapping. Both-grip scene grabs disable its pointer through the existing navigation owner; they do not freeze the panel.
 Tracking/focus loss falls back to a recentered world panel, and placement or
 handedness transitions cancel captures. Unknown reference-space changes clear
 the stored hand anchor. The toolbar Recenter action persists world placement.

@@ -1,6 +1,6 @@
 # BenchUp OpenXR implementation plan
 
-Updated: 2026-11-11. Status follows the current `feat/openxr-phase1` worktree;
+Updated: 2026-11-12. Status follows the current `feat/openxr-phase1` worktree;
 completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
@@ -8,8 +8,10 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 ## Active continuation
 
 Latest user direction: prioritize actual bugs and missing functionality, not
-speculative edge cases. The core coding checklist C01-C24 is implemented and
-build `591c117` is prepared. No confirmed unfixed defect is currently queued.
+speculative edge cases. The core coding checklist C01-C25 is implemented. A requested test confirmed
+the earlier controller panel faced the head and froze when a grip was held.
+The new C25 rigid-parent build corrects that gap and is ready for a physical check;
+its source/path are recorded in `.local/openxr/rigid-controller-panel-build.json`.
 Remaining acceptance is not complete; continue implementation only for concrete
 gaps demonstrated by normal use, requested testing or existing evidence. Do not
 create extra milestones or validation work merely to remain active.
@@ -134,7 +136,7 @@ record scope changes rather than silently changing an estimate.
     persistence check, locked build and inspected open/closed hardware snapshots
     pass. Further layout reduction and headset/controller acceptance remain open.
 19. [x] C19: Optional non-dominant-controller panel, saved handedness/width,
-    dominant-hand pointing, grab freezing and tracking/focus fallbacks. The
+    dominant-hand pointing and tracking/focus fallbacks (rigid parenting corrected in C25). The
     implementation passes two placement checks, immediate preference restoration,
     the locked native build and inspected settings-layout snapshots.
     World placement remains the default pending headset readability acceptance.
@@ -164,6 +166,11 @@ record scope changes rather than silently changing an estimate.
     test settings when needed. Parser and actual-profile normalization checks pass.
     The corrected `591c117` session has submitted a stereo scene; human
     confirmation of that relaunch is pending.
+25. [x] C25: Rigidly parent the quad to the non-dominant controller's OpenXR grip
+    space, using one fixed local translation and identity local rotation. Remove
+    head-facing orientation and grip freezing. Only both grips suspend pointer
+    input for scene navigation. Two rigid-transform/fallback checks pass; the
+    locked native build passes. Physical rigid-following acceptance is pending.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
@@ -428,7 +435,7 @@ or complete-parity claims.
    anchoring and explicitly handle tracking loss, focus changes and two-grip
    scene navigation. Verify readability and reachability of menus, modals and
    text entry on the compact panel. The C19 path follows the non-dominant grip,
-   faces its text toward the head and freezes in place during scene grabs. Losing
+   inherits its position and rotation directly from the grip space (C25), with no head-facing rotation or grip freeze. Losing
    the host hand returns to a recentered world panel and cancels input captures.
    Recenter explicitly detaches and persists world placement. These routes need
    headset verification before replacing the default interaction surface.

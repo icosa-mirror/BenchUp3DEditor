@@ -818,6 +818,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                 )
             })
         } else { None };
+        let mut panel_parent_hand = None;
         if let (Some(controllers), Some(editor)) = (&mut controllers, &mut editor) {
             let preferences = editor.panel_preferences();
             let navigation = controllers.tracking(
@@ -826,12 +827,14 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             )?;
             let placement = panel_anchor.update(
                 preferences,
-                head_location.as_ref().map(|head| head.pose),
                 navigation.hands[1 - preferences.dominant_hand.index()],
-                navigation.enabled && navigation.buttons.iter().any(|down| *down == Some(true)),
                 panel_pose,
             );
+            panel_parent_hand = placement.attached.then(|| 1 - preferences.dominant_hand.index());
             if placement.changed {
+                println!("[BenchUpXR] Panel attachment: {}; host hand: {:?}",
+                    if placement.attached { "tracked grip" } else { "world fallback" },
+                    if preferences.dominant_hand == crate::app_host::XrHand::Right { "left" } else { "right" });
                 let mut cancelled = controllers.cancel();
                 cancelled.focused = focused && head_location.is_some();
                 editor.cancel_input(cancelled, &graphics.device, &graphics.queue)?;
@@ -952,8 +955,12 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                 }
             }
         }
+        let (quad_space, quad_pose) = match (controllers.as_ref(), panel_parent_hand) {
+            (Some(controllers), Some(hand)) => (controllers.grip_space(hand), super::panel_anchor::local_pose()),
+            _ => (&space, panel_pose),
+        };
         let quad = xr::CompositionLayerQuad::new()
-            .space(&space)
+            .space(quad_space)
             .eye_visibility(xr::EyeVisibility::BOTH)
             .sub_image(
                 xr::SwapchainSubImage::new()
@@ -967,7 +974,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                         },
                     }),
             )
-            .pose(panel_pose)
+            .pose(quad_pose)
             .size(panel_size);
         if projection_views.is_empty() {
             stream.end(frame.predicted_display_time, blend, &[&quad])?;
