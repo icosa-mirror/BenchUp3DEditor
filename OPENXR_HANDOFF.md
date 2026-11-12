@@ -7,8 +7,13 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+The user requested another 90 degrees on the same X axis: the C26 source angle
+is now 270 degrees. Rendering and pointer mapping share that local quaternion.
+The user also reports that the first panel click is often ignored. That input
+issue is being fixed separately; a combined replacement build is pending.
+
 The user found the rigid panel by turning the controller and confirmed it needs
-a 180-degree local X rotation. C26 applies that fixed rotation to both the
+a 270-degree local X rotation. C26 applies that fixed rotation to both the
 compositor's grip-local pose and the composed pose used for ray input. The native
 build passes (`controller-panel-flip-build.log`); the rigid-transform assertion
 was updated but not rerun for this small orientation change before the requested
@@ -21,7 +26,7 @@ attached. The earlier implementation billboarded toward the head and froze for
 any held grip, including before attachment began. The user explicitly requests
 ordinary rigid parenting. C25 removes both behaviours, submits the quad directly
 in the non-dominant grip space with a fixed local translation `(0, 0.15, 0)` and
-fixed local rotation (corrected to 180 degrees about X in C26), and uses the matching composed pose only for ray input.
+fixed local rotation (corrected to 270 degrees about X in C26), and uses the matching composed pose only for ray input.
 Only both grips suspend pointer input; a single held grip no longer blocks it.
 Two focused transform/fallback checks pass (`rigid-controller-panel-tests.log`);
 the locked native build passes without warnings (`rigid-controller-panel-build.log`).

@@ -4,15 +4,22 @@ use glam::{DQuat, DVec3};
 use openxr as xr;
 
 const LOCAL_OFFSET: DVec3 = DVec3::new(0., 0.15, 0.);
-const LOCAL_ROTATION: DQuat = DQuat::from_xyzw(1., 0., 0., 0.);
+// 270 degrees around the controller-local X axis.
+const LOCAL_ROTATION: DQuat = DQuat::from_xyzw(
+    std::f64::consts::FRAC_1_SQRT_2,
+    0.,
+    0.,
+    -std::f64::consts::FRAC_1_SQRT_2,
+);
 
 pub(super) fn local_pose() -> xr::Posef {
+    let [x, y, z, w] = LOCAL_ROTATION.to_array();
     xr::Posef {
         orientation: xr::Quaternionf {
-            x: 1.,
-            y: 0.,
-            z: 0.,
-            w: 0.,
+            x: x as f32,
+            y: y as f32,
+            z: z as f32,
+            w: w as f32,
         },
         position: xr::Vector3f {
             x: 0.,
