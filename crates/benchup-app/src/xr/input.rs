@@ -129,7 +129,9 @@ impl Pointer {
             return output;
         }
         for (index, hand) in hands.iter().enumerate() {
-            if hand.position.is_none() {
+            // A tracked hand can point away from the panel plane. Keep observing
+            // its button releases so aiming back and clicking works first time.
+            if hand.ray.is_none() {
                 self.armed[index] = false;
             } else if !hand.buttons.iter().any(|down| *down) {
                 self.armed[index] = true;
@@ -696,7 +698,7 @@ mod tests {
             frame(&ctx, vec![], &mut draft);
             let (_, target, _) = frame(&ctx, vec![], &mut draft);
             let mut pointer = Pointer::default();
-            let hand = Hand { position: Some(target.center()), hit_distance: Some(1.), ..Default::default() };
+            let hand = Hand { position: Some(target.center()), hit_distance: Some(1.), ray: Some(Ray { origin: DVec3::ZERO, direction: -DVec3::Z }), ..Default::default() };
             let hover = pointer.update([hand, Hand::default()], true, 0.01);
             frame(&ctx, hover.events, &mut draft);
             let press = pointer.update([Hand { buttons: [true, false], ..hand }, Hand::default()], true, 0.01);
@@ -722,6 +724,7 @@ mod tests {
 
     fn hand(x: f32, pressed: bool) -> Hand {
         Hand {
+            ray: Some(Ray { origin: DVec3::ZERO, direction: -DVec3::Z }),
             position: Some(egui::pos2(x, 30.0)),
             hit_distance: Some(1.0),
             buttons: [pressed, false],
@@ -730,6 +733,35 @@ mod tests {
     }
     fn clicks(input: &FrameInput, pressed: bool) -> usize {
         input.events.iter().filter(|event| matches!(event, Event::PointerButton { pressed: state, .. } if *state == pressed)).count()
+    }
+    #[test]
+    fn first_click_after_pointing_away_activates_the_panel_button() {
+        fn frame(ctx: &egui::Context, events: Vec<Event>) -> (egui::Rect, bool) {
+            let mut result = (egui::Rect::NOTHING, false);
+            let _ = ctx.run_test_ui(egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(800., 600.))),
+                focused: true,
+                events,
+                ..Default::default()
+            }, |ui| {
+                let response = ui.button("First click");
+                result = (response.rect, response.clicked());
+            });
+            result
+        }
+        let ctx = egui::Context::default();
+        frame(&ctx, vec![]);
+        let (rect, _) = frame(&ctx, vec![]);
+        let mut pointer = Pointer::default();
+        let away = Hand { position: None, hit_distance: None, ..hand(0., false) };
+        let input = pointer.update([away, Hand::default()], true, 0.01);
+        frame(&ctx, input.events);
+        let over = Hand { position: Some(rect.center()), ..hand(0., true) };
+        let press = pointer.update([over, Hand::default()], true, 0.01);
+        assert_eq!(clicks(&press, true), 1);
+        assert!(!frame(&ctx, press.events).1);
+        let release = pointer.update([Hand { buttons: [false; 2], ..over }, Hand::default()], true, 0.01);
+        assert!(frame(&ctx, release.events).1, "One deliberate click must activate the button");
     }
     #[test]
     fn capture_retains_hand_and_unbounded_drag_until_release() {

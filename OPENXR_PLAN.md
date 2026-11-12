@@ -178,6 +178,11 @@ record scope changes rather than silently changing an estimate.
     is pending.
 27. [ ] C27: Visible tracked controller representations. The user reported their
     absence in the headset; this is a genuine missing feature, not yet implemented.
+28. [x] C28: Fix ignored first panel clicks after pointing away. Release arming
+    must use valid controller tracking, not whether its ray projects onto the
+    panel plane. The real-button first-click regression and all six focused input checks pass,
+    as do the two transform checks and combined locked native build. Hardware
+    first-click acceptance is pending.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

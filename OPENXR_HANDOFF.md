@@ -9,15 +9,26 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 The user requested another 90 degrees on the same X axis: the C26 source angle
 is now 270 degrees. Rendering and pointer mapping share that local quaternion.
-The user also reports that the first panel click is often ignored. That input
-issue is being fixed separately; a combined replacement build is pending.
+The user also reported ignored first clicks. C28 fixes that input issue. The
+combined build passes six pointer/input checks, two rigid-transform checks and
+the locked native build; `.local/openxr/panel-interaction-fixes-build.json`
+identifies its frozen executable. Physical angle/first-click confirmation is pending.
+
+C28 addresses the reported ignored first click. The pointer previously disarmed
+whenever the ray did not project onto the panel plane, even with a tracked hand
+and released trigger. A first press while aiming back onto the panel could then
+be dropped. Release arming now uses the tracked ray; genuine tracking/focus loss
+still disarms held buttons. A focused regression points away while released,
+then aims and presses in one sample and verifies a real egui button activates
+on that single click. Six input checks and the combined native build pass
+(`panel-first-click-tests.log`, `panel-interaction-fixes-build.log`); the two
+270-degree transform checks also pass (`panel-270-transform-tests.log`). The current session's tracking log only shows valid/tracked flags.
 
 The user found the rigid panel by turning the controller and confirmed it needs
 a 270-degree local X rotation. C26 applies that fixed rotation to both the
 compositor's grip-local pose and the composed pose used for ray input. The native
 build passes (`controller-panel-flip-build.log`); the rigid-transform assertion
-was updated but not rerun for this small orientation change before the requested
-hardware test. `.local/openxr/controller-panel-flip-build.json` identifies the
+now passes both focused transform checks in the combined C26/C28 build. `.local/openxr/controller-panel-flip-build.json` identifies the
 new frozen build. The user also reported no controller models; visible tracked
 controller representations remain a queued functionality gap (C27).
 
@@ -42,8 +53,8 @@ new coding milestones or expand validation to keep the goal busy. Resume fixes
 when normal use, a requested test or existing evidence demonstrates a concrete
 problem. Do not launch VR or request hardware checks until the user asks to test.
 
-The latest prepared executable is the C26 orientation-corrected build identified by
-`.local/openxr/controller-panel-flip-build.json`. Its manifest records the frozen
+The latest prepared executable is the combined C26/C28 build identified by
+`.local/openxr/panel-interaction-fixes-build.json`. Its manifest records the frozen
 path, full source commit, binary hash and passing checks. The earlier `591c117`
 executable is retained for comparison and is superseded for this attachment test. Later
 documentation-only commits do not require replacing that executable. The user
