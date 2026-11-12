@@ -1,18 +1,24 @@
 //! Controller-relative panel placement, independent of the world scene transform.
 use crate::app_host::{XrHand, XrPanelPreferences};
-use glam::DVec3;
+use glam::{DQuat, DVec3};
 use openxr as xr;
 
 const LOCAL_OFFSET: DVec3 = DVec3::new(0., 0.15, 0.);
+const LOCAL_ROTATION: DQuat = DQuat::from_xyzw(1., 0., 0., 0.);
 
 pub(super) fn local_pose() -> xr::Posef {
     xr::Posef {
+        orientation: xr::Quaternionf {
+            x: 1.,
+            y: 0.,
+            z: 0.,
+            w: 0.,
+        },
         position: xr::Vector3f {
             x: 0.,
             y: LOCAL_OFFSET.y as f32,
             z: 0.,
         },
-        ..xr::Posef::IDENTITY
     }
 }
 
@@ -74,9 +80,10 @@ fn controller_pose(hand: super::navigation::Grip) -> Option<xr::Posef> {
         return None;
     }
     // A rigid child of the grip: no head-facing rotation or navigation freeze.
-    // The lower edge sits just above the grip at the default panel width.
-    let rotation = hand.orientation.normalize();
-    let center = hand.position + rotation * LOCAL_OFFSET;
+    // Keep the offset grip-local; flip the display about its local X axis.
+    let grip_rotation = hand.orientation.normalize();
+    let center = hand.position + grip_rotation * LOCAL_OFFSET;
+    let rotation = grip_rotation * LOCAL_ROTATION;
     Some(xr::Posef {
         orientation: xr::Quaternionf {
             x: rotation.x as f32,
@@ -126,10 +133,11 @@ mod tests {
         ] {
             let frame = anchor.update(preferences, Some(hand), xr::Posef::IDENTITY);
             let parent = DMat4::from_rotation_translation(hand.orientation, hand.position);
-            assert!(
-                (parent.inverse() * matrix(frame.pose))
-                    .abs_diff_eq(DMat4::from_translation(DVec3::new(0., 0.15, 0.)), 1e-6)
-            );
+            assert!((parent.inverse() * matrix(frame.pose)).abs_diff_eq(
+                DMat4::from_rotation_translation(LOCAL_ROTATION, LOCAL_OFFSET),
+                1e-6
+            ));
+            assert!((parent * matrix(local_pose())).abs_diff_eq(matrix(frame.pose), 1e-6));
             assert!(frame.attached);
             assert_eq!(frame.pointer_hand, Some(1));
         }

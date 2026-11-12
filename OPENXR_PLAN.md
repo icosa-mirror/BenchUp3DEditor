@@ -167,10 +167,17 @@ record scope changes rather than silently changing an estimate.
     The corrected `591c117` session has submitted a stereo scene; human
     confirmation of that relaunch is pending.
 25. [x] C25: Rigidly parent the quad to the non-dominant controller's OpenXR grip
-    space, using one fixed local translation and identity local rotation. Remove
+    space, using one fixed local translation and fixed local rotation (corrected to 180 degrees about X in C26). Remove
     head-facing orientation and grip freezing. Only both grips suspend pointer
     input for scene navigation. Two rigid-transform/fallback checks pass; the
     locked native build passes. Physical rigid-following acceptance is pending.
+26. [x] C26: Apply the user-confirmed 180-degree local X rotation to the
+    controller panel, in both its submitted quad pose and ray/pointer pose.
+    The locked native build passes; the existing rigid-transform assertion is
+    updated for the corrected local rotation. Physical facing/click acceptance
+    is pending.
+27. [ ] C27: Visible tracked controller representations. The user reported their
+    absence in the headset; this is a genuine missing feature, not yet implemented.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

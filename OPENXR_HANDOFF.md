@@ -7,12 +7,21 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+The user found the rigid panel by turning the controller and confirmed it needs
+a 180-degree local X rotation. C26 applies that fixed rotation to both the
+compositor's grip-local pose and the composed pose used for ray input. The native
+build passes (`controller-panel-flip-build.log`); the rigid-transform assertion
+was updated but not rerun for this small orientation change before the requested
+hardware test. `.local/openxr/controller-panel-flip-build.json` identifies the
+new frozen build. The user also reported no controller models; visible tracked
+controller representations remain a queued functionality gap (C27).
+
 Current actual bug from the requested test: the controller panel did not feel
 attached. The earlier implementation billboarded toward the head and froze for
 any held grip, including before attachment began. The user explicitly requests
 ordinary rigid parenting. C25 removes both behaviours, submits the quad directly
 in the non-dominant grip space with a fixed local translation `(0, 0.15, 0)` and
-identity local rotation, and uses the matching composed pose only for ray input.
+fixed local rotation (corrected to 180 degrees about X in C26), and uses the matching composed pose only for ray input.
 Only both grips suspend pointer input; a single held grip no longer blocks it.
 Two focused transform/fallback checks pass (`rigid-controller-panel-tests.log`);
 the locked native build passes without warnings (`rigid-controller-panel-build.log`).
@@ -28,8 +37,8 @@ new coding milestones or expand validation to keep the goal busy. Resume fixes
 when normal use, a requested test or existing evidence demonstrates a concrete
 problem. Do not launch VR or request hardware checks until the user asks to test.
 
-The latest prepared executable is the C25 rigid-parent build identified by
-`.local/openxr/rigid-controller-panel-build.json`. Its manifest records the frozen
+The latest prepared executable is the C26 orientation-corrected build identified by
+`.local/openxr/controller-panel-flip-build.json`. Its manifest records the frozen
 path, full source commit, binary hash and passing checks. The earlier `591c117`
 executable is retained for comparison and is superseded for this attachment test. Later
 documentation-only commits do not require replacing that executable. The user
