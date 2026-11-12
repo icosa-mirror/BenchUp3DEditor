@@ -182,7 +182,12 @@ record scope changes rather than silently changing an estimate.
     must use valid controller tracking, not whether its ray projects onto the
     panel plane. The real-button first-click regression and all six focused input checks pass,
     as do the two transform checks and combined locked native build. Hardware
-    first-click acceptance is pending.
+    first-click acceptance failed: intermittent missed clicks also occur while
+    staying on the panel and moving between widgets; this arming fix is insufficient.
+29. [ ] C29: Resolve intermittent panel clicks across widgets. Add bounded
+    `[BenchUpXRClick]` action-to-UI tracing and reproduce in the headset before
+    choosing a fix. The diagnostic build preserves existing input thresholds.
+    The user confirmed the 270-degree controller-panel orientation is comfortable.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

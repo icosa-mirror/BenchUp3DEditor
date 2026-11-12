@@ -107,6 +107,7 @@ pub(super) struct Editor {
     staged_source: Option<super::immersive::Source>,
     keyboard: super::keyboard::Keyboard,
     file_dialogs: super::file_dialog::Dialogs,
+    click_trace: [Option<(egui::Pos2, Instant, f32)>; 2],
 }
 
 impl Editor {
@@ -168,6 +169,7 @@ impl Editor {
             staged_source: None,
             keyboard: Default::default(),
             file_dialogs,
+            click_trace: [None; 2],
         })
     }
 
@@ -225,6 +227,33 @@ impl Editor {
 
     fn update_ui(&mut self) -> Result<egui::FullOutput> {
         let mut events = std::mem::take(&mut self.input.events);
+        let trace_click = events.iter().any(|event| matches!(event, egui::Event::PointerButton { .. }));
+        for event in &events {
+            match event {
+                egui::Event::PointerMoved(pos) => {
+                    for (origin, _, distance) in self.click_trace.iter_mut().flatten() {
+                        *distance = distance.max(origin.distance(*pos));
+                    }
+                }
+                egui::Event::PointerButton { pos, button, pressed, .. } => {
+                    let index = match button {
+                        egui::PointerButton::Primary => 0,
+                        egui::PointerButton::Secondary => 1,
+                        _ => continue,
+                    };
+                    if *pressed {
+                        self.click_trace[index] = Some((*pos, Instant::now(), 0.));
+                        println!("[BenchUpXRClick] UI press: button={button:?}, pos={pos:?}, focus={:?}, modal={:?}",
+                            self.ctx.memory(|memory| memory.focused()), self.ctx.memory(|memory| memory.top_modal_layer()));
+                    } else {
+                        let gesture = self.click_trace[index].take().map(|(origin, start, distance)|
+                            (start.elapsed().as_millis(), distance.max(origin.distance(*pos))));
+                        println!("[BenchUpXRClick] UI release: button={button:?}, pos={pos:?}, duration_ms_and_max_motion_points={gesture:?}");
+                    }
+                }
+                _ => {}
+            }
+        }
         events.extend(self.keyboard.take_events(&self.ctx, self.input.focused));
         if events.iter().any(|event| matches!(event,
             egui::Event::Key { pressed: true, .. } | egui::Event::WindowFocused(false)))
@@ -410,6 +439,15 @@ impl Editor {
                 self.staged_source=Some(source);
             } else {
                 self.staged_source=None;
+            }
+            if trace_click {
+                let (click, dragging) = self.ctx.input(|input|
+                    (input.pointer.any_click(), input.pointer.is_decidedly_dragging()));
+                let focus = self.ctx.memory(|memory| memory.focused());
+                self.ctx.interaction_snapshot(|interaction| {
+                    println!("[BenchUpXRClick] UI pass result: click={click}, dragging={dragging}, widget_clicked={:?}, widget_dragged={:?}, focus={focus:?}",
+                        interaction.clicked, interaction.dragged);
+                });
             }
         });
         // Recenter is also the always-visible escape from controller attachment.

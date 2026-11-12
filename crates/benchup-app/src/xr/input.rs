@@ -80,6 +80,10 @@ struct Pointer {
 
 impl Pointer {
     fn cancel(&mut self, output: &mut FrameInput) {
+        if self.down.iter().any(|down| *down) {
+            println!("[BenchUpXRClick] Capture cancelled: owner={:?}, position={:?}, down={:?}",
+                self.owner, self.position, self.down);
+        }
         output.cancelled = true;
         if self.position.is_some() {
             // Release outside every widget so focus/tracking loss cannot click
@@ -492,6 +496,11 @@ impl Controllers {
                 continue;
             }
             let secondary = self.secondary.state(session, path)?;
+            if select.changed_since_last_sync || secondary.changed_since_last_sync {
+                println!("[BenchUpXRClick] Action hand={index}, primary={}, secondary={}, armed={}, panel_projection={:?}, panel_hit={}",
+                    select.current_state, secondary.current_state, self.pointer.armed[index],
+                    projected.as_ref().map(|hit| hit.position_points), panel.hit_test(origin, direction).is_some());
+            }
             let scroll = self.scroll.state(session, path)?;
             let touch = self.scroll_touch.state(session, path)?;
             *hand = Hand {

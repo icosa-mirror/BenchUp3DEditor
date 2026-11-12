@@ -7,14 +7,27 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+The user confirmed the 270-degree panel facing is comfortable, but intermittent
+missed clicks remain across panel widgets, possibly including dropdowns. This
+also occurs without pointing away or clicking the scene, so C28 is only a
+separate arming fix, not a resolution of the reported general clicking problem.
+The next diagnostic build adds `[BenchUpXRClick]` lines for action transitions,
+capture cancellation, UI press/release positions, maximum motion and duration,
+and each UI pass's click/drag target and keyboard focus. No click thresholds or
+interaction behavior are changed. An experimental larger click tolerance and
+its synthetic checks were set aside in `.local/openxr/panel-tolerance-experiment.patch`;
+hardware evidence must establish the cause before applying that experiment.
+Build output: `.local/openxr/panel-click-trace-build.log`.
+
 The user requested another 90 degrees on the same X axis: the C26 source angle
 is now 270 degrees. Rendering and pointer mapping share that local quaternion.
-The user also reported ignored first clicks. C28 fixes that input issue. The
+The user also reported ignored first clicks. C28 fixes one arming issue. The
 combined build passes six pointer/input checks, two rigid-transform checks and
 the locked native build; `.local/openxr/panel-interaction-fixes-build.json`
-identifies its frozen executable. Physical angle/first-click confirmation is pending.
+identifies its frozen executable. Physical angle confirmation passed; general
+first-click acceptance failed and remains open.
 
-C28 addresses the reported ignored first click. The pointer previously disarmed
+C28 addresses one ignored-first-click path. The pointer previously disarmed
 whenever the ray did not project onto the panel plane, even with a tracked hand
 and released trigger. A first press while aiming back onto the panel could then
 be dropped. Release arming now uses the tracked ray; genuine tracking/focus loss
