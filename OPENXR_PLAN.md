@@ -8,9 +8,9 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 ## Active continuation
 
 Latest user direction: the user is on the road; continue a concrete task that
-does not need their collaboration. C27 controller visuals are implemented;
-The C29 offline reproduction/fix is prepared. The user now requests a live
-desktop mirror, implemented without needing their headset participation.
+does not need their collaboration. C27 controller visuals, the C29 offline click
+fix and C30 desktop mirror are prepared. The user approved saved inspection
+views shared by desktop and XR (C31), with incremental commits and pushes.
 The core coding checklist C01-C27 is implemented, and the user confirmed the
 270-degree grip-local panel orientation is comfortable. Intermittent missed
 clicks remain open under C29; the latest prepared build is identified by
@@ -210,6 +210,13 @@ record scope changes rather than silently changing an estimate.
     RTX 4090 native diagnostic presents both modes across three window sizes;
     the focused letterboxing check passes. Actual OpenXR mirror acceptance and
     performance measurement remain pending.
+
+31. [ ] C31: Project-owned saved inspection views. Store named desktop cameras
+    and portable XR model placements; provide save, recall, rename, update and
+    delete controls on desktop and the controller panel. Recall relative to the
+    current upright head frame, without moving headset tracking. The core data
+    model and project/autosave roundtrip and viewpoint-math checks pass; shared
+    controls and XR integration are in progress.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

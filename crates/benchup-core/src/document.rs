@@ -563,6 +563,9 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(deserialize_with = "deserialize_map_or_empty_sequence")]
     pub viewport_cameras: BTreeMap<u64, Camera>,
+    /// Named inspection viewpoints are project data, shared by desktop and XR.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inspection_views: Vec<crate::InspectionView>,
     /// Selection belongs to this project, including the object open for editing.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub selection: BTreeSet<u64>,
@@ -590,6 +593,7 @@ impl Default for Document {
             history: History::default(),
             camera: Camera::default(),
             viewport_cameras: BTreeMap::new(),
+            inspection_views: Vec::new(),
             selection: BTreeSet::new(),
             selection_context: None,
             snap_to_geometry: true,
@@ -612,6 +616,7 @@ impl Document {
             history: History::default(),
             camera: self.camera.clone(),
             viewport_cameras: self.viewport_cameras.clone(),
+            inspection_views: self.inspection_views.clone(),
             selection: self.selection.clone(),
             selection_context: self.selection_context,
             snap_to_geometry: self.snap_to_geometry,
@@ -650,6 +655,8 @@ impl Document {
         if !doc.camera.valid() || doc.viewport_cameras.values().any(|camera| !camera.valid()) {
             return Err(tr!("core.document.invalid_camera").into());
         }
+        // A damaged optional viewpoint must not prevent recovery of the model.
+        doc.inspection_views.retain(|view| view.viewpoint.valid());
         Ok(())
     }
 }

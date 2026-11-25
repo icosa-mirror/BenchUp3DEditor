@@ -7,6 +7,15 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+C31 saved inspection views is the active independent task. The core Document
+now has optional project-owned inspection views (legacy documents default to
+an empty list), stable IDs/names, a shared desktop camera and optional model
+placement relative to the upright head frame. Autosave checkpoints include
+the metadata. Two focused tests pass for legacy/project/checkpoint roundtrips
+and desktop/immersive viewpoint conversion (`.local/openxr/inspection-view-core-tests.log`).
+Shared UI and native scene integration follow this core milestone. No live
+headset session is required or being launched.
+
 C30 desktop mirroring is implemented. The mirror uses the
 same runtime-selected Vulkan device and its existing desktop window. The panel
 and left eye first render to retained application-owned sampleable textures;
