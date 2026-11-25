@@ -408,21 +408,26 @@ pub fn snapshot_editor(path: &std::path::Path) -> Result<()> {
     )?;
     let system = instance.system(xr::FormFactor::HEAD_MOUNTED_DISPLAY)?;
     let graphics = Graphics::new(&instance, system)?;
-    snapshot_editor_on_device(&graphics.device, &graphics.queue, path, false)
+    snapshot_editor_on_device(&graphics.device, &graphics.queue, path, false, false)
 }
 
 /// Independent renderer check when no headset/runtime is available. This does
 /// not establish runtime adapter selection or XR interoperability.
 pub async fn snapshot_editor_without_runtime(path: &std::path::Path) -> Result<()> {
-    snapshot_without_runtime(path,false).await
+    snapshot_without_runtime(path,false,false).await
 }
 
 /// Exercise the actual eye render path on the hardware GPU without a headset.
 pub async fn snapshot_immersive_without_runtime(path:&std::path::Path)->Result<()> {
-    snapshot_without_runtime(path,true).await
+    snapshot_without_runtime(path,true,false).await
 }
 
-async fn snapshot_without_runtime(path: &std::path::Path, immersive:bool) -> Result<()> {
+/// GPU-only controller diagnostic with two simulated grips; no headset required.
+pub async fn snapshot_controllers_without_runtime(path: &std::path::Path) -> Result<()> {
+    snapshot_without_runtime(path, true, true).await
+}
+
+async fn snapshot_without_runtime(path: &std::path::Path, immersive:bool, controllers:bool) -> Result<()> {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::VULKAN;
     let instance = wgpu::Instance::new(descriptor);
@@ -441,7 +446,7 @@ async fn snapshot_without_runtime(path: &std::path::Path, immersive:bool) -> Res
         info.name, info.backend
     );
     let (device, queue) = adapter.request_device(&Default::default()).await?;
-    snapshot_editor_on_device(&device, &queue, path, immersive)
+    snapshot_editor_on_device(&device, &queue, path, immersive, controllers)
 }
 
 fn snapshot_editor_on_device(
@@ -449,6 +454,7 @@ fn snapshot_editor_on_device(
     queue: &wgpu::Queue,
     path: &std::path::Path,
     immersive:bool,
+    controllers:bool,
 ) -> Result<()> {
     let size = wgpu::Extent3d {
         width: 1440,
@@ -472,7 +478,7 @@ fn snapshot_editor_on_device(
     for _ in 0..2 {
         editor.paint(device, queue, &view)?;
     }
-    if immersive {editor.paint_immersive_snapshot(device,queue,&view,[size.width,size.height])?;}
+    if immersive {editor.paint_immersive_snapshot(device,queue,&view,[size.width,size.height],controllers)?;}
     let stride = (size.width * 4).div_ceil(256) * 256;
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("BenchUpXR diagnostic PNG readback"),

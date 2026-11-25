@@ -115,6 +115,7 @@ pub(super) struct Scene {
     surfaces: super::world_surfaces::Surfaces,
     backdrop: super::backdrop::Backdrop,
     grid: super::floor_grid::Grid,
+    controllers: super::controller_visuals::Controllers,
     paste_cache: renderer::SceneCache,
     paste_faces: renderer::FaceCache,
     paste_entities: renderer::EntityCache,
@@ -152,6 +153,7 @@ impl Scene {
             surfaces: super::world_surfaces::Surfaces::new(device, format),
             backdrop: super::backdrop::Backdrop::new(device, format),
             grid: super::floor_grid::Grid::new(device, format),
+            controllers: super::controller_visuals::Controllers::new(device, format),
             paste_cache: Default::default(),
             paste_faces: Default::default(),
             paste_entities: Default::default(),
@@ -233,6 +235,7 @@ impl Scene {
         self.placement = None;
         self.input = None;
         self.navigation.reset();
+        self.controllers.set_tracking(Default::default());
         self.head = DMat4::IDENTITY;
     }
 
@@ -241,6 +244,7 @@ impl Scene {
     }
 
     pub fn navigate(&mut self, input: super::navigation::Input, preferences: XrPanelPreferences) {
+        self.controllers.set_tracking(input);
         let previous = self.navigation.grabbing();
         let pivot = self.placement.as_ref().map_or(DVec3::ZERO, |p| {
             p.model_to_tracking(preferences.scene_scale as f64)
@@ -1088,6 +1092,7 @@ impl Scene {
                 placement.guide_frame(),
             );
         }
+        self.controllers.prepare(queue, projection(eye.fov, 0.03, 200.0) * pose_matrix(eye.pose).inverse());
         // Eye output contains only a GPU callback. Its private egui context must
         // not replace the editor's managed font atlas in the shared renderer.
         output.textures_delta.clear();
@@ -1130,6 +1135,7 @@ impl Scene {
             renderer.render(&mut pass, &jobs, &screen);
             self.grid.paint(&mut pass, size);
             self.surfaces.paint(&mut pass, size);
+            self.controllers.paint(&mut pass);
         }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

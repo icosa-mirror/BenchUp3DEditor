@@ -1,11 +1,34 @@
 # BenchUp OpenXR development handoff
 
-Updated: 2026-11-12. Status follows the current `feat/openxr-phase1` worktree.
+Updated: 2026-11-25. Status follows the current `feat/openxr-phase1` worktree.
 Read [AGENTS.md](AGENTS.md) and [OPENXR_PLAN.md](OPENXR_PLAN.md) before continuing.
 The plan is the current scope/status/backlog; this file is the operational handoff.
 Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
+
+The user is on the road and requests work without collaboration. C27 controller
+visuals are implemented; do not launch an interactive preview or ask headset questions.
+The implementation uses a retained generic controller mesh instanced at both
+valid grip poses in tracking space, with left/right colors and grip-held feedback.
+Scene navigation never scales or rotates these representations. Rendering uses
+the eye depth buffer; lost tracking/focus clears the corresponding instances.
+`--controllers-snapshot output.png` renders two simulated grips in the existing
+Vulkan offscreen scene diagnostic without loading an OpenXR runtime. This checks
+the GPU path, not physical controller alignment. Model geometry is generic;
+device-specific runtime controller assets are not implemented.
+
+Checks: two focused `xr::controller_visuals::tests::` checks pass
+(`.local/openxr/controller-visual-tests.log`); the locked native example build
+passes (`.local/openxr/controller-visual-build.log`). The offscreen snapshot
+ran on the NVIDIA GeForce RTX 4090 Vulkan adapter and rendered both hands
+(`.local/openxr/controller-visual-snapshot.log`, `.local/openxr/controller-visuals.png`).
+The prepared build manifest is `.local/openxr/controller-visuals-build.json`.
+The diagnostic example switch is `--controllers-snapshot output.png`; use an
+isolated `BENCHUP_DATA_DIR` with the bundled Example, as with other snapshots.
+Physical alignment, tracking transitions and scene occlusion are not headset-tested.
+No live VR preview was launched. C29 click tracing is retained in this build;
+missed clicks remain unresolved until an in-headset trace can be collected.
 
 The user confirmed the 270-degree panel facing is comfortable, but intermittent
 missed clicks remain across panel widgets, possibly including dropdowns. This

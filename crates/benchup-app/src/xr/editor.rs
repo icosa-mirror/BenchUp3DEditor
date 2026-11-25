@@ -614,11 +614,23 @@ impl Editor {
         )
     }
 
-    pub(super) fn paint_immersive_snapshot(&mut self,device:&wgpu::Device,queue:&wgpu::Queue,target:&wgpu::TextureView,size:[u32;2])->Result<()> {
+    pub(super) fn paint_immersive_snapshot(&mut self,device:&wgpu::Device,queue:&wgpu::Queue,target:&wgpu::TextureView,size:[u32;2],controllers:bool)->Result<()> {
         self.begin_immersive_frame(openxr::Posef::IDENTITY);
         // Placement is now known, so settle model-side HUD anchors and fonts.
         self.paint(device,queue,target)?;
         let eye=self.scene.diagnostic_eye(self.app.xr_panel_preferences().scene_scale,size).ok_or("The immersive snapshot needs a model with bounds")?;
+        if controllers {
+            let orientation = glam::DQuat::from_xyzw(eye.pose.orientation.x as _, eye.pose.orientation.y as _, eye.pose.orientation.z as _, eye.pose.orientation.w as _);
+            let origin = glam::DVec3::new(eye.pose.position.x as _, eye.pose.position.y as _, eye.pose.position.z as _);
+            let tracking = super::navigation::Input {
+                hands: [-0.20, 0.20].map(|x| Some(super::navigation::Grip {
+                    position: origin + orientation * glam::DVec3::new(x, -0.15, -0.50),
+                    orientation: orientation * glam::DQuat::from_rotation_x(-0.4),
+                })),
+                ..Default::default()
+            };
+            self.scene.navigate(tracking, self.app.xr_panel_preferences());
+        }
         self.paint_eye(device,queue,target,size,eye);
         Ok(())
     }

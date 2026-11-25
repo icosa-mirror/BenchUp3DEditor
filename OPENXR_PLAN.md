@@ -1,23 +1,23 @@
 # BenchUp OpenXR implementation plan
 
-Updated: 2026-11-12. Status follows the current `feat/openxr-phase1` worktree;
+Updated: 2026-11-25. Status follows the current `feat/openxr-phase1` worktree;
 completed milestones and build evidence are recorded in the handoff.
 This is the current plan, not a chronological implementation log. Operational
 commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_HANDOFF.md).
 
 ## Active continuation
 
-Latest user direction: prioritize actual bugs and missing functionality, not
-speculative edge cases. The core coding checklist C01-C25 is implemented. A requested test confirmed
-the earlier controller panel faced the head and froze when a grip was held.
-The new C25 rigid-parent build corrects that gap and is ready for a physical check;
-its source/path are recorded in `.local/openxr/rigid-controller-panel-build.json`.
-Remaining acceptance is not complete; continue implementation only for concrete
-gaps demonstrated by normal use, requested testing or existing evidence. Do not
-create extra milestones or validation work merely to remain active.
+Latest user direction: the user is on the road; continue a concrete task that
+does not need their collaboration. Implement C27 tracked controller visuals.
+The core coding checklist C01-C26 is implemented, and the user confirmed the
+270-degree grip-local panel orientation is comfortable. Intermittent missed
+clicks remain open under C29; diagnostic build `aa6f139` is prepared, but
+headset trace collection must wait until the user is available. Do not change
+click tolerances on a hypothesis alone. Prioritize actual bugs and missing
+functionality; do not create speculative validation work to remain active.
 
-The user resumed the goal and is currently busy. Continue independent development
-without more test questions or replacing their running preview. Their `dfab0e6`
+Continue independent development without more test questions or replacing a
+running preview. Their earlier `dfab0e6`
 clean-example session confirmed that virtual-keyboard typing now retains focus.
 They also confirmed no label holes/flicker and an in-headset Save As chooser.
 Exact value movement/undo verification remains pending. Ask future test questions
@@ -176,8 +176,15 @@ record scope changes rather than silently changing an estimate.
     The locked native build passes; the existing rigid-transform assertion is
     updated for the corrected local rotation. Physical facing/click acceptance
     is pending.
-27. [ ] C27: Visible tracked controller representations. The user reported their
-    absence in the headset; this is a genuine missing feature, not yet implemented.
+27. [x] C27: Visible tracked controller representations. Generic left/right
+    grip-space meshes now render in the immersive view, independent of scene
+    navigation, panel attachment and pointer ownership. GPU geometry is retained;
+    only two instance transforms/tints and the eye view are updated. Unavailable
+    grips are hidden; left is blue, right is orange, and held grips turn green.
+    Two focused mesh/pose tests and the locked native build pass. An independent
+    RTX 4090 Vulkan snapshot renders both hands without an OpenXR runtime.
+    Physical alignment/occlusion acceptance remains pending. Device-specific
+    runtime model assets are separate future work.
 28. [x] C28: Fix ignored first panel clicks after pointing away. Release arming
     must use valid controller tracking, not whether its ray projects onto the
     panel plane. The real-button first-click regression and all six focused input checks pass,

@@ -39,6 +39,9 @@ mod world_handles;
 mod cursor;
 
 #[cfg(feature = "openxr")]
+mod controller_visuals;
+
+#[cfg(feature = "openxr")]
 pub(crate) mod immersive;
 
 #[cfg(feature = "openxr")]
