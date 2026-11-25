@@ -22,6 +22,7 @@ enum Event {
     Ready(egui::Context),
     PlatformOutput(egui::PlatformOutput),
     CloseRequested,
+    CreateSurface(eframe::wgpu::Instance, Sender<Result<eframe::wgpu::Surface<'static>, String>>),
 }
 
 pub(super) struct KeyboardInput {
@@ -41,16 +42,24 @@ impl NativeOutput {
     pub fn request_close(&self) {
         let _ = self.0.send_event(Event::CloseRequested);
     }
+    pub fn create_surface(&self, instance: &eframe::wgpu::Instance) -> Result<eframe::wgpu::Surface<'static>, String> {
+        let (send, receive) = mpsc::channel();
+        self.0.send_event(Event::CreateSurface(instance.clone(), send))
+            .map_err(|_| "The desktop event loop is closed".to_owned())?;
+        receive.recv_timeout(Duration::from_secs(5))
+            .map_err(|error| format!("Desktop surface creation did not complete: {error}"))?
+    }
 }
 
 pub(super) struct NativeInput {
     pub output: NativeOutput,
     pub events: Receiver<KeyboardInput>,
+    pub window: Arc<Window>,
 }
 
 struct Desktop {
     proxy: EventLoopProxy<Event>,
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
     worker: Option<JoinHandle<()>>,
     close: Arc<AtomicBool>,
     closing: Option<Instant>,
@@ -61,6 +70,7 @@ struct Desktop {
     keys: Vec<egui::Key>,
     keyboard_tx: Sender<KeyboardInput>,
     keyboard_rx: Option<Receiver<KeyboardInput>>,
+    smoke: Option<std::path::PathBuf>,
 }
 
 impl Desktop {
@@ -71,7 +81,7 @@ impl Desktop {
         println!("[BenchUpXR] Close requested; ending the editor session.");
         self.close.store(true, Ordering::Relaxed);
         self.closing = Some(Instant::now());
-        self.window = None;
+        if let Some(window) = self.window.take() { window.set_visible(false); }
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + Duration::from_millis(50),
         ));
@@ -87,7 +97,7 @@ impl ApplicationHandler<Event> for Desktop {
             .with_title("BenchUp VR — close this window to exit")
             .with_inner_size(winit::dpi::LogicalSize::new(640., 360.));
         match event_loop.create_window(attributes) {
-            Ok(window) => self.window = Some(window),
+            Ok(window) => self.window = Some(Arc::new(window)),
             Err(error) => {
                 self.result = Some(Err(format!("Could not create the desktop window: {error}")));
                 event_loop.exit();
@@ -98,9 +108,11 @@ impl ApplicationHandler<Event> for Desktop {
         let proxy = self.proxy.clone();
         let close = self.close.clone();
         let duration = self.duration;
+        let smoke = self.smoke.clone();
         let native = NativeInput {
             output: NativeOutput(proxy.clone()),
             events: self.keyboard_rx.take().expect("One XR worker"),
+            window: self.window.as_ref().unwrap().clone(),
         };
         match std::thread::Builder::new()
             .name("BenchUp OpenXR".into())
@@ -108,8 +120,11 @@ impl ApplicationHandler<Event> for Desktop {
                 // Report a worker panic too, so the desktop never waits forever for
                 // a completion notification that will not arrive.
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    super::panel::run_editor_session(duration, &close, native)
-                        .map_err(|error| error.to_string())
+                    if let Some(path) = smoke {
+                        super::mirror::smoke(native.window, native.output, &close, &path).map_err(|error| error.to_string())
+                    } else {
+                        super::panel::run_editor_session(duration, &close, native).map_err(|error| error.to_string())
+                    }
                 }))
                 .unwrap_or_else(|_| {
                     Err("The OpenXR worker panicked; see the application log.".into())
@@ -193,6 +208,13 @@ impl ApplicationHandler<Event> for Desktop {
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         match event {
+            Event::CreateSurface(instance, reply) => {
+                // Window handles are available on the event-loop thread. The
+                // returned surface retains its Arc<Window> for the GPU worker.
+                let result = self.window.as_ref().ok_or_else(|| "Desktop window is closing".to_owned())
+                    .and_then(|window| instance.create_surface(window.clone()).map_err(|error| error.to_string()));
+                let _ = reply.send(result);
+            }
             Event::CloseRequested => self.request_close(event_loop),
             Event::Finished(result) => {
                 self.finished = true;
@@ -239,6 +261,14 @@ impl ApplicationHandler<Event> for Desktop {
 }
 
 pub(super) fn run(duration: Option<Duration>) -> Result<(), Box<dyn Error>> {
+    run_mode(duration, None)
+}
+
+pub(super) fn mirror_smoke(path: std::path::PathBuf) -> Result<(), Box<dyn Error>> {
+    run_mode(None, Some(path))
+}
+
+fn run_mode(duration: Option<Duration>, smoke: Option<std::path::PathBuf>) -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::<Event>::with_user_event().build()?;
     event_loop.set_control_flow(ControlFlow::Wait);
     let (keyboard_tx, keyboard_rx) = mpsc::channel();
@@ -255,6 +285,7 @@ pub(super) fn run(duration: Option<Duration>) -> Result<(), Box<dyn Error>> {
         keys: Vec::new(),
         keyboard_tx,
         keyboard_rx: Some(keyboard_rx),
+        smoke,
     };
     let result = event_loop.run_app(&mut desktop);
     desktop.close.store(true, Ordering::Relaxed);

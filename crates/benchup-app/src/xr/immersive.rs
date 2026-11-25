@@ -1280,7 +1280,7 @@ impl Placement {
     }
 }
 
-fn pose_matrix(pose: xr::Posef) -> DMat4 {
+pub(super) fn pose_matrix(pose: xr::Posef) -> DMat4 {
     DMat4::from_rotation_translation(
         DQuat::from_xyzw(
             pose.orientation.x as f64,
@@ -1297,7 +1297,7 @@ fn pose_matrix(pose: xr::Posef) -> DMat4 {
     )
 }
 
-fn projection(fov: xr::Fovf, near: f64, far: f64) -> DMat4 {
+pub(super) fn projection(fov: xr::Fovf, near: f64, far: f64) -> DMat4 {
     let (left, right, up, down) = (
         (fov.angle_left as f64).tan(),
         (fov.angle_right as f64).tan(),

@@ -1,6 +1,5 @@
 //! Borrowed Vulkan images and an OpenXR quad, with a pattern probe or shared
-//! editor host. The editor has a desktop lifetime window; desktop mirroring and
-//! other native window services are still pending.
+//! editor host, with a GPU desktop mirror in the editor lifetime window.
 
 use ash::vk::{self, Handle};
 use openxr as xr;
@@ -18,8 +17,8 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 struct Graphics {
     queue: wgpu::Queue,
     device: wgpu::Device,
-    _adapter: wgpu::Adapter,
-    _instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
+    instance: wgpu::Instance,
     binding: xr::vulkan::SessionCreateInfo,
 }
 
@@ -254,8 +253,8 @@ impl Graphics {
             Ok(Self {
                 queue,
                 device,
-                _adapter: adapter,
-                _instance: instance,
+                adapter,
+                instance,
                 binding: xr::vulkan::SessionCreateInfo {
                     instance: raw,
                     physical_device: physical.as_raw() as _,
@@ -275,6 +274,7 @@ impl Graphics {
         pipeline: &wgpu::RenderPipeline,
         editor: Option<&mut super::editor::Editor>,
         eye: Option<xr::View>,
+        capture: Option<&super::mirror::Capture>,
     ) -> Result<()> {
         let descriptor = wgpu::TextureDescriptor {
             label: Some("BenchUpXR borrowed image"),
@@ -320,17 +320,18 @@ impl Graphics {
             )
         };
         let view = texture.create_view(&Default::default());
+        let render_target = capture.map_or(&view, |capture| &capture.view);
         let submission = if let Some(editor) = editor {
             if let Some(eye) = eye {
                 editor.paint_eye(
                     &self.device,
                     &self.queue,
-                    &view,
+                    render_target,
                     [size.width, size.height],
                     eye,
                 )
             } else {
-                editor.paint(&self.device, &self.queue, &view)?
+                editor.paint(&self.device, &self.queue, render_target)?
             }
         } else {
             let mut encoder = self.device.create_command_encoder(&Default::default());
@@ -338,7 +339,7 @@ impl Graphics {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("BenchUpXR orientation quad"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
+                    view: render_target,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -358,6 +359,9 @@ impl Graphics {
             }
             self.queue.submit([encoder.finish()])
         };
+        let submission = if let Some(capture) = capture {
+            capture.copy_to(&self.device, &self.queue, &view)
+        } else { submission };
         // Conservative single-frame pacing for the interoperability gate, not a
         // throughput policy. No CPU readback or separate graphics queue is used.
         self.device.poll(wgpu::PollType::Wait {
@@ -427,6 +431,11 @@ pub async fn snapshot_controllers_without_runtime(path: &std::path::Path) -> Res
     snapshot_without_runtime(path, true, true).await
 }
 
+/// Present and resize a diagnostic mirror window without a headset or OpenXR.
+pub fn mirror_smoke(path: &std::path::Path) -> Result<()> {
+    super::desktop::mirror_smoke(path.to_owned())
+}
+
 async fn snapshot_without_runtime(path: &std::path::Path, immersive:bool, controllers:bool) -> Result<()> {
     let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     descriptor.backends = wgpu::Backends::VULKAN;
@@ -479,6 +488,11 @@ fn snapshot_editor_on_device(
         editor.paint(device, queue, &view)?;
     }
     if immersive {editor.paint_immersive_snapshot(device,queue,&view,[size.width,size.height],controllers)?;}
+    save_texture(device, queue, &target, size, path)
+}
+
+pub(super) fn save_texture(device: &wgpu::Device, queue: &wgpu::Queue,
+    target: &wgpu::Texture, size: wgpu::Extent3d, path: &std::path::Path) -> Result<()> {
     let stride = (size.width * 4).div_ceil(256) * 256;
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("BenchUpXR diagnostic PNG readback"),
@@ -512,6 +526,9 @@ fn snapshot_editor_on_device(
     let mut rgba = Vec::with_capacity((size.width * size.height * 4) as usize);
     for row in pixels.chunks(stride as usize) {
         rgba.extend_from_slice(&row[..size.width as usize * 4]);
+    }
+    if matches!(target.format(), wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb) {
+        for pixel in rgba.chunks_exact_mut(4) { pixel.swap(0, 2); }
     }
     image::save_buffer(
         path,
@@ -677,6 +694,13 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
         size.width,
         size.height
     );
+    let mut mirror = if let Some(native) = &native {
+        match super::mirror::Mirror::new(&graphics.instance, &graphics.adapter, &graphics.device,
+            native.window.clone(), native.output.clone(), format, [size.width,size.height], stereo.as_ref().map(|stereo| [stereo.size.width,stereo.size.height])) {
+            Ok(mirror) => Some(mirror),
+            Err(error) => { eprintln!("[BenchUpXRMirror] Desktop mirror unavailable: {error}"); None },
+        }
+    } else { None };
     let _drain_gpu = DrainGpu(&graphics);
     let start = Instant::now();
     let mut events = xr::EventDataBuffer::new();
@@ -900,6 +924,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
         swapchain.wait_image(xr::Duration::INFINITE)?;
         // On graphics failure, never hand a possibly in-flight image back to the
         // compositor: unwind session resources before destroying the GPU owner.
+        let mirror_active = mirror.as_ref().is_some_and(|mirror| mirror.visible());
         graphics.paint(
             images[index],
             format,
@@ -907,9 +932,11 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             &pipeline,
             editor.as_mut(),
             None,
+            mirror.as_ref().filter(|_| mirror_active).map(|mirror| &mirror.panel),
         )?;
         swapchain.release_image()?;
         let mut projection_views = Vec::new();
+        let mut mirror_eye = None;
         if let (Some(stereo), Some(editor)) = (&mut stereo, &mut editor) {
             if editor.panel_preferences().immersive_scene {
                 let (state, views) = session.locate_views(
@@ -936,8 +963,10 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
                             &pipeline,
                             Some(&mut *editor),
                             Some(*eye),
+                            if eye_index == 0 && mirror_active { mirror.as_ref().and_then(|mirror| mirror.eye.as_ref()) } else { None },
                         )?;
                         chain.release_image()?;
+                        if eye_index == 0 { mirror_eye = Some(*eye); }
                     }
                     for (eye_index, eye) in views.iter().enumerate() {
                         projection_views.push(
@@ -965,6 +994,13 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             (Some(controllers), Some(hand)) => (controllers.grip_space(hand), super::panel_anchor::local_pose()),
             _ => (&space, panel_pose),
         };
+        if let Some(desktop) = &mut mirror && mirror_active {
+            if let Err(error) = desktop.present(&graphics.device, &graphics.queue,
+                mirror_eye.map(|eye| (eye, panel_pose, panel_size))) {
+                eprintln!("[BenchUpXRMirror] Desktop mirror disabled: {error}");
+                mirror = None;
+            }
+        }
         let quad = xr::CompositionLayerQuad::new()
             .space(quad_space)
             .eye_visibility(xr::EyeVisibility::BOTH)

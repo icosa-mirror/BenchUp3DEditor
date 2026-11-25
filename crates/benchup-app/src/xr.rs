@@ -42,6 +42,9 @@ mod cursor;
 mod controller_visuals;
 
 #[cfg(feature = "openxr")]
+mod mirror;
+
+#[cfg(feature = "openxr")]
 pub(crate) mod immersive;
 
 #[cfg(feature = "openxr")]

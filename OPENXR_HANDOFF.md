@@ -7,6 +7,36 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+C30 desktop mirroring is implemented. The mirror uses the
+same runtime-selected Vulkan device and its existing desktop window. The panel
+and left eye first render to retained application-owned sampleable textures;
+GPU blits copy those images into the acquired XR render attachments. Desktop
+presentation samples the owned textures and draws the panel at the same
+tracking-space pose, after the left-eye scene, matching the composition layers.
+XR images retain their render-attachment-only usage and existing completion/
+release discipline. Minimized windows skip mirror captures; restored/resized
+windows reconfigure their surface and letterbox to preserve source aspect.
+`--mirror-smoke output.png` exercises native presentation/resizing and both
+composition modes without OpenXR or loading user project data. Its only CPU
+readback is the explicit diagnostic PNG; the live mirror has no CPU readback.
+The existing keyboard and Close services remain attached to the same window.
+Surface creation/recreation is requested through the desktop event loop because
+winit exposes native window handles only on that thread; rendering stays on the
+XR worker. One aspect-ratio test passes (`.local/openxr/desktop-mirror-tests.log`).
+The RTX 4090 Vulkan native diagnostic presents 18 frames across 640x360, 800x450
+and 480x480, alternating scene-plus-quad and flat-panel modes. Its inspected
+PNG has the expected letterboxing and upright red/green panel over the blue
+scene (`.local/openxr/desktop-mirror-smoke.log`, `.local/openxr/desktop-mirror-smoke.png`).
+The same diagnostic copies the owned panel capture into a render-only attachment
+and verifies its readback pixels retain orientation and channels
+(`.local/openxr/desktop-mirror-smoke.copy.png`). This exercises the blit used for
+headset output without borrowing an XR image. The locked native build passes
+(`.local/openxr/desktop-mirror-build.log`).
+The prepared build manifest is `.local/openxr/desktop-mirror-build.json` and
+includes the earlier click movement fix and controller visuals. No interactive
+OpenXR session was launched. Live runtime-selected-device presentation, headset
+equivalence and mirror performance are not verified by this native diagnostic.
+
 C29 has a confirmed offline reproduction: the real File menu drops a completed
 click after eight UI points of movement even when both endpoints and the path
 remain inside its button. `.local/openxr/panel-ray-motion-before.log` records
@@ -20,7 +50,7 @@ All three real-editor replay checks now pass, covering small-motion clicking,
 larger-drag rejection, menu switching, text focus and layout retries
 (`.local/openxr/panel-ui-replay-fixed-tests.log`). Menu switching passes in both
 directions. The locked native build passes (`.local/openxr/panel-ray-motion-build.log`).
-The latest prepared build is identified by `.local/openxr/panel-ray-motion-build.json`;
+The earlier click-fix build is identified by `.local/openxr/panel-ray-motion-build.json`;
 it includes controller visuals and click tracing as well as the movement fix.
 
 C29 offline investigation: two real-editor CPU replays pass. Consecutive
@@ -1062,7 +1092,7 @@ the current preview still uses the world panel.
    worker. Physical keyboard/text/IME and Windows clipboard are bridged; controller text entry is implemented; desktop
    mouse/focus do not replace headset pointing/focus. Close/Alt+F4 and shared
    Close/File Quit request shutdown. The eight-second stalled-shutdown guard is
-   not a session deadline. Desktop mirroring is not implemented.
+   not a session deadline. C30 adds GPU desktop mirroring; headset acceptance remains pending.
 4. `immersive.rs` uses explicit eye transforms and shared retained geometry and
    display state. GPU environment, analytic grid, shadows, styles/X-Ray, section
    caps/contours, labels and overlays are implemented. Immersive mode hosts the

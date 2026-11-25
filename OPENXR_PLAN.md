@@ -9,11 +9,12 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 
 Latest user direction: the user is on the road; continue a concrete task that
 does not need their collaboration. C27 controller visuals are implemented;
-now investigate C29 through real-editor event replays and commit milestones.
+The C29 offline reproduction/fix is prepared. The user now requests a live
+desktop mirror, implemented without needing their headset participation.
 The core coding checklist C01-C27 is implemented, and the user confirmed the
 270-degree grip-local panel orientation is comfortable. Intermittent missed
 clicks remain open under C29; the latest prepared build is identified by
-`.local/openxr/panel-ray-motion-build.json`. Headset trace collection must wait
+`.local/openxr/desktop-mirror-build.json`. Headset trace collection must wait
 until the user is available. Do not change
 click tolerances on a hypothesis alone. Prioritize actual bugs and missing
 functionality; do not create speculative validation work to remain active.
@@ -94,7 +95,7 @@ to reach immersive functionality quickly. Neither phase is accepted as complete.
 |---|---|---|
 | 1A: panel/input foundation | Metric panel geometry; ray mapping; OpenXR actions; capture and focus/tracking cancellation; LOCAL origin-change compensation | Complete drag/loss/reference-change/restart coverage on the headset |
 | 1B: Vulkan/wgpu interoperability | Runtime preflight; runtime-selected Vulkan GPU/device; borrowed swapchain images; GPU quad/stereo rendering; XR frame lifecycle; pinned SPIR-V compiler fix | OpenXR-runtime core/synchronization validation and the full restart/loss matrix remain open |
-| 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad; native desktop lifetime window | Complete host-service workflow acceptance; desktop mirroring stays explicitly deferred |
+| 1C: complete editor panel | Shared editor UI and GPU viewport callbacks rendered into an OpenXR quad; native desktop lifetime window | Complete host-service workflow acceptance; live mirroring is implemented in C30, with headset acceptance pending |
 | 1D: interaction/usability | Controller cursor/click/scroll; comfort/recenter controls; physical keyboard/IME/clipboard bridge; controller keyboard with saved visibility/caps/symbols; in-panel file chooser with destination-folder creation; native lifetime window; shared Close/Quit path; saved preferences; compact controls and optional controller panel/recall | Headset keyboard/file-chooser/controller-panel acceptance and end-to-end project workflow verification; additional native window commands remain explicitly deferred |
 | 2A: shared scene/overlay preparation | Evaluated model/overlays, scoped snapshots and an immersive inspector/tool panel without a duplicate 2D canvas; eight-row source audit closed | Rendered/controller workflow acceptance across the recorded parity matrix |
 | 2B: stereo scene | Explicit eye poses/projections; shared geometry across two eye passes; GPU environment, grid, shadows and section rendering | Visual equivalence not established; validation/performance gates remain deferred |
@@ -200,6 +201,15 @@ record scope changes rather than silently changing an estimate.
     and the locked native build pass, covering menu switching in both directions,
     text focus, layout retries and motion classification. Keep `[BenchUpXRClick]` tracing to determine
     whether other causes remain in hardware; final headset acceptance is pending.
+30. [x] C30: Live GPU desktop mirror in the existing lifetime window. Shows the
+    left-eye scene with the editor quad at its tracking-space pose, or the full
+    editor in panel-only mode. Preserves aspect ratio, handles window resizing/
+    minimizing and retains keyboard/Close services. Captures and blits stay on
+    the GPU; XR image usage/layout and completion/release contracts are retained.
+    Surface creation/recreation runs on the desktop event-loop thread. The
+    RTX 4090 native diagnostic presents both modes across three window sizes;
+    the focused letterboxing check passes. Actual OpenXR mirror acceptance and
+    performance measurement remain pending.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that
@@ -481,7 +491,7 @@ or complete-parity claims.
 3. A later multiview implementation needs capability negotiation, layered
    swapchain/depth/visibility resources and view-indexed geometry, overlay and text
    shaders. Keep the two-pass path as a backend fallback.
-4. Desktop mirroring, additional native window commands, extended virtual keyboard input,
+4. Desktop mirroring is now C30. Additional native window commands, extended virtual keyboard input,
    standalone Quest packaging, Steam Frame support and broader platform adaptation are
    future work. The current target is Windows + SteamVR + Vulkan on the RTX 4090.
 
