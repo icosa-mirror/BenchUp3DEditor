@@ -119,6 +119,7 @@ impl Editor {
     ) -> Result<Self> {
         let preferences = Preferences::open(crate::preferences_path()?)?;
         let ctx = egui::Context::default();
+        crate::app_host::configure_xr_panel_input(&ctx);
         let mut renderer = egui_wgpu::Renderer::new(
             device,
             format,

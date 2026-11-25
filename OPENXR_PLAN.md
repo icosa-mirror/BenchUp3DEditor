@@ -8,11 +8,13 @@ commands and the latest continuation state belong in [OPENXR_HANDOFF.md](OPENXR_
 ## Active continuation
 
 Latest user direction: the user is on the road; continue a concrete task that
-does not need their collaboration. Implement C27 tracked controller visuals.
-The core coding checklist C01-C26 is implemented, and the user confirmed the
+does not need their collaboration. C27 controller visuals are implemented;
+now investigate C29 through real-editor event replays and commit milestones.
+The core coding checklist C01-C27 is implemented, and the user confirmed the
 270-degree grip-local panel orientation is comfortable. Intermittent missed
-clicks remain open under C29; diagnostic build `aa6f139` is prepared, but
-headset trace collection must wait until the user is available. Do not change
+clicks remain open under C29; the latest prepared build is identified by
+`.local/openxr/panel-ray-motion-build.json`. Headset trace collection must wait
+until the user is available. Do not change
 click tolerances on a hypothesis alone. Prioritize actual bugs and missing
 functionality; do not create speculative validation work to remain active.
 
@@ -191,10 +193,13 @@ record scope changes rather than silently changing an estimate.
     as do the two transform checks and combined locked native build. Hardware
     first-click acceptance failed: intermittent missed clicks also occur while
     staying on the panel and moving between widgets; this arming fix is insufficient.
-29. [ ] C29: Resolve intermittent panel clicks across widgets. Add bounded
-    `[BenchUpXRClick]` action-to-UI tracing and reproduce in the headset before
-    choosing a fix. The diagnostic build preserves existing input thresholds.
-    The user confirmed the 270-degree controller-panel orientation is comfortable.
+29. [ ] C29: Resolve intermittent panel clicks across widgets. A real-editor
+    CPU replay reproduces a completed File click being lost after eight UI points
+    of movement, entirely inside the button. The dedicated XR context now allows
+    18 points; larger drags are still rejected. All three real-editor replay checks
+    and the locked native build pass, covering menu switching in both directions,
+    text focus, layout retries and motion classification. Keep `[BenchUpXRClick]` tracing to determine
+    whether other causes remain in hardware; final headset acceptance is pending.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

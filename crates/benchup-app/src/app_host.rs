@@ -99,6 +99,15 @@ impl XrPanelPreferences {
     }
 }
 
+/// Configure the dedicated XR panel context before its first input pass.
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+pub(crate) fn configure_xr_panel_input(ctx: &egui::Context) {
+    // The mouse default rejects a real File-menu click after just eight points
+    // of in-button ray movement. Allow trigger-induced hand motion, while still
+    // rejecting deliberate drags. Immersive scene gestures use their own input.
+    ctx.options_mut(|options| options.input_options.max_click_dist = 18.0);
+}
+
 // Frame-scoped because a context may later be reused by a different host.
 pub(crate) fn set_world_input(ctx: &egui::Context, enabled: bool) {
     let frame = ctx.cumulative_frame_nr();

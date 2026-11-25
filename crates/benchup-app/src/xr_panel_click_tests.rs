@@ -27,6 +27,7 @@ struct Replay {
 impl Replay {
     fn new(retry: bool) -> Self {
         let mut h = Harness::new();
+        crate::app_host::configure_xr_panel_input(&h.ctx);
         h.size = egui::vec2(960., 640.);
         Self {
             h,
@@ -99,12 +100,12 @@ fn xr_panel_click_switches_real_dropdowns_with_and_without_layout_retry() {
         let mut replay = Replay::new(retry);
         replay.frame(vec![]);
         let output = replay.frame(vec![]);
-        let targets =
-            ["File", "Edit", "View", "Tools", "Help"].map(|label| text_position(&output, label));
-        for (label, pos) in ["File", "Edit", "View", "Tools", "Help"]
-            .into_iter()
-            .zip(targets)
-        {
+        // Exercise both UI construction orders when replacing an open popup.
+        let labels = [
+            "File", "Edit", "View", "Tools", "Help", "Tools", "View", "Edit", "File",
+        ];
+        let targets = labels.map(|label| text_position(&output, label));
+        for (label, pos) in labels.into_iter().zip(targets) {
             // Deliberately move and press together, without a separate hover pass.
             replay.click(pos);
             let id = replay
@@ -136,4 +137,41 @@ fn xr_panel_click_after_text_focus_opens_real_dropdown_on_first_click() {
     replay.click(file);
     assert!(replay.clicked.is_some());
     assert!(egui::Popup::is_any_open(&ctx));
+}
+
+#[test]
+fn xr_panel_click_with_small_ray_motion_opens_real_dropdown() {
+    check_motion(8., true);
+    check_motion(30., false);
+}
+
+fn check_motion(distance: f32, should_open: bool) {
+    let mut replay = Replay::new(false);
+    replay.frame(vec![]);
+    let output = replay.frame(vec![]);
+    let pos = text_position(&output, "File");
+    replay.button(pos, true);
+    let response = replay
+        .h
+        .ctx
+        .interaction_snapshot(|snapshot| snapshot.contains_pointer.clone())
+        .into_iter()
+        .filter_map(|id| replay.h.ctx.read_response(id))
+        .filter(|response| response.sense.senses_click())
+        .min_by(|a, b| a.rect.area().total_cmp(&b.rect.area()))
+        .unwrap();
+    let release = pos + egui::vec2(8., 0.);
+    assert!(
+        response.rect.contains(release),
+        "The ray must stay inside the same button"
+    );
+    replay.frame(vec![egui::Event::PointerMoved(
+        pos + egui::vec2(distance, 0.),
+    )]);
+    replay.button(release, false);
+    assert_eq!(
+        egui::Popup::is_any_open(&replay.h.ctx),
+        should_open,
+        "Eight points inside File should click; a larger drag returning to File should not. Motion={distance}"
+    );
 }

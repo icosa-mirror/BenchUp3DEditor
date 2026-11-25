@@ -7,6 +7,22 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+C29 has a confirmed offline reproduction: the real File menu drops a completed
+click after eight UI points of movement even when both endpoints and the path
+remain inside its button. `.local/openxr/panel-ray-motion-before.log` records
+the failing regression. The dedicated XR context now sets a bounded 18-point
+click tolerance before its first input pass. The regression also checks a
+30-point drag returning to the same button does not activate it. This fixes a
+confirmed path; it does not establish that every reported hardware miss has
+this cause. Click tracing remains enabled. No interactive session is required
+for these checks, and no live preview is being launched while the user is away.
+All three real-editor replay checks now pass, covering small-motion clicking,
+larger-drag rejection, menu switching, text focus and layout retries
+(`.local/openxr/panel-ui-replay-fixed-tests.log`). Menu switching passes in both
+directions. The locked native build passes (`.local/openxr/panel-ray-motion-build.log`).
+The latest prepared build is identified by `.local/openxr/panel-ray-motion-build.json`;
+it includes controller visuals and click tracing as well as the movement fix.
+
 C29 offline investigation: two real-editor CPU replays pass. Consecutive
 dropdown clicks work without an intervening hover frame, both normally and
 with a forced layout retry; a dropdown also opens on the first click after a
@@ -30,23 +46,22 @@ Checks: two focused `xr::controller_visuals::tests::` checks pass
 passes (`.local/openxr/controller-visual-build.log`). The offscreen snapshot
 ran on the NVIDIA GeForce RTX 4090 Vulkan adapter and rendered both hands
 (`.local/openxr/controller-visual-snapshot.log`, `.local/openxr/controller-visuals.png`).
-The prepared build manifest is `.local/openxr/controller-visuals-build.json`.
+The earlier controller milestone manifest is `.local/openxr/controller-visuals-build.json`.
 The diagnostic example switch is `--controllers-snapshot output.png`; use an
 isolated `BENCHUP_DATA_DIR` with the bundled Example, as with other snapshots.
 Physical alignment, tracking transitions and scene occlusion are not headset-tested.
 No live VR preview was launched. C29 click tracing is retained in this build;
-missed clicks remain unresolved until an in-headset trace can be collected.
+general missed-click acceptance still requires an in-headset test.
 
 The user confirmed the 270-degree panel facing is comfortable, but intermittent
 missed clicks remain across panel widgets, possibly including dropdowns. This
 also occurs without pointing away or clicking the scene, so C28 is only a
 separate arming fix, not a resolution of the reported general clicking problem.
-The next diagnostic build adds `[BenchUpXRClick]` lines for action transitions,
+The earlier `aa6f139` diagnostic build added `[BenchUpXRClick]` lines for action transitions,
 capture cancellation, UI press/release positions, maximum motion and duration,
-and each UI pass's click/drag target and keyboard focus. No click thresholds or
-interaction behavior are changed. An experimental larger click tolerance and
-its synthetic checks were set aside in `.local/openxr/panel-tolerance-experiment.patch`;
-hardware evidence must establish the cause before applying that experiment.
+and each UI pass's click/drag target and keyboard focus. It preserved the old
+click thresholds. The original synthetic tolerance experiment was set aside;
+the new change follows the real-editor reproduction described above instead.
 Build output: `.local/openxr/panel-click-trace-build.log`.
 
 The user requested another 90 degrees on the same X axis: the C26 source angle
