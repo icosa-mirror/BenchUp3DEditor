@@ -17,3 +17,18 @@ Local autosave continues independently of project files: editing never automatic
 - For isolated desktop sessions/tests, set `BENCHUP_DATA_DIR` to a directory of your choice.
 
 Local autosave failures show an Unsaved indicator with the error in its tooltip. The live model remains editable; further edits trigger another autosave attempt. Project file errors appear in a dialog and preserve the current project and its destination. An unreadable or unsupported autosave starts a clean workspace with a recovery notice. The existing saved data is not overwritten until you edit or load another project.
+
+## Saved inspection views
+
+1. Choose **View → Saved inspection views → Save current view** to save the current
+   viewpoint in the project. New entries are named View 1, View 2, and so on.
+2. Choose a saved name from that menu to recall it. **Manage saved views** opens
+   the **Saved inspection views** section of the View inspector, where you can
+   edit names or recall a view. Each row's **More (…)** menu updates its framing
+   or deletes it.
+3. Views are included in project files and local autosave. They belong to that
+   project and are separate from geometry undo/redo.
+4. In XR, saved views retain model scale and placement relative to your current
+   standing position and heading. Headset tracking and field of view remain
+   runtime-controlled. Desktop-created views use headset perspective when recalled
+   in XR; with a world-space editor panel, the view is placed beside the panel.

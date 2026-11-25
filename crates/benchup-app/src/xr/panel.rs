@@ -895,7 +895,7 @@ fn run_content(duration: Option<Duration>, show_editor: bool, close: &AtomicBool
             let now = Instant::now();
             if frame.should_render && head_location.is_some() {
                 if let Some(head) = &head_location {
-                    editor.scene_input_head(upright_anchor(head.pose).unwrap_or(anchor));
+                    editor.scene_input_head(head.pose, upright_anchor(head.pose).unwrap_or(anchor));
                 }
                 let input = controllers.sample(
                     &session,

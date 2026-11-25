@@ -2,6 +2,22 @@ use super::*;
 use benchup_core::StandardView;
 
 #[test]
+fn inspection_view_recall_uses_current_head_without_accumulating_scene_scale() {
+    let camera = Camera { target: DVec3::new(3.,1.,2.), distance: 4., ..Camera::default() };
+    let relative = DMat4::from_scale_rotation_translation(DVec3::splat(0.4),
+        DQuat::from_rotation_y(0.3) * DQuat::from_rotation_x(-std::f64::consts::FRAC_PI_2), DVec3::new(0.2,-0.3,-1.4));
+    let point = benchup_core::InspectionViewpoint { camera, immersive: Some(relative) };
+    for head in [DMat4::IDENTITY, DMat4::from_rotation_translation(DQuat::from_rotation_y(1.2), DVec3::new(4.,1.7,-3.))] {
+        for scene_scale in [0.2, 1., 8.] {
+            let placement = Placement::from_inspection(head * point.immersive_placement(), point.camera.target, scene_scale);
+            let result = placement.model_to_tracking(scene_scale);
+            assert!((head.inverse() * result).abs_diff_eq(relative, 1e-8));
+            assert!(result.transform_point3(point.camera.target).distance((head * relative).transform_point3(point.camera.target)) < 1e-8);
+        }
+    }
+}
+
+#[test]
 fn xr_standard_views_match_desktop_bases_and_keep_picking_invertible() {
     let bounds = Some((DVec3::new(-2., 1., -1.), DVec3::new(4., 5., 7.)));
     let anchor = xr::Posef {

@@ -108,6 +108,7 @@ pub(super) struct Scene {
     lines: super::world_lines::Lines,
     text: super::world_text::Text,
     head: DMat4,
+    inspection_head: Option<DMat4>,
     dark: bool,
     sections: crate::app::display_scene::SectionCache,
     section_picking: super::section_picking::Index,
@@ -146,6 +147,7 @@ impl Scene {
             lines: super::world_lines::Lines::new(device, format),
             text: super::world_text::Text::new(device, format),
             head: DMat4::IDENTITY,
+            inspection_head: None,
             dark: false,
             sections: Default::default(),
             section_picking: Default::default(),
@@ -237,6 +239,7 @@ impl Scene {
         self.navigation.reset();
         self.controllers.set_tracking(Default::default());
         self.head = DMat4::IDENTITY;
+        self.inspection_head = None;
     }
 
     pub fn set_input(&mut self, input: Option<super::input::SceneInput>) {
@@ -301,6 +304,7 @@ impl Scene {
             },
         };
         self.head = pose_matrix(eye.pose);
+        self.inspection_head = Some(self.head);
         Some(eye)
     }
 
@@ -370,7 +374,33 @@ impl Scene {
         }
     }
 
-    pub fn input_head(&mut self, pose: xr::Posef) { self.head = pose_matrix(pose); }
+    pub fn input_head(&mut self, pose: xr::Posef, upright: xr::Posef) {
+        self.inspection_head = Some(pose_matrix(pose));
+        self.head = pose_matrix(upright);
+    }
+
+    pub fn inspection_snapshot(&self, scale: f32) -> Option<(crate::app::xr_tools::InputStamp, benchup_core::InspectionViewpoint)> {
+        let source = self.source.as_ref()?;
+        let placement = self.placement.as_ref()?;
+        let matrix = self.navigation.matrix() * placement.model_to_tracking(scale as f64);
+        let point = benchup_core::InspectionViewpoint::from_immersive(&source.camera,
+            self.inspection_head?.inverse() * matrix, self.head.inverse() * matrix, placement.center)?;
+        Some((source.input_stamp.clone(), point))
+    }
+
+    pub fn recall_inspection_view(&mut self, point: &benchup_core::InspectionViewpoint, preferences: XrPanelPreferences) {
+        if !point.valid() { return; }
+        let mut relative = point.immersive_placement();
+        if point.immersive.is_none() && !preferences.controller_panel {
+            // Desktop views have no saved physical placement. Aim their camera
+            // frame beside the opaque world panel, as for the initial scene.
+            relative = DMat4::from_rotation_y(-Placement::OFFSET.x.atan2(-Placement::OFFSET.z)) * relative;
+        }
+        let matrix = self.head * relative;
+        self.placement = Some(Placement::from_inspection(matrix, point.camera.target, preferences.scene_scale as f64));
+        self.navigation.reset();
+        self.input = None;
+    }
 
     pub fn erase_sweep_key(&self, scale: f32) -> Option<super::erase_sweep::Key> {
         let (source, placement) = (self.source.as_ref()?, self.placement.as_ref()?);
@@ -1219,6 +1249,12 @@ fn paste_display(source: &DisplaySettings, offset: DVec3) -> DisplaySettings {
 
 impl Placement {
     const OFFSET: DVec3 = DVec3::new(2.05, -0.2, -1.43);
+
+    fn from_inspection(matrix: DMat4, center: DVec3, scene_scale: f64) -> Self {
+        let (scale, orientation, _) = matrix.to_scale_rotation_translation();
+        Self { center, fit_scale: scale.x / scene_scale, anchor: xr::Posef::IDENTITY,
+            orientation: orientation.normalize(), offset: matrix.transform_point3(center) }
+    }
 
     fn fitted(bounds: Option<(DVec3, DVec3)>, anchor: xr::Posef, action: WorldView, previous: Option<(DVec3, DMat4)>) -> Self {
         let (mut center, mut fit_scale) = bounds.map_or((DVec3::ZERO, 1.), |(min, max)| {

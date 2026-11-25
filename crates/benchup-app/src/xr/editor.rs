@@ -286,6 +286,8 @@ impl Editor {
             ..Default::default()
         };
         let mut preferences = self.app.xr_panel_preferences();
+        crate::app_host::publish_inspection_snapshot(&self.ctx,
+            self.input.focused.then(|| self.scene.inspection_snapshot(preferences.scene_scale)).flatten());
         let key = self.scene.erase_sweep_key(preferences.scene_scale);
         let sweep_input = self.input.scene.filter(|_| self.input.focused && !cancel_erase);
         let targets = self.erase_sweep.update(key, sweep_input, self.start.elapsed().as_secs_f64(),
@@ -464,6 +466,10 @@ impl Editor {
         }
         self.recenter_requested |= recenter;
         self.view_requested = crate::app_host::take_world_view(&self.ctx).or(fit_scene).or(self.view_requested);
+        if let Some(point) = crate::app_host::take_inspection_recall(&self.ctx) {
+            self.scene.recall_inspection_view(&point, preferences);
+            self.view_requested = None;
+        }
         // Immediate preference persistence uses the same shared capture/restore
         // path as desktop, even without document edits or framework autosave.
         self.preferences.flush();
@@ -575,7 +581,7 @@ impl Editor {
             .pick_ray(ray, self.app.xr_panel_preferences())
     }
 
-    pub(super) fn scene_input_head(&mut self, pose: openxr::Posef) { self.scene.input_head(pose); }
+    pub(super) fn scene_input_head(&mut self, pose: openxr::Posef, upright: openxr::Posef) { self.scene.input_head(pose, upright); }
 
     pub(super) fn reset_tracking_origin(&mut self) {
         self.scene.reset_tracking_origin();

@@ -126,6 +126,8 @@ mod tag_menu;
 mod time_estimates;
 #[path = "viewports.rs"]
 mod viewports;
+#[path = "inspection_views.rs"]
+mod inspection_views;
 #[path = "walk.rs"]
 mod walk;
 use context_menu::ContextAction;

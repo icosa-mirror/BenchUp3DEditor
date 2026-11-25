@@ -14,7 +14,7 @@ views shared by desktop and XR (C31), with incremental commits and pushes.
 The core coding checklist C01-C27 is implemented, and the user confirmed the
 270-degree grip-local panel orientation is comfortable. Intermittent missed
 clicks remain open under C29; the latest prepared build is identified by
-`.local/openxr/desktop-mirror-build.json`. Headset trace collection must wait
+`.local/openxr/inspection-views-build.json`. Headset trace collection must wait
 until the user is available. Do not change
 click tolerances on a hypothesis alone. Prioritize actual bugs and missing
 functionality; do not create speculative validation work to remain active.
@@ -211,12 +211,14 @@ record scope changes rather than silently changing an estimate.
     the focused letterboxing check passes. Actual OpenXR mirror acceptance and
     performance measurement remain pending.
 
-31. [ ] C31: Project-owned saved inspection views. Store named desktop cameras
-    and portable XR model placements; provide save, recall, rename, update and
-    delete controls on desktop and the controller panel. Recall relative to the
-    current upright head frame, without moving headset tracking. The core data
-    model and project/autosave roundtrip and viewpoint-math checks pass; shared
-    controls and XR integration are in progress.
+31. [x] C31: Project-owned saved inspection views. View menu and View inspector
+    provide save, recall, inline naming and a compact More menu for update/delete.
+    Records survive project files and immediate autosave, with legacy defaults;
+    section state is retained without copying records into unrelated projects.
+    XR captures model placement relative to the upright head frame and recalls
+    it at the current user location/heading, without changing headset tracking
+    or the desktop camera. Project/checkpoint, isolated UI/persistence and XR
+    placement checks pass. Headset workflow and browser acceptance remain pending.
 
 Automatic Fasteners is intentionally disabled by `fasteners::AVAILABLE = false`.
 Its entry-face XR route is conditional future work, not a reason to enable that

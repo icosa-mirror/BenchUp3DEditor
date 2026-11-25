@@ -147,6 +147,29 @@ pub(crate) enum UiHost<'a> {
     OpenXr(&'a mut (dyn eframe::Storage + 'static)),
 }
 
+pub(crate) fn request_inspection_recall(ctx: &egui::Context, viewpoint: benchup_core::InspectionViewpoint) -> bool {
+    if !world_input(ctx) { return false; }
+    ctx.data_mut(|data| data.insert_temp(egui::Id::unique("benchup.host.inspection_recall"), Some(viewpoint)));
+    ctx.request_repaint();
+    true
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+pub(crate) fn take_inspection_recall(ctx: &egui::Context) -> Option<benchup_core::InspectionViewpoint> {
+    ctx.data_mut(|data| data.remove_temp::<Option<benchup_core::InspectionViewpoint>>(egui::Id::unique("benchup.host.inspection_recall"))).flatten()
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+pub(crate) fn publish_inspection_snapshot(ctx: &egui::Context,
+    snapshot: Option<(crate::app::xr_tools::InputStamp, benchup_core::InspectionViewpoint)>) {
+    ctx.data_mut(|data| data.insert_temp(egui::Id::unique("benchup.host.inspection_snapshot"), snapshot));
+}
+
+#[cfg(all(feature = "openxr", not(target_arch = "wasm32")))]
+pub(crate) fn inspection_snapshot(ctx: &egui::Context) -> Option<(crate::app::xr_tools::InputStamp, benchup_core::InspectionViewpoint)> {
+    ctx.data(|data| data.get_temp::<Option<(crate::app::xr_tools::InputStamp, benchup_core::InspectionViewpoint)>>(egui::Id::unique("benchup.host.inspection_snapshot"))).flatten()
+}
+
 impl UiHost<'_> {
     pub(crate) fn is_xr(&self) -> bool {
         match self {

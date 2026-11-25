@@ -4886,6 +4886,8 @@ impl BenchUpApp {
     }
 
     pub(super) fn view_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Saved inspection views", |ui| self.inspection_views_menu(ui));
+        ui.separator();
         let before = self.doc.display.clone();
         let d = &mut self.doc.display;
         for (value, label) in [

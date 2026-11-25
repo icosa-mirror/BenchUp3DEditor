@@ -114,6 +114,7 @@ impl BenchUpApp {
         if before != self.doc.camera {
             self.changed(ui.ctx());
         }
+        self.inspection_views_controls(ui);
     }
 }
 

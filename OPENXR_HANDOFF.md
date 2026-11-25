@@ -7,14 +7,31 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
-C31 saved inspection views is the active independent task. The core Document
+C31 saved inspection views is implemented. The core Document
 now has optional project-owned inspection views (legacy documents default to
 an empty list), stable IDs/names, a shared desktop camera and optional model
 placement relative to the upright head frame. Autosave checkpoints include
 the metadata. Two focused tests pass for legacy/project/checkpoint roundtrips
 and desktop/immersive viewpoint conversion (`.local/openxr/inspection-view-core-tests.log`).
-Shared UI and native scene integration follow this core milestone. No live
-headset session is required or being launched.
+The shared View menu provides Save current view and direct recall by name.
+Manage saved views opens the View inspector section; names are edited inline,
+Recall is directly visible, and each row's More menu provides Update/Delete.
+The table uses the shared centered inspector columns and fits the normal sidebar
+width. View metadata is autosaved immediately without invalidating retained model
+geometry or joining geometry undo history. Stable section/scroll keys use shared
+inspector preferences. An isolated child-process UI check covers save, rename,
+update, recall, delete, immediate storage restoration, section restoration and
+project ownership, plus stale-project XR snapshot rejection. XR recall math
+covers changed user locations and scene-scale normalization; existing framing
+and standard-view checks pass (`.local/openxr/inspection-view-app-tests.log`,
+`.local/openxr/inspection-view-view-regressions.log`).
+The prepared build manifest is `.local/openxr/inspection-views-build.json`.
+The locked native build passes (`.local/openxr/inspection-view-build.log`). The
+RTX 4090 Vulkan control snapshot passes and was inspected at the default sidebar
+width (`.local/openxr/inspection-view-snapshot.log`, `.local/openxr/inspection-view-controls.png`).
+It uses an isolated Example with synthetic saved views, not user data.
+No live headset session is being launched. Physical save/recall comfort and
+browser acceptance remain unverified. User instructions are in `docs/projects.md`.
 
 C30 desktop mirroring is implemented. The mirror uses the
 same runtime-selected Vulkan device and its existing desktop window. The panel
