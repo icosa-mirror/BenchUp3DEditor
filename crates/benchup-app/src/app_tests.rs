@@ -2,6 +2,10 @@ use super::*;
 use crate::test_ui::ContextExt as _;
 use eframe::App;
 
+#[cfg(feature = "openxr")]
+#[path = "xr_panel_click_tests.rs"]
+mod xr_panel_click_tests;
+
 fn walk_fixture() -> Harness {
     let mut h = Harness::new();
     properties_outline(&mut h.app.doc.model, &[

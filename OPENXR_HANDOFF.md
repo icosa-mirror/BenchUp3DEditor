@@ -7,6 +7,13 @@ Git history retains the earlier milestones and historical handoff revisions.
 
 ## Prepared build and next requested test
 
+C29 offline investigation: two real-editor CPU replays pass. Consecutive
+dropdown clicks work without an intervening hover frame, both normally and
+with a forced layout retry; a dropdown also opens on the first click after a
+real text field has keyboard focus. These use the XR host and its modifier-event
+ordering, with in-memory preferences. See `.local/openxr/panel-ui-replay-tests.log`.
+This narrows the tested cases; it does not establish the cause of hardware misses.
+
 The user is on the road and requests work without collaboration. C27 controller
 visuals are implemented; do not launch an interactive preview or ask headset questions.
 The implementation uses a retained generic controller mesh instanced at both
